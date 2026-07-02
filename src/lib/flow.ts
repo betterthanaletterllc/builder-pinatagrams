@@ -34,6 +34,18 @@ export type GraphicChoice =
       preview: string; // small dataURL for cart/library thumbnails
     };
 
+// Where ONE piñata ships. Addresses attach per line (a cart can send to
+// several people); the payer's email is collected once at checkout.
+export type DeliveryAddress = {
+  name: string;
+  address1: string;
+  address2: string;
+  city: string;
+  province: string;
+  zip: string;
+  phone: string;
+};
+
 export type CartLine = {
   id: string;
   styleId: string;
@@ -46,18 +58,8 @@ export type CartLine = {
   message: string;
   filling: Filling;
   deliveryDate: string; // YYYY-MM-DD
+  address: DeliveryAddress;
   qty: number;
-};
-
-export type ShippingAddress = {
-  name: string;
-  email: string;
-  address1: string;
-  address2: string;
-  city: string;
-  province: string;
-  zip: string;
-  phone: string;
 };
 
 const CART_KEY = "pinatagrams-builder-cart";
@@ -84,4 +86,58 @@ export function saveCart(lines: CartLine[]): boolean {
 
 export function newLineId(): string {
   return `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/* ---------------------------------------------------------------------------
+ * Address book — previously used delivery addresses, so sending another
+ * piñata to grandma is one tap. localStorage, most-recent-first, capped.
+ * ------------------------------------------------------------------------- */
+
+const ADDR_KEY = "pinatagrams-builder-addresses";
+const ADDR_MAX = 8;
+
+export const EMPTY_ADDRESS: DeliveryAddress = {
+  name: "",
+  address1: "",
+  address2: "",
+  city: "",
+  province: "",
+  zip: "",
+  phone: "",
+};
+
+export function addressKey(a: DeliveryAddress): string {
+  return [a.name, a.address1, a.address2, a.city, a.province, a.zip]
+    .map((s) => s.trim().toLowerCase())
+    .join("|");
+}
+
+export function addressComplete(a: DeliveryAddress | undefined | null): boolean {
+  return !!a && !!a.name && !!a.address1 && !!a.city && !!a.province && !!a.zip;
+}
+
+export function formatAddress(a: DeliveryAddress): string {
+  return `${a.name} — ${a.address1}, ${a.city}, ${a.province} ${a.zip}`;
+}
+
+export function loadAddresses(): DeliveryAddress[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(ADDR_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+export function rememberAddress(a: DeliveryAddress): void {
+  const key = addressKey(a);
+  const rest = loadAddresses().filter((x) => addressKey(x) !== key);
+  try {
+    localStorage.setItem(
+      ADDR_KEY,
+      JSON.stringify([a, ...rest].slice(0, ADDR_MAX)),
+    );
+  } catch {
+    // full storage just means no address book — never block the flow
+  }
 }

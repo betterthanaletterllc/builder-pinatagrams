@@ -4,26 +4,23 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatCents, priceUrl, type HubPrice } from "@/lib/hub";
 import {
+  addressComplete,
+  addressKey,
   loadCart,
   saveCart,
   type CartLine,
-  type ShippingAddress,
 } from "@/lib/flow";
 
-const EMPTY_ADDRESS: ShippingAddress = {
-  name: "",
-  email: "",
-  address1: "",
-  address2: "",
-  city: "",
-  province: "",
-  zip: "",
-  phone: "",
-};
-
 type CheckoutResult =
-  | { dryRun: true; reason: string; draftOrderInput: unknown }
-  | { dryRun: false; invoiceUrl: string; draftOrderId: string };
+  | {
+      dryRun: true;
+      reason: string;
+      draftOrders: { shipTo: string; input: unknown }[];
+    }
+  | {
+      dryRun: false;
+      orders: { shipTo: string; invoiceUrl: string; draftOrderId: string }[];
+    };
 
 // "Your box" thumbnail: the graphic composited onto the style's box photo
 // (same logoZone math as the preview rail); falls back to the raw art.
@@ -61,14 +58,13 @@ function CartBoxThumb({ line }: { line: CartLine }) {
 export default function CartView() {
   const [lines, setLines] = useState<CartLine[] | null>(null);
   const [unitPrice, setUnitPrice] = useState<HubPrice | null>(null);
-  const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
+  const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLines(loadCart());
-    // B2C single-destination pricing: per-unit delivered price from the hub.
     fetch(
       priceUrl({
         qty: 1,
@@ -110,9 +106,11 @@ export default function CartView() {
       ? (unitCents + shipCents) * totalUnits
       : null;
 
-  const addressOk =
-    address.name && address.email.includes("@") && address.address1 &&
-    address.city && address.province && address.zip;
+  const missingAddress = lines.filter((l) => !addressComplete(l.address));
+  const destinations = new Set(
+    lines.filter((l) => addressComplete(l.address)).map((l) => addressKey(l.address)),
+  ).size;
+  const emailOk = email.includes("@") && email.includes(".");
 
   const checkout = async () => {
     setSubmitting(true);
@@ -121,7 +119,7 @@ export default function CartView() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines, address }),
+        body: JSON.stringify({ lines, email }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
@@ -150,6 +148,16 @@ export default function CartView() {
                 {l.filling} · arrives {l.deliveryDate}
                 {l.message ? " · with gift message" : ""}
               </p>
+              {addressComplete(l.address) ? (
+                <p className="note">
+                  → {l.address.name}, {l.address.city}, {l.address.province}
+                </p>
+              ) : (
+                <p className="note" style={{ color: "var(--warn)" }}>
+                  Missing delivery address — remove this piñata and add it
+                  again.
+                </p>
+              )}
               <div className="el-controls">
                 <button
                   className="btn mini"
@@ -203,45 +211,56 @@ export default function CartView() {
         {result && result.dryRun && (
           <div className="notice info" style={{ overflowX: "auto" }}>
             <strong>Checkout dry run</strong> — {result.reason}
-            <pre className="payload-pre">
-              {JSON.stringify(result.draftOrderInput, null, 2)}
-            </pre>
+            {result.draftOrders.map((o, i) => (
+              <div key={i}>
+                <p className="note">
+                  Order {i + 1} → {o.shipTo}
+                </p>
+                <pre className="payload-pre">
+                  {JSON.stringify(o.input, null, 2)}
+                </pre>
+              </div>
+            ))}
           </div>
         )}
         {result && !result.dryRun && (
           <div className="notice info">
-            <strong>Order created!</strong>{" "}
-            <a href={result.invoiceUrl}>Pay your invoice here.</a>
+            <strong>
+              {result.orders.length === 1
+                ? "Order created!"
+                : `${result.orders.length} orders created!`}
+            </strong>
+            <ul>
+              {result.orders.map((o) => (
+                <li key={o.draftOrderId}>
+                  {o.shipTo}: <a href={o.invoiceUrl}>pay this invoice</a>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {error && <div className="notice warn">{error}</div>}
       </div>
 
       <aside className="panel">
-        <h2>Delivery address</h2>
-        {(
-          [
-            ["name", "Full name"],
-            ["email", "Email"],
-            ["address1", "Address"],
-            ["address2", "Apt / suite (optional)"],
-            ["city", "City"],
-            ["province", "State"],
-            ["zip", "ZIP"],
-            ["phone", "Phone (optional)"],
-          ] as const
-        ).map(([key, label]) => (
-          <div className="field" key={key}>
-            <label htmlFor={`addr-${key}`}>{label}</label>
-            <input
-              id={`addr-${key}`}
-              value={address[key]}
-              onChange={(e) =>
-                setAddress((a) => ({ ...a, [key]: e.target.value }))
-              }
-            />
+        <h2>Checkout</h2>
+
+        {destinations > 1 && (
+          <div className="notice info">
+            Shipping to {destinations} different addresses — each becomes its
+            own order and invoice.
           </div>
-        ))}
+        )}
+
+        <div className="field">
+          <label htmlFor="payer-email">Your email (for the invoice)</label>
+          <input
+            id="payer-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
 
         <div className="price-lines">
           {unitCents !== null && shipCents !== null ? (
@@ -266,16 +285,28 @@ export default function CartView() {
           )}
         </div>
 
+        {missingAddress.length > 0 && (
+          <div className="notice warn">
+            {missingAddress.length} piñata
+            {missingAddress.length === 1 ? " is" : "s are"} missing a delivery
+            address.
+          </div>
+        )}
+
         <button
           className="btn primary block"
-          disabled={!addressOk || submitting || lines.length === 0}
+          disabled={
+            !emailOk ||
+            submitting ||
+            lines.length === 0 ||
+            missingAddress.length > 0
+          }
           onClick={checkout}
         >
           {submitting ? "Placing order…" : "Place order"}
         </button>
         <p className="note">
-          You&apos;ll get a Shopify invoice by email — the order ships once
-          it&apos;s paid.
+          You&apos;ll get a Shopify invoice by email — orders ship once paid.
         </p>
       </aside>
     </div>

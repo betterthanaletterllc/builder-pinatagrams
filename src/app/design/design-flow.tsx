@@ -1,14 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { LogoZone } from "@/lib/hub";
 import {
+  addressComplete,
+  addressKey,
+  EMPTY_ADDRESS,
   FILLINGS,
+  formatAddress,
+  loadAddresses,
   loadCart,
   newLineId,
+  rememberAddress,
   saveCart,
+  type DeliveryAddress,
   type Filling,
   type GraphicChoice,
 } from "@/lib/flow";
@@ -29,8 +36,18 @@ type StyleInfo = {
   logoZone: LogoZone | null;
 };
 
-const STEPS = ["Graphic", "Message", "Filling", "Delivery"] as const;
+const STEPS = ["Graphic", "Message", "Filling", "Delivery", "Send to"] as const;
 type Step = (typeof STEPS)[number];
+
+const ADDRESS_FIELDS: [keyof DeliveryAddress, string][] = [
+  ["name", "Recipient name"],
+  ["address1", "Address"],
+  ["address2", "Apt / suite (optional)"],
+  ["city", "City"],
+  ["province", "State"],
+  ["zip", "ZIP"],
+  ["phone", "Phone (optional)"],
+];
 
 export default function DesignFlow({
   style,
@@ -48,12 +65,21 @@ export default function DesignFlow({
   const [message, setMessage] = useState("");
   const [filling, setFilling] = useState<Filling | null>(null);
   const [date, setDate] = useState(firstAvailableDate());
+  const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
+  const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
   const [cartError, setCartError] = useState(false);
+
+  useEffect(() => {
+    setSavedAddresses(loadAddresses());
+  }, []);
 
   const dateProblem = useMemo(() => deliveryProblem(date), [date]);
   const stepIndex = STEPS.indexOf(step);
   const doneThrough =
-    (graphic ? 1 : 0) + (stepIndex > 1 ? 1 : 0) + (filling ? 1 : 0);
+    (graphic ? 1 : 0) +
+    (stepIndex > 1 ? 1 : 0) +
+    (filling ? 1 : 0) +
+    (!dateProblem ? 1 : 0);
 
   const artUrl = graphic
     ? graphic.type === "custom"
@@ -61,14 +87,14 @@ export default function DesignFlow({
       : (graphic.art ?? graphic.thumb)
     : null;
 
-  // The box rail: only once there's something to show on the box, and never
-  // while browsing the library / using the canvas (they need the width and
-  // the canvas already shows the box).
   const choosing = step === "Graphic" && !graphic && graphicMode !== null;
   const railVisible = !choosing && (graphic !== null || step !== "Graphic");
 
+  const selectedSavedKey = addressKey(address);
+  const addressOk = addressComplete(address);
+
   const addToCart = () => {
-    if (!graphic || !filling || dateProblem) return;
+    if (!graphic || !filling || dateProblem || !addressOk) return;
     const lines = loadCart();
     lines.push({
       id: newLineId(),
@@ -80,12 +106,14 @@ export default function DesignFlow({
       message: message.trim(),
       filling,
       deliveryDate: date,
+      address,
       qty: 1,
     });
     if (!saveCart(lines)) {
       setCartError(true);
       return;
     }
+    rememberAddress(address);
     router.push("/cart");
   };
 
@@ -162,8 +190,7 @@ export default function DesignFlow({
           <h2>Add a gift message</h2>
           <p className="note">
             It&apos;s printed on the inside flap — the first thing they read
-            when the box opens. Watch it appear on the right. Leave blank to
-            skip.
+            when the box opens. Leave blank to skip.
           </p>
           <textarea
             className="message-box"
@@ -222,6 +249,62 @@ export default function DesignFlow({
               We&apos;ll make it, box it, and get it there by {date}.
             </div>
           )}
+          <button
+            className="btn primary"
+            disabled={!!dateProblem}
+            onClick={() => setStep("Send to")}
+          >
+            Continue →
+          </button>
+        </div>
+      )}
+
+      {step === "Send to" && (
+        <div className="step-panel">
+          <h2>Who&apos;s it going to?</h2>
+          <p className="note">
+            Each piñata ships to its own person — add another to the cart to
+            send somewhere else.
+          </p>
+
+          {savedAddresses.length > 0 && (
+            <div className="addr-cards">
+              {savedAddresses.map((a) => {
+                const key = addressKey(a);
+                return (
+                  <button
+                    key={key}
+                    className={
+                      "addr-card" + (key === selectedSavedKey ? " selected" : "")
+                    }
+                    onClick={() => setAddress(a)}
+                  >
+                    {formatAddress(a)}
+                  </button>
+                );
+              })}
+              <button
+                className="addr-card new"
+                onClick={() => setAddress(EMPTY_ADDRESS)}
+              >
+                + New address
+              </button>
+            </div>
+          )}
+
+          {ADDRESS_FIELDS.map(([key, label]) => (
+            <div className="field" key={key}>
+              <label htmlFor={`addr-${key}`}>{label}</label>
+              <input
+                id={`addr-${key}`}
+                value={address[key]}
+                onChange={(e) =>
+                  setAddress((a) => ({ ...a, [key]: e.target.value }))
+                }
+              />
+            </div>
+          ))}
+
           {cartError && (
             <div className="notice warn">
               This design is too large to save — try fewer or smaller photos.
@@ -229,7 +312,7 @@ export default function DesignFlow({
           )}
           <button
             className="btn primary"
-            disabled={!!dateProblem || !graphic || !filling}
+            disabled={!addressOk || !graphic || !filling || !!dateProblem}
             onClick={addToCart}
           >
             Add to cart →
@@ -273,7 +356,11 @@ export default function DesignFlow({
               artUrl={artUrl}
               message={message}
               filling={filling}
-              deliveryDate={step === "Delivery" && !dateProblem ? date : null}
+              deliveryDate={
+                (step === "Delivery" || step === "Send to") && !dateProblem
+                  ? date
+                  : null
+              }
               mode={step === "Message" ? "open" : "closed"}
               interiorUrl={boxInterior?.interiorUrl}
               messageZone={boxInterior?.messageZone}
