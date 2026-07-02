@@ -14,9 +14,10 @@ import type { LogoZone } from "@/lib/hub";
  * Both layers stay mounted; opacity crossfades between them.
  */
 
-// Printable flap rectangle on the open-box PHOTO, as fractions of the image.
-// Tuned by eye against the supplied photo — adjust here if the asset changes.
-const PHOTO_MESSAGE_ZONE = { x: 0.36, y: 0.79, w: 0.28, h: 0.15 };
+// Printable flap rectangle on the open-box PHOTO (public/box-open.jpg —
+// cropped from images/empty_box_open.jpg), as fractions of the image.
+// Measured against the flap's flat central area — adjust if the asset changes.
+const PHOTO_MESSAGE_ZONE = { x: 0.25, y: 0.795, w: 0.5, h: 0.145 };
 // Same rectangle for the SVG fallback illustration below.
 const SVG_MESSAGE_ZONE = { x: 0.3, y: 0.78, w: 0.4, h: 0.17 };
 
