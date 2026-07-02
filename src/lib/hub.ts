@@ -22,6 +22,11 @@ export type HubBodyStyle = {
 
 export type HubCatalog = {
   bodyStyles: HubBodyStyle[];
+  // Global box-interior config (gift-message step); absent on older deploys.
+  box?: {
+    interiorUrl: string | null;
+    messageZone: LogoZone | null;
+  };
   asOf: string;
 };
 

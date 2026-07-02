@@ -32,7 +32,13 @@ type StyleInfo = {
 const STEPS = ["Graphic", "Message", "Filling", "Delivery"] as const;
 type Step = (typeof STEPS)[number];
 
-export default function DesignFlow({ style }: { style: StyleInfo }) {
+export default function DesignFlow({
+  style,
+  boxInterior,
+}: {
+  style: StyleInfo;
+  boxInterior: { interiorUrl: string | null; messageZone: LogoZone | null } | null;
+}) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("Graphic");
   const [graphicMode, setGraphicMode] = useState<"library" | "canvas" | null>(
@@ -268,6 +274,8 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
               filling={filling}
               deliveryDate={step === "Delivery" && !dateProblem ? date : null}
               mode={step === "Message" ? "open" : "closed"}
+              interiorUrl={boxInterior?.interiorUrl}
+              messageZone={boxInterior?.messageZone}
             />
           </aside>
         </div>

@@ -34,13 +34,19 @@ function Card({
   g: LibraryGraphic;
   onPick: (g: LibraryGraphic) => void;
 }) {
+  // Art only — no product name. The graphic sells itself; the title stays
+  // available to screen readers and as a hover tooltip.
   return (
-    <button className="library-card" onClick={() => onPick(g)}>
+    <button
+      className="library-card"
+      onClick={() => onPick(g)}
+      title={g.title}
+      aria-label={g.title}
+    >
       {g.art || g.thumb ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img src={g.art ?? g.thumb ?? ""} alt={g.title} loading="lazy" />
       ) : null}
-      <span>{g.title}</span>
     </button>
   );
 }

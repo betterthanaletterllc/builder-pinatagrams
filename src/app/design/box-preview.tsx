@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { LogoZone } from "@/lib/hub";
 
 /**
@@ -51,6 +51,8 @@ export default function BoxPreview({
   filling,
   deliveryDate,
   mode,
+  interiorUrl,
+  messageZone,
 }: {
   styleName: string;
   boxImageUrl: string | null;
@@ -60,13 +62,31 @@ export default function BoxPreview({
   filling: string | null;
   deliveryDate: string | null;
   mode: "closed" | "open";
+  // Hub-configured interior photo + zone (admin /catalog); local fallbacks
+  // keep the preview working when the hub hasn't been configured yet.
+  interiorUrl?: string | null;
+  messageZone?: LogoZone | null;
 }) {
   const [photoFailed, setPhotoFailed] = useState(false);
-  const zone = photoFailed ? SVG_MESSAGE_ZONE : PHOTO_MESSAGE_ZONE;
+  const zone =
+    (!photoFailed ? messageZone : null) ??
+    (photoFailed ? SVG_MESSAGE_ZONE : PHOTO_MESSAGE_ZONE);
+  const interiorSrc = (!photoFailed && interiorUrl) || "/box-open.jpg";
 
-  // Shrink long messages so they stay on the flap.
-  const msgSize =
-    message.length > 180 ? 9 : message.length > 90 ? 11 : message.length > 40 ? 13 : 15;
+  // Auto-fit: shrink the text until the whole message sits inside the white
+  // card (padding included). Runs after layout; opacity-hidden layers still
+  // have geometry, so this works even before the crossfade reveals it.
+  const msgRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = msgRef.current;
+    if (!el) return;
+    let size = 16;
+    el.style.fontSize = `${size}px`;
+    while (size > 6 && el.scrollHeight > el.clientHeight) {
+      size -= 0.5;
+      el.style.fontSize = `${size}px`;
+    }
+  }, [message, mode, zone.w, zone.h]);
 
   return (
     <div className="box-preview">
@@ -112,20 +132,20 @@ export default function BoxPreview({
             ) : (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
-                src="/box-open.jpg"
+                src={interiorSrc}
                 alt="open box"
                 className="box-img"
                 onError={() => setPhotoFailed(true)}
               />
             )}
             <div
+              ref={msgRef}
               className="flap-message"
               style={{
                 left: `${zone.x * 100}%`,
                 top: `${zone.y * 100}%`,
                 width: `${zone.w * 100}%`,
                 height: `${zone.h * 100}%`,
-                fontSize: msgSize,
               }}
             >
               {message || "Your message appears here, printed on the inside flap."}
