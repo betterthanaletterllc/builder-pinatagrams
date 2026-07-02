@@ -33,7 +33,7 @@ import {
  * (later = on top); the sidebar can move elements forward/back.
  */
 
-const STAGE_WIDTH = 760;
+const MAX_STAGE_WIDTH = 760;
 const SAFE_MARGIN_IN = 0.25;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
@@ -122,13 +122,28 @@ export default function Editor({
   const px = artboardPx(doc.artboard);
   const safePx = SAFE_MARGIN_IN * doc.artboard.dpi;
 
+  // Responsive stage: track the column's width so the canvas fits phones.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [stageW, setStageW] = useState(MAX_STAGE_WIDTH);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () =>
+      setStageW(Math.max(280, Math.min(MAX_STAGE_WIDTH, el.clientWidth)));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // re-run when the loading gate lifts and the wrapper first renders
+  }, [boxImg]);
+
   const geo = useMemo(() => {
     if (boxImg && logoZone) {
-      const stageH = Math.round((STAGE_WIDTH * boxImg.height) / boxImg.width);
+      const stageH = Math.round((stageW * boxImg.height) / boxImg.width);
       const zone = {
-        x: logoZone.x * STAGE_WIDTH,
+        x: logoZone.x * stageW,
         y: logoZone.y * stageH,
-        w: logoZone.w * STAGE_WIDTH,
+        w: logoZone.w * stageW,
         h: logoZone.h * stageH,
       };
       const s = Math.min(zone.w / px.width, zone.h / px.height);
@@ -140,7 +155,7 @@ export default function Editor({
         boxed: true,
       };
     }
-    const s = STAGE_WIDTH / px.width;
+    const s = stageW / px.width;
     return {
       stageH: Math.round(px.height * s),
       scale: s,
@@ -148,7 +163,7 @@ export default function Editor({
       gy: 0,
       boxed: false,
     };
-  }, [boxImg, logoZone, px.width, px.height]);
+  }, [boxImg, logoZone, px.width, px.height, stageW]);
 
   const fontFamily = useMemo(() => {
     const v = getComputedStyle(document.body)
@@ -272,10 +287,10 @@ export default function Editor({
 
   return (
     <div className="editor-grid">
-      <div>
+      <div ref={wrapRef}>
         <div className="artboard-wrap">
           <Stage
-            width={STAGE_WIDTH}
+            width={stageW}
             height={geo.stageH}
             onMouseDown={(e) => {
               if (e.target === e.target.getStage()) deselect();
@@ -285,7 +300,7 @@ export default function Editor({
               <Layer listening={false}>
                 <KonvaImage
                   image={boxImg ?? undefined}
-                  width={STAGE_WIDTH}
+                  width={stageW}
                   height={geo.stageH}
                 />
               </Layer>
@@ -419,7 +434,7 @@ export default function Editor({
                 fontFamily,
                 color: editingEl.fill,
                 width: Math.min(
-                  STAGE_WIDTH - (geo.gx + editingEl.x * geo.scale),
+                  stageW - (geo.gx + editingEl.x * geo.scale),
                   Math.max(
                     140,
                     editingEl.text.length * editingEl.fontSizePx * geo.scale * 0.62,

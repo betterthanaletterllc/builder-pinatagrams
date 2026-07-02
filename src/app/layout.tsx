@@ -30,15 +30,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className={`${poppins.variable} ${arbotek.variable}`}>
         <header className="topbar">
           <div className="topbar-inner">
-            <Image
-              src={logo}
-              alt="Piñatagrams"
-              className="brand-logo"
-              priority
-            />
-            <span className="brand">
-              <em>Builder</em>
-            </span>
+            <a href="/" className="brand-wrap">
+              <Image
+                src={logo}
+                alt="Piñatagrams"
+                className="brand-logo"
+                priority
+              />
+              <span className="brand">
+                <em>Builder</em>
+              </span>
+            </a>
+            <a href="/cart" className="cart-link">
+              Cart
+            </a>
           </div>
         </header>
         {children}
