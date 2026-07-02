@@ -64,9 +64,11 @@ export default function GraphicLibrary({
                 })
               }
             >
-              {g.thumb ? (
+              {/* show the actual front graphic (the print art), not the
+                  boxed product photo — the customer is choosing a graphic */}
+              {g.art || g.thumb ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={g.thumb} alt={g.title} loading="lazy" />
+                <img src={g.art ?? g.thumb ?? ""} alt={g.title} loading="lazy" />
               ) : null}
               <span>{g.title}</span>
             </button>

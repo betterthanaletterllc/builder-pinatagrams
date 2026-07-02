@@ -142,7 +142,7 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
               src={
                 graphic.type === "custom"
                   ? graphic.preview
-                  : (graphic.thumb ?? "")
+                  : (graphic.art ?? graphic.thumb ?? "")
               }
               alt="chosen graphic"
             />

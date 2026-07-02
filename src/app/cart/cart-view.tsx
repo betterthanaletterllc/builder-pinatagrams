@@ -112,7 +112,7 @@ export default function CartView() {
               src={
                 l.graphic.type === "custom"
                   ? l.graphic.preview
-                  : (l.graphic.thumb ?? "")
+                  : (l.graphic.art ?? l.graphic.thumb ?? "")
               }
               alt=""
             />
