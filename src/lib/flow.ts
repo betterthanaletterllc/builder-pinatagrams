@@ -1,4 +1,5 @@
 import type { DesignDocument } from "./design-document";
+import type { LogoZone } from "./hub";
 
 /**
  * The B2C order flow: body style → graphic (pick or design) → message →
@@ -37,6 +38,10 @@ export type CartLine = {
   id: string;
   styleId: string;
   styleName: string;
+  // Box context captured at add-time so the cart can composite "your box"
+  // thumbnails without refetching the catalog.
+  boxImageUrl: string | null;
+  logoZone: LogoZone | null;
   graphic: GraphicChoice;
   message: string;
   filling: Filling;

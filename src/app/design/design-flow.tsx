@@ -20,6 +20,7 @@ import {
 } from "@/lib/delivery";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
+import BoxPreview from "./box-preview";
 
 type StyleInfo = {
   id: string;
@@ -48,6 +49,17 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
   const doneThrough =
     (graphic ? 1 : 0) + (stepIndex > 1 ? 1 : 0) + (filling ? 1 : 0);
 
+  const artUrl = graphic
+    ? graphic.type === "custom"
+      ? graphic.preview
+      : (graphic.art ?? graphic.thumb)
+    : null;
+
+  // The box rail: hidden while browsing the library or using the canvas
+  // (they need the full width; the canvas already shows the box).
+  const choosing = step === "Graphic" && !graphic && graphicMode !== null;
+  const railVisible = !choosing;
+
   const addToCart = () => {
     if (!graphic || !filling || dateProblem) return;
     const lines = loadCart();
@@ -55,6 +67,8 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
       id: newLineId(),
       styleId: style.id,
       styleName: style.name,
+      boxImageUrl: style.boxImageUrl,
+      logoZone: style.logoZone,
       graphic,
       message: message.trim(),
       filling,
@@ -68,26 +82,8 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
     router.push("/cart");
   };
 
-  return (
+  const steps = (
     <div>
-      <div className="chips">
-        <span className="chip done">✓ {style.name}</span>
-        {STEPS.map((s, i) => (
-          <button
-            key={s}
-            className={
-              "chip" +
-              (s === step ? " active" : "") +
-              (i < stepIndex ? " done" : "")
-            }
-            onClick={() => i <= Math.max(stepIndex, doneThrough) && setStep(s)}
-          >
-            {i < stepIndex ? "✓ " : ""}
-            {s}
-          </button>
-        ))}
-      </div>
-
       {step === "Graphic" && !graphicMode && !graphic && (
         <div className="choice-cards">
           <button className="choice-card" onClick={() => setGraphicMode("library")}>
@@ -108,10 +104,7 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
       {step === "Graphic" && graphicMode === "library" && !graphic && (
         <GraphicLibrary
           onBack={() => setGraphicMode(null)}
-          onPick={(g) => {
-            setGraphic(g);
-            setStep("Message");
-          }}
+          onPick={(g) => setGraphic(g)}
         />
       )}
 
@@ -128,7 +121,6 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
             logoZone={style.logoZone}
             onSave={(design, preview) => {
               setGraphic({ type: "custom", design, preview });
-              setStep("Message");
             }}
           />
         </div>
@@ -136,36 +128,25 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
 
       {step === "Graphic" && graphic && (
         <div className="step-panel">
-          <div className="picked-graphic">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={
-                graphic.type === "custom"
-                  ? graphic.preview
-                  : (graphic.art ?? graphic.thumb ?? "")
-              }
-              alt="chosen graphic"
-            />
-            <div>
-              <strong>
-                {graphic.type === "custom" ? "Your design" : graphic.title}
-              </strong>
-              <p className="note">
-                <button
-                  className="btn mini"
-                  onClick={() => {
-                    setGraphic(null);
-                    setGraphicMode(null);
-                  }}
-                >
-                  Change graphic
-                </button>
-              </p>
-            </div>
+          <h2>That&apos;s the one?</h2>
+          <p className="note">
+            {graphic.type === "custom" ? "Your design" : graphic.title}, on
+            your {style.name} box — see it on the right.
+          </p>
+          <div className="el-controls">
+            <button className="btn primary" onClick={() => setStep("Message")}>
+              Looks good →
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                setGraphic(null);
+                setGraphicMode(null);
+              }}
+            >
+              Change graphic
+            </button>
           </div>
-          <button className="btn primary" onClick={() => setStep("Message")}>
-            Continue →
-          </button>
         </div>
       )}
 
@@ -173,8 +154,9 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
         <div className="step-panel">
           <h2>Add a gift message</h2>
           <p className="note">
-            Printed on a card that ships inside the box — the first thing they
-            read when they open it. Leave it blank to skip.
+            It&apos;s printed on the inside flap — the first thing they read
+            when the box opens. Watch it appear on the right. Leave blank to
+            skip.
           </p>
           <textarea
             className="message-box"
@@ -249,6 +231,48 @@ export default function DesignFlow({ style }: { style: StyleInfo }) {
             <Link href="/cart">View cart</Link>
           </p>
         </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="chips">
+        <span className="chip done">✓ {style.name}</span>
+        {STEPS.map((s, i) => (
+          <button
+            key={s}
+            className={
+              "chip" +
+              (s === step ? " active" : "") +
+              (i < stepIndex ? " done" : "")
+            }
+            onClick={() => i <= Math.max(stepIndex, doneThrough) && setStep(s)}
+          >
+            {i < stepIndex ? "✓ " : ""}
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {railVisible ? (
+        <div className="flow-grid">
+          {steps}
+          <aside className="flow-rail">
+            <BoxPreview
+              styleName={style.name}
+              boxImageUrl={style.boxImageUrl}
+              logoZone={style.logoZone}
+              artUrl={artUrl}
+              message={message}
+              filling={filling}
+              deliveryDate={step === "Delivery" && !dateProblem ? date : null}
+              mode={step === "Message" ? "open" : "closed"}
+            />
+          </aside>
+        </div>
+      ) : (
+        steps
       )}
     </div>
   );

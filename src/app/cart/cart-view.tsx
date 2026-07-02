@@ -25,6 +25,39 @@ type CheckoutResult =
   | { dryRun: true; reason: string; draftOrderInput: unknown }
   | { dryRun: false; invoiceUrl: string; draftOrderId: string };
 
+// "Your box" thumbnail: the graphic composited onto the style's box photo
+// (same logoZone math as the preview rail); falls back to the raw art.
+function CartBoxThumb({ line }: { line: CartLine }) {
+  const art =
+    line.graphic.type === "custom"
+      ? line.graphic.preview
+      : (line.graphic.art ?? line.graphic.thumb ?? "");
+  if (!line.boxImageUrl || !line.logoZone) {
+    /* eslint-disable-next-line @next/next/no-img-element */
+    return <img className="cart-thumb" src={art} alt="" />;
+  }
+  return (
+    <div className="cart-thumb box-composite">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={line.boxImageUrl} alt="" className="box-img" />
+      {art && (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={art}
+          alt=""
+          className="box-art"
+          style={{
+            left: `${line.logoZone.x * 100}%`,
+            top: `${line.logoZone.y * 100}%`,
+            width: `${line.logoZone.w * 100}%`,
+            height: `${line.logoZone.h * 100}%`,
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function CartView() {
   const [lines, setLines] = useState<CartLine[] | null>(null);
   const [unitPrice, setUnitPrice] = useState<HubPrice | null>(null);
@@ -106,16 +139,7 @@ export default function CartView() {
       <div>
         {lines.map((l) => (
           <div className="cart-line" key={l.id}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="cart-thumb"
-              src={
-                l.graphic.type === "custom"
-                  ? l.graphic.preview
-                  : (l.graphic.art ?? l.graphic.thumb ?? "")
-              }
-              alt=""
-            />
+            <CartBoxThumb line={l} />
             <div className="cart-line-info">
               <strong>
                 {l.graphic.type === "custom"

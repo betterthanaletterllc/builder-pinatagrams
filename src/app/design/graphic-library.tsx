@@ -2,68 +2,47 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { GraphicChoice } from "@/lib/flow";
+import {
+  EXCLUDED_PREFIXES,
+  FALLBACK_OCCASION,
+  loadJson,
+  occasionOf,
+  RECIPIENTS,
+  SHELF_OCCASIONS,
+  VIBES,
+  type LibraryGraphic,
+  type PopularRanking,
+  type TagIndex,
+} from "@/lib/library-data";
 
 /**
- * The ready-made front-graphic library, organized for GIFT-FINDING: a live
- * search box plus occasion chips derived from each design code's prefix
- * (HBD01 → Birthday, SYMP12 → Sympathy…). Fed by /graphics.json — a snapshot
- * of the live Shopify catalog; becomes a hub `/api/public/graphics` endpoint
- * once the admin.btal app gets the read_products scope.
+ * Gift-finding library. Default view = shelves (Popular right now, This
+ * season, top occasions); any search/facet flips to a filtered grid. Facets
+ * answer the three questions a gift-giver asks: who's it for, what's the
+ * occasion, what's the vibe. Tags + popularity are optional data files —
+ * without them the shelves quietly reduce to occasions only.
  */
 
-type LibraryGraphic = {
-  design: string;
-  title: string;
-  thumb: string | null;
-  art: string | null;
-};
+type Manifest = { graphics: LibraryGraphic[] };
+type PopularFile = { ranking: PopularRanking };
+type TagFile = { tags: TagIndex };
 
-// Client-specific one-off designs that shouldn't appear in a public library.
-const EXCLUDED_PREFIXES = new Set(["BSG", "BRYNNEIL", "RETENTION"]);
-
-// Design-code prefix → customer-facing occasion. Several prefixes can share
-// an occasion (the School group). Unknown prefixes land in "More fun".
-const OCCASIONS: Record<string, string> = {
-  HBD: "Birthday",
-  FAF: "Family & Friends",
-  SYMP: "Sympathy",
-  APPR: "Thank you",
-  CONGRATS: "Congrats",
-  VALENTINES: "Love & Valentine's",
-  WED: "Wedding",
-  ANNI: "Anniversary",
-  BABY: "New baby",
-  PARTY: "Party",
-  DIVORCE: "Divorce party",
-  SPORTS: "Sports",
-  PUPYATA: "For dogs",
-  CATYATA: "For cats",
-  REALSY: "Realsy Dates",
-  SCHOOLFUN: "School",
-  SCHOOL: "School",
-  BACKTOSCHOOL: "School",
-  BUSINESS: "Work & business",
-  SEASON: "Summer",
-  CHRISTMASINJULY: "Summer",
-  HALLOWEEN: "Halloween",
-  THANKSGIVING: "Thanksgiving",
-  CHRISTMAS: "Christmas",
-  HANUKKAH: "Hanukkah",
-  NEWYEAR: "New Year",
-  EASTER: "Easter",
-  STPADDYS: "St. Patrick's Day",
-  CINCODEMAYO: "Cinco de Mayo",
-  "4THOFJULY": "4th of July",
-  PRIDEMONTH: "Pride",
-  JUNETEENTH: "Juneteenth",
-  HHM: "Hispanic Heritage",
-};
-
-const FALLBACK_OCCASION = "More fun";
-
-function occasionOf(design: string): string {
-  const prefix = design.replace(/[0-9]+$/, "");
-  return OCCASIONS[prefix] ?? FALLBACK_OCCASION;
+function Card({
+  g,
+  onPick,
+}: {
+  g: LibraryGraphic;
+  onPick: (g: LibraryGraphic) => void;
+}) {
+  return (
+    <button className="library-card" onClick={() => onPick(g)}>
+      {g.art || g.thumb ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img src={g.art ?? g.thumb ?? ""} alt={g.title} loading="lazy" />
+      ) : null}
+      <span>{g.title}</span>
+    </button>
+  );
 }
 
 export default function GraphicLibrary({
@@ -74,25 +53,95 @@ export default function GraphicLibrary({
   onBack: () => void;
 }) {
   const [graphics, setGraphics] = useState<LibraryGraphic[] | null>(null);
+  const [tags, setTags] = useState<TagIndex>({});
+  const [popular, setPopular] = useState<PopularRanking>([]);
   const [failed, setFailed] = useState(false);
+
   const [query, setQuery] = useState("");
   const [occasion, setOccasion] = useState<string | null>(null);
+  const [recipient, setRecipient] = useState<string | null>(null);
+  const [vibe, setVibe] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/graphics.json")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((data) =>
-        setGraphics(
-          (data.graphics ?? []).filter(
-            (g: LibraryGraphic) =>
-              !EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, "")),
-          ),
+    Promise.all([
+      loadJson<Manifest>("/graphics.json"),
+      loadJson<TagFile>("/library-index.json"),
+      loadJson<PopularFile>("/popular.json"),
+    ]).then(([manifest, tagFile, popularFile]) => {
+      if (!manifest) {
+        setFailed(true);
+        return;
+      }
+      setGraphics(
+        manifest.graphics.filter(
+          (g) => !EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, "")),
         ),
-      )
-      .catch(() => setFailed(true));
+      );
+      if (tagFile?.tags) setTags(tagFile.tags);
+      if (popularFile?.ranking) setPopular(popularFile.ranking);
+    });
   }, []);
 
-  // Occasion chips, biggest categories first ("More fun" always last).
+  const pick = (g: LibraryGraphic) =>
+    onPick({
+      type: "shopify",
+      design: g.design,
+      title: g.title,
+      thumb: g.thumb,
+      art: g.art,
+    });
+
+  const filtering =
+    query.trim() !== "" || occasion !== null || recipient !== null || vibe !== null;
+
+  const byDesign = useMemo(() => {
+    const m = new Map<string, LibraryGraphic>();
+    for (const g of graphics ?? []) m.set(g.design, g);
+    return m;
+  }, [graphics]);
+
+  const shown = useMemo(() => {
+    if (!graphics) return [];
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return graphics.filter((g) => {
+      const o = occasionOf(g.design);
+      const t = tags[g.design];
+      if (occasion && o !== occasion) return false;
+      if (recipient && !(t?.r ?? []).includes(recipient)) return false;
+      if (vibe && !(t?.v ?? []).includes(vibe)) return false;
+      if (tokens.length === 0) return true;
+      const hay = `${g.title} ${o} ${g.design} ${(t?.r ?? []).join(" ")} ${(t?.v ?? []).join(" ")}`.toLowerCase();
+      return tokens.every((tok) => hay.includes(tok));
+    });
+  }, [graphics, tags, query, occasion, recipient, vibe]);
+
+  const shelves = useMemo(() => {
+    if (!graphics || filtering) return [];
+    const out: { title: string; items: LibraryGraphic[]; seeAll?: string }[] = [];
+
+    if (popular.length > 0) {
+      const items = popular
+        .map((p) => byDesign.get(p.design))
+        .filter((g): g is LibraryGraphic => !!g)
+        .slice(0, 12);
+      if (items.length) out.push({ title: "Popular right now", items });
+    }
+
+    const month = new Date().getMonth() + 1;
+    const seasonal = graphics.filter((g) =>
+      (tags[g.design]?.m ?? []).includes(month),
+    );
+    if (seasonal.length)
+      out.push({ title: "This season", items: seasonal.slice(0, 12) });
+
+    for (const o of SHELF_OCCASIONS) {
+      const items = graphics.filter((g) => occasionOf(g.design) === o);
+      if (items.length)
+        out.push({ title: o, items: items.slice(0, 12), seeAll: o });
+    }
+    return out;
+  }, [graphics, tags, popular, byDesign, filtering]);
+
   const occasions = useMemo(() => {
     if (!graphics) return [];
     const counts = new Map<string, number>();
@@ -107,17 +156,7 @@ export default function GraphicLibrary({
     );
   }, [graphics]);
 
-  const shown = useMemo(() => {
-    if (!graphics) return [];
-    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return graphics.filter((g) => {
-      const o = occasionOf(g.design);
-      if (occasion && o !== occasion) return false;
-      if (tokens.length === 0) return true;
-      const hay = `${g.title} ${o} ${g.design}`.toLowerCase();
-      return tokens.every((t) => hay.includes(t));
-    });
-  }, [graphics, query, occasion]);
+  const hasTags = Object.keys(tags).length > 0;
 
   return (
     <div>
@@ -143,28 +182,81 @@ export default function GraphicLibrary({
             placeholder="Search — birthday, thank you, dog, Halloween…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            autoFocus
           />
 
-          <div className="chips occasion-chips">
-            <button
-              className={"chip" + (occasion === null ? " active" : "")}
-              onClick={() => setOccasion(null)}
-            >
-              All ({graphics.length})
-            </button>
-            {occasions.map(([o, n]) => (
-              <button
-                key={o}
-                className={"chip" + (occasion === o ? " active" : "")}
-                onClick={() => setOccasion(occasion === o ? null : o)}
-              >
-                {o} ({n})
-              </button>
-            ))}
+          {hasTags && (
+            <div className="facet-row">
+              <span className="facet-label">Who&apos;s it for?</span>
+              {RECIPIENTS.map(([key, label]) => (
+                <button
+                  key={key}
+                  className={"chip" + (recipient === key ? " active" : "")}
+                  onClick={() => setRecipient(recipient === key ? null : key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="facet-row">
+            <span className="facet-label">Occasion</span>
+            <div className="facet-scroll">
+              {occasions.map(([o, n]) => (
+                <button
+                  key={o}
+                  className={"chip" + (occasion === o ? " active" : "")}
+                  onClick={() => setOccasion(occasion === o ? null : o)}
+                >
+                  {o} ({n})
+                </button>
+              ))}
+            </div>
           </div>
 
-          {shown.length === 0 ? (
+          {hasTags && (
+            <div className="facet-row">
+              <span className="facet-label">Vibe</span>
+              {VIBES.map(([key, label]) => (
+                <button
+                  key={key}
+                  className={"chip" + (vibe === key ? " active" : "")}
+                  onClick={() => setVibe(vibe === key ? null : key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!filtering ? (
+            <div className="shelves">
+              {shelves.map((s) => (
+                <section key={s.title} className="shelf">
+                  <div className="shelf-head">
+                    <h3>{s.title}</h3>
+                    {s.seeAll && (
+                      <button
+                        className="btn mini"
+                        onClick={() => setOccasion(s.seeAll!)}
+                      >
+                        See all →
+                      </button>
+                    )}
+                  </div>
+                  <div className="shelf-row">
+                    {s.items.map((g) => (
+                      <Card key={g.design} g={g} onPick={pick} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+              <p className="note">
+                Or search above — every one of our {graphics.length} graphics
+                is in here.
+              </p>
+            </div>
+          ) : shown.length === 0 ? (
             <div className="notice info">
               Nothing matches{query ? ` “${query}”` : ""} — try another word,
               a different occasion, or design your own graphic.
@@ -174,34 +266,12 @@ export default function GraphicLibrary({
               <p className="note">
                 {shown.length} graphic{shown.length === 1 ? "" : "s"}
                 {occasion ? ` · ${occasion}` : ""}
+                {recipient ? ` · for ${recipient}` : ""}
+                {vibe ? ` · ${vibe}` : ""}
               </p>
               <div className="library-grid">
                 {shown.map((g) => (
-                  <button
-                    key={g.design}
-                    className="library-card"
-                    onClick={() =>
-                      onPick({
-                        type: "shopify",
-                        design: g.design,
-                        title: g.title,
-                        thumb: g.thumb,
-                        art: g.art,
-                      })
-                    }
-                  >
-                    {/* the actual front graphic (print art), not the boxed
-                        product photo — the customer is choosing a graphic */}
-                    {g.art || g.thumb ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={g.art ?? g.thumb ?? ""}
-                        alt={g.title}
-                        loading="lazy"
-                      />
-                    ) : null}
-                    <span>{g.title}</span>
-                  </button>
+                  <Card key={g.design} g={g} onPick={pick} />
                 ))}
               </div>
             </>
