@@ -1,0 +1,633 @@
+/* Brand tokens from design-system/colors_and_type.css (the official
+ * Piñatagrams design system — navy/periwinkle/cream, Arbotek + Poppins).
+ * Values here are the semantic subset this app uses; the repo is the
+ * source of truth. */
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --ink: #180d38; /* navy — fg-primary */
+  --muted: #4a4060; /* fg-secondary; lavender #b3b9ce is too light for text */
+  --lavender: #b3b9ce;
+  --paper: #f3e7e4; /* cream — bg-page */
+  --card: #ffffff;
+  --line: rgba(24, 13, 56, 0.12);
+  --line-strong: rgba(24, 13, 56, 0.25);
+  --accent: #627ae3; /* periwinkle — interactive */
+  --accent-hover: #4a62c4;
+  --accent-soft: rgba(98, 122, 227, 0.12);
+  --highlight: #f6de6b;
+  --good: #55a871;
+  --warn: #d4623d; /* coral-dark: readable warning/error text on light bg */
+  --warn-soft: #fdf3d8;
+  --shadow-sm: 0 2px 8px rgba(24, 13, 56, 0.08);
+  --shadow-md: 0 4px 20px rgba(24, 13, 56, 0.12);
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family:
+    var(--font-poppins),
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+.topbar {
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.brand-logo {
+  height: 44px;
+  width: auto;
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.brand em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+
+h1 {
+  /* display style: Arbotek per the design system's type-hero/h1 tokens */
+  font-family: var(--font-arbotek), var(--font-poppins), sans-serif;
+  font-size: 38px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  margin: 8px 0 4px;
+}
+
+.sub {
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+
+.builder-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .builder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.style-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.style-card {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.style-card:hover {
+  border-color: var(--accent);
+}
+
+.style-card.selected {
+  /* keep the card white (the style photos have white backgrounds) — bold
+     blue ring instead of a tinted fill */
+  border-color: var(--accent);
+  background: var(--card);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.style-card.oos {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.style-card img {
+  width: 100%;
+  height: 96px;
+  object-fit: contain;
+}
+
+.style-card .style-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.style-card .oos-tag {
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  position: sticky;
+  top: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.field {
+  margin-bottom: 12px;
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.field select,
+.field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--ink);
+}
+
+.price-lines {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 12px;
+  font-size: 14px;
+}
+
+.price-lines .row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.price-lines .total {
+  font-weight: 700;
+  font-size: 17px;
+  margin-top: 8px;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.notice {
+  font-size: 13px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+
+.notice.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.notice.info {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.error-box {
+  background: var(--warn-soft);
+  border: 1px solid var(--line);
+  color: var(--warn);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+/* --- buttons ------------------------------------------------------------- */
+
+.btn {
+  display: inline-block;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn.block {
+  display: block;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.btn.danger {
+  color: var(--warn);
+  padding: 4px 8px;
+}
+
+/* --- design editor -------------------------------------------------------- */
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1080px) {
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.artboard-wrap {
+  display: inline-block;
+  position: relative; /* anchors the inline text editor overlay */
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: var(--shadow-md);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.inline-text-edit {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 1px dashed var(--accent);
+  border-radius: 4px;
+  background: transparent;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  line-height: 1;
+  white-space: pre;
+}
+
+.el-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 10px;
+}
+
+.el-row.selected {
+  border-color: var(--accent);
+}
+
+.el-row input[type="text"],
+.el-row > input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.el-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.el-controls input[type="number"] {
+  width: 72px;
+  padding: 5px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.el-thumb {
+  height: 40px;
+  width: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch.active {
+  border-color: var(--ink);
+}
+
+.editor-actions {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn.mini {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+/* --- flow wizard ----------------------------------------------------------- */
+
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 20px;
+}
+
+.chip {
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.chip.active {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.chip.done {
+  color: var(--good);
+}
+
+.choice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  max-width: 640px;
+}
+
+.choice-card {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 28px 22px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-sm);
+}
+
+.choice-card:hover {
+  border-color: var(--accent);
+}
+
+.choice-title {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.choice-sub {
+  display: block;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.step-panel {
+  max-width: 560px;
+}
+
+.step-panel h2 {
+  font-size: 20px;
+  margin: 0 0 6px;
+}
+
+.step-panel .btn.primary {
+  margin-top: 14px;
+}
+
+.step-panel .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.picked-graphic {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.picked-graphic img {
+  height: 90px;
+  max-width: 160px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.message-box {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.filling-cards {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.filling-card {
+  border: 2px solid var(--line);
+  background: var(--card);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.filling-card:hover {
+  border-color: var(--accent);
+}
+
+.filling-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.date-input {
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.library-card {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.library-card:hover {
+  border-color: var(--accent);
+}
+
+.library-card img {
+  width: 100%;
+  height: 110px;
+  object-fit: contain;
+  margin-bottom: 6px;
+}
+
+.price-from {
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+
+/* --- cart ------------------------------------------------------------------ */
+
+.cart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .cart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cart-line {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.cart-thumb {
+  height: 72px;
+  width: 96px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.cart-line-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cart-line-price {
+  font-weight: 700;
+}
+
+.qty {
+  min-width: 26px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.payload-pre {
+  font-size: 11px;
+  background: var(--card);
+  border-radius: 8px;
+  padding: 10px;
+  overflow-x: auto;
+  max-height: 320px;
+}

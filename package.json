@@ -1,0 +1,23 @@
+{
+  "name": "builder-pinatagrams",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3006",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "konva": "^10.3.0",
+    "next": "^15.1.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-konva": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.7.2"
+  }
+}
