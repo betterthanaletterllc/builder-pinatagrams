@@ -710,7 +710,7 @@ a.style-card:focus-visible {
     padding: 16px 14px 60px;
   }
   h1 {
-    font-size: 28px;
+    font-size: 26px;
   }
   .brand-logo {
     height: 34px;
@@ -734,8 +734,39 @@ a.style-card:focus-visible {
   .facet-label {
     min-width: 100%;
   }
+  .facet-row {
+    row-gap: 4px;
+  }
   .choice-card {
     padding: 20px 16px;
+  }
+  /* thumb-friendly primary actions */
+  .step-panel .btn.primary,
+  .editor-actions .btn {
+    width: 100%;
+    text-align: center;
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+  /* 16px inputs stop iOS Safari from zooming the page on focus */
+  .field select,
+  .field input,
+  .message-box,
+  .date-input,
+  .el-row > input,
+  .library-search {
+    font-size: 16px;
+  }
+  .step-panel {
+    max-width: none;
+  }
+  .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .chip {
+    flex: 0 0 auto;
   }
 }
 
@@ -810,8 +841,13 @@ a.style-card:focus-visible {
   .flow-grid {
     grid-template-columns: 1fr;
   }
+  /* steps and their buttons come FIRST on phones; the box preview follows,
+     compact and centered */
   .flow-rail {
-    order: -1; /* the box preview leads on mobile */
+    position: static;
+    max-width: 340px;
+    margin: 18px auto 0;
+    width: 100%;
   }
 }
 
@@ -842,6 +878,19 @@ a.style-card:focus-visible {
 
 .box-layer.visible {
   opacity: 1;
+}
+
+/* the hidden layer must not contribute height (the open-box photo is much
+   taller than the closed box — it was inflating the preview and pushing
+   step content off-screen on phones) */
+.box-layer:not(.visible) {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.box-stage {
+  position: relative;
 }
 
 .box-composite {

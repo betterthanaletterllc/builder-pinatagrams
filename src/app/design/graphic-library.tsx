@@ -27,15 +27,25 @@ type Manifest = { graphics: LibraryGraphic[] };
 type PopularFile = { ranking: PopularRanking };
 type TagFile = { tags: TagIndex };
 
+// Shopify's CDN resizes on the fly — a 360px thumb is ~10x lighter than the
+// print-resolution original, which is what makes shelf scrolling feel instant.
+function thumbUrl(u: string, width = 360): string {
+  if (!u.includes("cdn.shopify.com")) return u;
+  return u + (u.includes("?") ? "&" : "?") + `width=${width}`;
+}
+
 function Card({
   g,
   onPick,
+  eager = false,
 }: {
   g: LibraryGraphic;
   onPick: (g: LibraryGraphic) => void;
+  eager?: boolean;
 }) {
   // Art only — no product name. The graphic sells itself; the title stays
   // available to screen readers and as a hover tooltip.
+  const src = g.art ?? g.thumb;
   return (
     <button
       className="library-card"
@@ -43,9 +53,14 @@ function Card({
       title={g.title}
       aria-label={g.title}
     >
-      {g.art || g.thumb ? (
+      {src ? (
         /* eslint-disable-next-line @next/next/no-img-element */
-        <img src={g.art ?? g.thumb ?? ""} alt={g.title} loading="lazy" />
+        <img
+          src={thumbUrl(src)}
+          alt={g.title}
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
+        />
       ) : null}
     </button>
   );
@@ -193,15 +208,17 @@ export default function GraphicLibrary({
           {hasTags && (
             <div className="facet-row">
               <span className="facet-label">Who&apos;s it for?</span>
-              {RECIPIENTS.map(([key, label]) => (
-                <button
-                  key={key}
-                  className={"chip" + (recipient === key ? " active" : "")}
-                  onClick={() => setRecipient(recipient === key ? null : key)}
-                >
-                  {label}
-                </button>
-              ))}
+              <div className="facet-scroll">
+                {RECIPIENTS.map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={"chip" + (recipient === key ? " active" : "")}
+                    onClick={() => setRecipient(recipient === key ? null : key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -223,15 +240,17 @@ export default function GraphicLibrary({
           {hasTags && (
             <div className="facet-row">
               <span className="facet-label">Vibe</span>
-              {VIBES.map(([key, label]) => (
-                <button
-                  key={key}
-                  className={"chip" + (vibe === key ? " active" : "")}
-                  onClick={() => setVibe(vibe === key ? null : key)}
-                >
-                  {label}
-                </button>
-              ))}
+              <div className="facet-scroll">
+                {VIBES.map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={"chip" + (vibe === key ? " active" : "")}
+                    onClick={() => setVibe(vibe === key ? null : key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -252,7 +271,7 @@ export default function GraphicLibrary({
                   </div>
                   <div className="shelf-row">
                     {s.items.map((g) => (
-                      <Card key={g.design} g={g} onPick={pick} />
+                      <Card key={g.design} g={g} onPick={pick} eager />
                     ))}
                   </div>
                 </section>

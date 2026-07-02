@@ -61,10 +61,11 @@ export default function DesignFlow({
       : (graphic.art ?? graphic.thumb)
     : null;
 
-  // The box rail: hidden while browsing the library or using the canvas
-  // (they need the full width; the canvas already shows the box).
+  // The box rail: only once there's something to show on the box, and never
+  // while browsing the library / using the canvas (they need the width and
+  // the canvas already shows the box).
   const choosing = step === "Graphic" && !graphic && graphicMode !== null;
-  const railVisible = !choosing;
+  const railVisible = !choosing && (graphic !== null || step !== "Graphic");
 
   const addToCart = () => {
     if (!graphic || !filling || dateProblem) return;
@@ -137,7 +138,7 @@ export default function DesignFlow({
           <h2>That&apos;s the one?</h2>
           <p className="note">
             {graphic.type === "custom" ? "Your design" : graphic.title}, on
-            your {style.name} box — see it on the right.
+            your {style.name} box.
           </p>
           <div className="el-controls">
             <button className="btn primary" onClick={() => setStep("Message")}>
