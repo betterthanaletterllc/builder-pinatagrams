@@ -540,6 +540,34 @@ h1 {
   background: #fff;
 }
 
+.library-search {
+  width: 100%;
+  max-width: 460px;
+  padding: 11px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+  margin-bottom: 12px;
+}
+
+.library-search:focus {
+  outline: 2px solid var(--accent);
+  border-color: var(--accent);
+}
+
+.occasion-chips {
+  margin-bottom: 16px;
+}
+
+.occasion-chips .chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
