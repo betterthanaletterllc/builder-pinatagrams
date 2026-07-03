@@ -24,16 +24,18 @@ import {
 } from "@/lib/design-document";
 
 /**
- * Canvas editor: the design artboard overlaid on the chosen style's BOX photo
- * at the hub's logoZone. The document stays in artboard pixels; the Group
- * carries the zone transform. Export renders ONLY the design group.
- *
- * Editing model: click selects (drag/resize/rotate via Transformer),
- * double-click a text opens an in-place editor. Element order = layer order
- * (later = on top); the sidebar can move elements forward/back.
+ * Canvas-first editor. The canvas is the page; a toolbar sits above it and a
+ * context bar appears under it for whatever is selected. Two view modes:
+ *  - flat: the artboard fills the width (default on phones — the print zone
+ *    on the box photo is too small to edit by thumb)
+ *  - boxed: the artboard composited on the box photo at the hub's logoZone
+ * The document stays in artboard pixels either way; export renders ONLY the
+ * design group. On narrow screens text edits in a fixed bottom sheet (16px
+ * input — no iOS focus-zoom); on wide screens it edits inline on the canvas.
  */
 
 const MAX_STAGE_WIDTH = 760;
+const NARROW = 520;
 const SAFE_MARGIN_IN = 0.25;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
@@ -113,6 +115,8 @@ export default function Editor({
   const [doc, setDoc] = useState<DesignDocument>(() => newDesign(bodyStyleId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"flat" | "boxed">("boxed");
+  const userToggledView = useRef(false);
   const designRef = useRef<Konva.Group>(null);
   const trRef = useRef<Konva.Transformer>(null);
   const nodeRefs = useRef<Map<string, Konva.Node>>(new Map());
@@ -122,14 +126,18 @@ export default function Editor({
   const px = artboardPx(doc.artboard);
   const safePx = SAFE_MARGIN_IN * doc.artboard.dpi;
 
-  // Responsive stage: track the column's width so the canvas fits phones.
+  // Responsive stage width; phones default to flat editing (the boxed print
+  // zone is too small to work in by thumb).
   const wrapRef = useRef<HTMLDivElement>(null);
   const [stageW, setStageW] = useState(MAX_STAGE_WIDTH);
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const update = () =>
-      setStageW(Math.max(280, Math.min(MAX_STAGE_WIDTH, el.clientWidth)));
+    const update = () => {
+      const w = Math.max(280, Math.min(MAX_STAGE_WIDTH, el.clientWidth));
+      setStageW(w);
+      if (!userToggledView.current && w < NARROW) setViewMode("flat");
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -137,8 +145,12 @@ export default function Editor({
     // re-run when the loading gate lifts and the wrapper first renders
   }, [boxImg]);
 
+  const isNarrow = stageW < NARROW;
+  const canBox = !!(boxImg && logoZone);
+  const boxed = viewMode === "boxed" && canBox;
+
   const geo = useMemo(() => {
-    if (boxImg && logoZone) {
+    if (boxed && boxImg && logoZone) {
       const stageH = Math.round((stageW * boxImg.height) / boxImg.width);
       const zone = {
         x: logoZone.x * stageW,
@@ -152,7 +164,6 @@ export default function Editor({
         scale: s,
         gx: zone.x + (zone.w - px.width * s) / 2,
         gy: zone.y + (zone.h - px.height * s) / 2,
-        boxed: true,
       };
     }
     const s = stageW / px.width;
@@ -161,9 +172,8 @@ export default function Editor({
       scale: s,
       gx: 0,
       gy: 0,
-      boxed: false,
     };
-  }, [boxImg, logoZone, px.width, px.height, stageW]);
+  }, [boxed, boxImg, logoZone, px.width, px.height, stageW]);
 
   const fontFamily = useMemo(() => {
     const v = getComputedStyle(document.body)
@@ -181,10 +191,9 @@ export default function Editor({
         : null;
     tr.nodes(node ? [node] : []);
     tr.getLayer()?.batchDraw();
-  }, [selectedId, editingId, doc.elements]);
+  }, [selectedId, editingId, doc.elements, geo]);
 
-  // Wait for the box photo — rendering the flat artboard first then jumping
-  // to the boxed layout is exactly the flash we're avoiding.
+  // Wait for the box photo — no flat-artboard flash.
   if (boxImageUrl && !boxImg) {
     return <p className="note">Setting up your box…</p>;
   }
@@ -247,8 +256,7 @@ export default function Editor({
   };
 
   // Synchronous on purpose: requestAnimationFrame never fires in background
-  // tabs, and Konva's toDataURL doesn't need a paint — just detach the
-  // transformer handles imperatively so they can't leak into the export.
+  // tabs, and Konva's toDataURL doesn't need a paint.
   const exportPng = (targetWidthPx: number): string | null => {
     trRef.current?.nodes([]);
     const g = designRef.current;
@@ -281,13 +289,56 @@ export default function Editor({
     else nodeRefs.current.delete(id);
   };
 
+  const selected = doc.elements.find((e) => e.id === selectedId) ?? null;
   const editingEl = doc.elements.find(
     (e) => e.id === editingId && e.kind === "text",
   );
 
   return (
-    <div className="editor-grid">
-      <div ref={wrapRef}>
+    <div className="editor-v4">
+      <div className="editor-toolbar">
+        <button className="btn" onClick={addText}>
+          + Text
+        </button>
+        <button className="btn" onClick={() => fileRef.current?.click()}>
+          + Photo
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onUpload(f);
+            e.target.value = "";
+          }}
+        />
+        {canBox && (
+          <div className="seg">
+            <button
+              className={"seg-btn" + (!boxed ? " on" : "")}
+              onClick={() => {
+                userToggledView.current = true;
+                setViewMode("flat");
+              }}
+            >
+              Flat
+            </button>
+            <button
+              className={"seg-btn" + (boxed ? " on" : "")}
+              onClick={() => {
+                userToggledView.current = true;
+                setViewMode("boxed");
+              }}
+            >
+              On the box
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div ref={wrapRef} className="editor-canvas-col">
         <div className="artboard-wrap">
           <Stage
             width={stageW}
@@ -295,8 +346,11 @@ export default function Editor({
             onMouseDown={(e) => {
               if (e.target === e.target.getStage()) deselect();
             }}
+            onTouchStart={(e) => {
+              if (e.target === e.target.getStage()) deselect();
+            }}
           >
-            {geo.boxed && (
+            {boxed && (
               <Layer listening={false}>
                 <KonvaImage
                   image={boxImg ?? undefined}
@@ -334,7 +388,10 @@ export default function Editor({
                     <Text
                       key={el.id}
                       ref={refFn(el.id)}
-                      visible={el.id !== editingId}
+                      // wide: inline overlay replaces the node while editing;
+                      // narrow: the node stays visible as the live preview of
+                      // what's typed in the bottom sheet
+                      visible={isNarrow || el.id !== editingId}
                       text={el.text}
                       x={el.x}
                       y={el.y}
@@ -383,7 +440,7 @@ export default function Editor({
                   width={px.width}
                   height={px.height}
                   stroke="#627AE3"
-                  strokeWidth={2 / geo.scale}
+                  strokeWidth={(boxed ? 2 : 1.5) / geo.scale}
                 />
                 <Line
                   points={[
@@ -408,13 +465,17 @@ export default function Editor({
                   "bottom-left",
                   "bottom-right",
                 ]}
+                anchorSize={isNarrow ? 16 : 10}
+                anchorCornerRadius={isNarrow ? 8 : 2}
+                rotateAnchorOffset={isNarrow ? 34 : 24}
                 anchorStroke="#627AE3"
                 borderStroke="#627AE3"
               />
             </Layer>
           </Stage>
 
-          {editingEl && editingEl.kind === "text" && (
+          {/* wide screens: edit text right on the canvas */}
+          {!isNarrow && editingEl && editingEl.kind === "text" && (
             <textarea
               className="inline-text-edit"
               autoFocus
@@ -444,109 +505,97 @@ export default function Editor({
             />
           )}
         </div>
+
         <p className="note">
-          {geo.boxed
-            ? "Your design on the box it ships in. Double-click text to edit it; drag the corners to resize."
-            : `Artboard: ${doc.artboard.widthIn}″ × ${doc.artboard.heightIn}″ at ${doc.artboard.dpi} DPI.`}
+          {selected
+            ? "Drag to move · corners resize · double-tap text to edit"
+            : boxed
+              ? "This is the printed area on your box — tap anything to edit it."
+              : "Your front graphic, edge to edge. Keep it inside the dashed safe line."}
         </p>
       </div>
 
-      <aside className="panel">
-        <h2>Your design</h2>
-        <div className="el-controls">
-          <button className="btn" onClick={addText}>
-            + Text
+      {selected && (
+        <div className="context-bar">
+          {selected.kind === "text" && (
+            <>
+              <button
+                className="btn mini"
+                onClick={() => setEditingId(selected.id)}
+              >
+                Edit text
+              </button>
+              {TEXT_SWATCHES.map((c) => (
+                <button
+                  key={c}
+                  className={
+                    "swatch" +
+                    (selected.kind === "text" && selected.fill === c
+                      ? " active"
+                      : "")
+                  }
+                  style={{ background: c }}
+                  onClick={() => patch(selected.id, { fill: c })}
+                  title={c}
+                />
+              ))}
+            </>
+          )}
+          <button
+            className="btn mini"
+            onClick={() => moveLayer(selected.id, 1)}
+            title="Bring forward"
+          >
+            ⬆ Front
           </button>
-          <button className="btn" onClick={() => fileRef.current?.click()}>
-            + Photo
+          <button
+            className="btn mini"
+            onClick={() => moveLayer(selected.id, -1)}
+            title="Send backward"
+          >
+            ⬇ Back
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onUpload(f);
-              e.target.value = "";
+          <button
+            className="btn danger"
+            onClick={() => removeEl(selected.id)}
+            title="Remove"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      <div className="editor-cta">
+        {onSave && (
+          <button className="btn primary block" onClick={useThisDesign}>
+            Use this design →
+          </button>
+        )}
+        <button className="btn mini" onClick={downloadPreview}>
+          Download print-size PNG
+        </button>
+      </div>
+
+      {/* narrow screens: text edits in a bottom sheet (16px input, no iOS zoom) */}
+      {isNarrow && editingEl && editingEl.kind === "text" && (
+        <div className="edit-sheet">
+          <textarea
+            autoFocus
+            rows={2}
+            value={editingEl.text}
+            onChange={(e) => patch(editingEl.id, { text: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                setEditingId(null);
+              }
             }}
           />
-        </div>
-
-        {[...doc.elements].reverse().map((el) => (
-          <div
-            key={el.id}
-            className={"el-row" + (el.id === selectedId ? " selected" : "")}
-            onClick={() => setSelectedId(el.id)}
-          >
-            {el.kind === "text" ? (
-              <>
-                <input
-                  value={el.text}
-                  onChange={(e) => patch(el.id, { text: e.target.value })}
-                />
-                <div className="el-controls">
-                  {TEXT_SWATCHES.map((c) => (
-                    <button
-                      key={c}
-                      className={"swatch" + (el.fill === c ? " active" : "")}
-                      style={{ background: c }}
-                      onClick={() => patch(el.id, { fill: c })}
-                      title={c}
-                    />
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="el-controls">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="el-thumb" src={el.src} alt="uploaded" />
-                <span className="note" style={{ margin: 0, flex: 1 }}>
-                  Photo
-                </span>
-              </div>
-            )}
-            <div className="el-controls">
-              <button
-                className="btn mini"
-                onClick={() => moveLayer(el.id, 1)}
-                title="Bring forward (on top)"
-              >
-                ⬆ Front
-              </button>
-              <button
-                className="btn mini"
-                onClick={() => moveLayer(el.id, -1)}
-                title="Send backward (behind)"
-              >
-                ⬇ Back
-              </button>
-              <button
-                className="btn danger"
-                onClick={() => removeEl(el.id)}
-                title="Remove"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {doc.elements.length === 0 && (
-          <p className="note">Nothing here yet — add text or upload a photo.</p>
-        )}
-
-        <div className="editor-actions">
-          {onSave && (
-            <button className="btn primary block" onClick={useThisDesign}>
-              Use this design →
-            </button>
-          )}
-          <button className="btn" onClick={downloadPreview}>
-            Download print-size preview
+          <button className="btn primary" onClick={() => setEditingId(null)}>
+            Done
           </button>
         </div>
-      </aside>
+      )}
     </div>
   );
 }

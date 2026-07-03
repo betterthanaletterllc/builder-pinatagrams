@@ -312,6 +312,107 @@ a.style-card:focus-visible {
   padding: 4px 8px;
 }
 
+/* --- design editor (canvas-first) ------------------------------------------ */
+
+.editor-v4 {
+  max-width: 760px;
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-left: auto;
+}
+
+.seg-btn {
+  border: none;
+  background: var(--card);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.seg-btn.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.editor-canvas-col {
+  min-width: 0;
+}
+
+.context-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+
+.context-bar .swatch {
+  width: 26px;
+  height: 26px;
+}
+
+.editor-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 14px;
+}
+
+.editor-cta .btn.block {
+  width: 100%;
+}
+
+.edit-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 16px rgba(24, 13, 56, 0.16);
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+}
+
+.edit-sheet textarea {
+  flex: 1;
+  font-size: 16px; /* no iOS focus-zoom */
+  font-family: inherit;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 10px 12px;
+  resize: none;
+}
+
 /* --- design editor -------------------------------------------------------- */
 
 .editor-grid {
