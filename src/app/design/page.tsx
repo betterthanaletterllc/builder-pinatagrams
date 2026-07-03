@@ -40,7 +40,6 @@ export default async function DesignPage({
 
   return (
     <main>
-      <h1>Design your {match ? match.name : style} piñata</h1>
       <DesignFlow
         style={{
           id: style,

@@ -43,8 +43,8 @@ export default function BuilderPreview({
     <div>
       {price && (
         <p className="price-from">
-          <strong>{formatCents(price.unitDeliveredCents)}</strong> delivered —
-          tap a style to start designing.
+          Every Piñatagram is{" "}
+          <strong>{formatCents(price.unitDeliveredCents)}</strong> delivered.
         </p>
       )}
       <div className="style-grid">

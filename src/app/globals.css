@@ -555,19 +555,23 @@ a.style-card:focus-visible {
   color: var(--good);
 }
 
+.step-h1 {
+  margin-top: 4px;
+}
+
 .choice-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  max-width: 640px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  max-width: 560px;
 }
 
 .choice-card {
   background: var(--card);
   border: 2px solid var(--line);
   border-radius: 12px;
-  padding: 28px 22px;
-  text-align: left;
+  padding: 34px 12px;
+  text-align: center;
   cursor: pointer;
   font-family: inherit;
   box-shadow: var(--shadow-sm);
@@ -579,16 +583,9 @@ a.style-card:focus-visible {
 
 .choice-title {
   display: block;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--ink);
-  margin-bottom: 6px;
-}
-
-.choice-sub {
-  display: block;
-  font-size: 14px;
-  color: var(--muted);
 }
 
 .step-panel {

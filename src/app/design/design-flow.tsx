@@ -104,6 +104,17 @@ export default function DesignFlow({
   const selectedSavedKey = addressKey(address);
   const addressOk = addressComplete(address);
 
+  // "Step One" is the body-style picker on the landing page.
+  const STEP_HEADINGS: Record<Step, string> = {
+    Graphic: "Step Two: The graphic",
+    Message: "Step Three: Add a gift message",
+    Filling: "Step Four: What goes inside?",
+    Delivery: "Step Five: Pick the delivery day",
+    "Send to": "Step Six: Who's it going to?",
+  };
+  // Inside the library or canvas the tools need the room — no heading there.
+  const showHeading = !choosing;
+
   const addToCart = () => {
     if (!graphic || !filling || dateProblem || !addressOk) return;
     const lines = loadCart();
@@ -134,9 +145,6 @@ export default function DesignFlow({
         <div className="choice-cards">
           <button className="choice-card" onClick={() => setGraphicMode("library")}>
             <span className="choice-title">Pick a graphic</span>
-            <span className="choice-sub">
-              Browse our library of ready-made front graphics.
-            </span>
           </button>
           <button
             className="choice-card"
@@ -145,10 +153,7 @@ export default function DesignFlow({
               setGraphicMode("canvas");
             }}
           >
-            <span className="choice-title">Design a graphic</span>
-            <span className="choice-sub">
-              Your words and photos, on the box — you make it.
-            </span>
+            <span className="choice-title">Design your own</span>
           </button>
         </div>
       )}
@@ -233,7 +238,6 @@ export default function DesignFlow({
 
       {step === "Filling" && (
         <div className="step-panel">
-          <h2>What goes inside?</h2>
           <div className="filling-cards">
             {FILLINGS.map((f) => (
               <button
@@ -257,7 +261,6 @@ export default function DesignFlow({
 
       {step === "Delivery" && (
         <div className="step-panel">
-          <h2>When should it arrive?</h2>
           <DateCalendar value={date} onChange={setDate} />
           {dateProblem ? (
             <div className="notice warn">{dateProblem}</div>
@@ -276,7 +279,6 @@ export default function DesignFlow({
 
       {step === "Send to" && (
         <div className="step-panel">
-          <h2>Who&apos;s it going to?</h2>
           <p className="note">
             Each piñata ships to its own person — add another to the cart to
             send somewhere else.
@@ -359,6 +361,8 @@ export default function DesignFlow({
           </button>
         ))}
       </div>
+
+      {showHeading && <h1 className="step-h1">{STEP_HEADINGS[step]}</h1>}
 
       {railVisible ? (
         <div className="flow-grid">

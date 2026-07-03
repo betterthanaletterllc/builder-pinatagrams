@@ -10,11 +10,8 @@ export default async function Home() {
     const catalog = await getCatalog();
     return (
       <main>
-        <h1>Design your own piñata</h1>
-        <p className="sub">
-          Pick a body style to get started — live availability and pricing come
-          straight from the hub.
-        </p>
+        <h1>Build a Piñatagram</h1>
+        <p className="sub">Step One: Pick a body style</p>
         <BuilderPreview bodyStyles={catalog.bodyStyles} />
       </main>
     );
