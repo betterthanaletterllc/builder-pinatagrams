@@ -25,7 +25,7 @@ export function toYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function fromYmd(ymd: string): Date {
+export function fromYmd(ymd: string): Date {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(y, m - 1, d);
 }

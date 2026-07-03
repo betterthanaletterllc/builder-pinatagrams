@@ -51,6 +51,7 @@ export default function BoxPreview({
   filling,
   deliveryDate,
   mode,
+  variant = "full",
   interiorUrl,
   messageZone,
 }: {
@@ -62,6 +63,9 @@ export default function BoxPreview({
   filling: string | null;
   deliveryDate: string | null;
   mode: "closed" | "open";
+  // "bare" hides the meta block (style name, filling, arrival) — used on the
+  // message step where the box + text field should be the whole page.
+  variant?: "full" | "bare";
   // Hub-configured interior photo + zone (admin /catalog); local fallbacks
   // keep the preview working when the hub hasn't been configured yet.
   interiorUrl?: string | null;
@@ -154,17 +158,19 @@ export default function BoxPreview({
         </div>
       </div>
 
-      <div className="box-meta">
-        <strong>{styleName} piñata</strong>
-        {mode === "open" && (
-          <p className="note">
-            Your message is printed right here — on the flap they see the
-            moment the box opens.
-          </p>
-        )}
-        {filling && <p className="note">Filled with {filling}</p>}
-        {deliveryDate && <p className="note">Arriving {deliveryDate}</p>}
-      </div>
+      {variant === "full" && (
+        <div className="box-meta">
+          <strong>{styleName} piñata</strong>
+          {mode === "open" && (
+            <p className="note">
+              Your message is printed right here — on the flap they see the
+              moment the box opens.
+            </p>
+          )}
+          {filling && <p className="note">Filled with {filling}</p>}
+          {deliveryDate && <p className="note">Arriving {deliveryDate}</p>}
+        </div>
+      )}
     </div>
   );
 }

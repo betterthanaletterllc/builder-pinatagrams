@@ -526,6 +526,130 @@ a.style-card:focus-visible {
   border-radius: 8px;
 }
 
+/* --- build dock: the collapsed "your box so far" bar ------------------------ */
+
+.build-dock {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -2px 12px rgba(24, 13, 56, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+}
+
+.dock-thumb {
+  width: 52px;
+  flex: 0 0 52px;
+}
+
+.dock-info {
+  min-width: 0;
+  display: grid;
+}
+
+.dock-info strong {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-info span {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.has-dock {
+  padding-bottom: 88px;
+}
+
+/* message step: box + text box + continue, one screen */
+
+.msg-step .message-box {
+  margin-top: 4px;
+}
+
+.flow-rail.msg-compact {
+  max-width: 250px;
+}
+
+@media (max-width: 900px) {
+  .flow-rail.msg-compact {
+    max-width: 230px;
+    margin-bottom: 10px;
+  }
+  .flow-rail.msg-compact .box-preview {
+    padding: 8px;
+  }
+}
+
+/* --- inline delivery calendar ----------------------------------------------- */
+
+.cal {
+  max-width: 340px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+
+.cal-dow {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.cal-day {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  padding: 9px 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.cal-day:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.cal-day.selected {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.cal-day.off {
+  color: var(--lavender);
+  cursor: not-allowed;
+}
+
 .addr-cards {
   display: grid;
   gap: 8px;

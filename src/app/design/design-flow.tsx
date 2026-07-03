@@ -19,15 +19,11 @@ import {
   type Filling,
   type GraphicChoice,
 } from "@/lib/flow";
-import {
-  deliveryProblem,
-  firstAvailableDate,
-  maxDeliveryDate,
-  minDeliveryDate,
-} from "@/lib/delivery";
+import { deliveryProblem, firstAvailableDate } from "@/lib/delivery";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
 import BoxPreview from "./box-preview";
+import DateCalendar from "./date-calendar";
 
 type StyleInfo = {
   id: string;
@@ -88,7 +84,12 @@ export default function DesignFlow({
     : null;
 
   const choosing = step === "Graphic" && !graphic && graphicMode !== null;
-  const railVisible = !choosing && (graphic !== null || step !== "Graphic");
+  // Big box preview only where the box IS the subject (confirm + message).
+  // Later steps collapse it into a small "building…" dock at the bottom.
+  const docked =
+    step === "Filling" || step === "Delivery" || step === "Send to";
+  const railVisible =
+    !choosing && !docked && (graphic !== null || step !== "Graphic");
 
   const selectedSavedKey = addressKey(address);
   const addressOk = addressComplete(address);
@@ -175,8 +176,10 @@ export default function DesignFlow({
             <button
               className="btn"
               onClick={() => {
+                // straight back to where they were choosing — the library for
+                // picked graphics, the canvas for designed ones
+                setGraphicMode(graphic.type === "shopify" ? "library" : "canvas");
                 setGraphic(null);
-                setGraphicMode(null);
               }}
             >
               Change graphic
@@ -186,21 +189,15 @@ export default function DesignFlow({
       )}
 
       {step === "Message" && (
-        <div className="step-panel">
-          <h2>Add a gift message</h2>
-          <p className="note">
-            It&apos;s printed on the inside flap — the first thing they read
-            when the box opens. Leave blank to skip.
-          </p>
+        <div className="step-panel msg-step">
           <textarea
             className="message-box"
             maxLength={300}
-            rows={5}
-            placeholder="Happy birthday! Smash responsibly…"
+            rows={4}
+            placeholder="Add a gift message — it prints on the inside flap. Leave blank to skip."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <p className="note">{300 - message.length} characters left</p>
           <button className="btn primary" onClick={() => setStep("Filling")}>
             Continue →
           </button>
@@ -234,20 +231,11 @@ export default function DesignFlow({
       {step === "Delivery" && (
         <div className="step-panel">
           <h2>When should it arrive?</h2>
-          <input
-            type="date"
-            className="date-input"
-            value={date}
-            min={minDeliveryDate()}
-            max={maxDeliveryDate()}
-            onChange={(e) => setDate(e.target.value)}
-          />
+          <DateCalendar value={date} onChange={setDate} />
           {dateProblem ? (
             <div className="notice warn">{dateProblem}</div>
           ) : (
-            <div className="notice info">
-              We&apos;ll make it, box it, and get it there by {date}.
-            </div>
+            <div className="notice info">Arriving by {date}.</div>
           )}
           <button
             className="btn primary"
@@ -348,7 +336,11 @@ export default function DesignFlow({
       {railVisible ? (
         <div className="flow-grid">
           {steps}
-          <aside className="flow-rail">
+          <aside
+            className={
+              "flow-rail" + (step === "Message" ? " msg-compact" : "")
+            }
+          >
             <BoxPreview
               styleName={style.name}
               boxImageUrl={style.boxImageUrl}
@@ -356,19 +348,59 @@ export default function DesignFlow({
               artUrl={artUrl}
               message={message}
               filling={filling}
-              deliveryDate={
-                (step === "Delivery" || step === "Send to") && !dateProblem
-                  ? date
-                  : null
-              }
+              deliveryDate={null}
               mode={step === "Message" ? "open" : "closed"}
+              variant={step === "Message" ? "bare" : "full"}
               interiorUrl={boxInterior?.interiorUrl}
               messageZone={boxInterior?.messageZone}
             />
           </aside>
         </div>
       ) : (
-        steps
+        <div className={docked ? "has-dock" : undefined}>{steps}</div>
+      )}
+
+      {docked && (
+        <div className="build-dock">
+          <div className="dock-thumb box-composite">
+            {style.boxImageUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={style.boxImageUrl} alt="" className="box-img" />
+            ) : null}
+            {artUrl && style.logoZone && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={artUrl}
+                alt=""
+                className="box-art"
+                style={{
+                  left: `${style.logoZone.x * 100}%`,
+                  top: `${style.logoZone.y * 100}%`,
+                  width: `${style.logoZone.w * 100}%`,
+                  height: `${style.logoZone.h * 100}%`,
+                }}
+              />
+            )}
+          </div>
+          <div className="dock-info">
+            <strong>
+              {graphic?.type === "custom"
+                ? `Your design — ${style.name}`
+                : graphic
+                  ? `${graphic.title} — ${style.name}`
+                  : style.name}
+            </strong>
+            <span>
+              {[
+                message ? "message ✓" : null,
+                filling,
+                !dateProblem && stepIndex >= 3 ? date : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "building…"}
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );
