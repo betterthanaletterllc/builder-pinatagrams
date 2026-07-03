@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { formatCents, priceUrl, type HubPrice } from "@/lib/hub";
 import {
@@ -8,6 +9,7 @@ import {
   addressKey,
   loadCart,
   saveCart,
+  saveDraft,
   type CartLine,
 } from "@/lib/flow";
 
@@ -56,6 +58,7 @@ function CartBoxThumb({ line }: { line: CartLine }) {
 }
 
 export default function CartView() {
+  const router = useRouter();
   const [lines, setLines] = useState<CartLine[] | null>(null);
   const [unitPrice, setUnitPrice] = useState<HubPrice | null>(null);
   const [email, setEmail] = useState("");
@@ -159,6 +162,24 @@ export default function CartView() {
                 </p>
               )}
               <div className="el-controls">
+                <button
+                  className="btn mini"
+                  onClick={() => {
+                    // reopen the flow loaded with this line; saving replaces it
+                    saveDraft({
+                      styleId: l.styleId,
+                      graphic: l.graphic,
+                      message: l.message,
+                      filling: l.filling,
+                      date: l.deliveryDate,
+                      address: l.address,
+                      editLineId: l.id,
+                    });
+                    router.push(`/design?style=${l.styleId}`);
+                  }}
+                >
+                  Edit
+                </button>
                 <button
                   className="btn mini"
                   onClick={() =>

@@ -89,6 +89,49 @@ export function newLineId(): string {
 }
 
 /* ---------------------------------------------------------------------------
+ * In-progress draft — survives refresh, back-swipes and accidental closes.
+ * sessionStorage (a draft belongs to this sitting, unlike the cart).
+ * editLineId set = this draft is editing an existing cart line.
+ * ------------------------------------------------------------------------- */
+
+export type FlowDraft = {
+  styleId: string;
+  graphic: GraphicChoice | null;
+  message: string;
+  filling: Filling | null;
+  date: string;
+  address: DeliveryAddress;
+  editLineId?: string | null;
+};
+
+const DRAFT_KEY = "pinatagrams-builder-draft";
+
+export function loadDraft(): FlowDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as FlowDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDraft(d: FlowDraft): void {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+  } catch {
+    // photo-heavy custom designs can exceed the quota — the flow still works
+    // in memory, it just won't survive a refresh
+  }
+}
+
+export function clearDraft(): void {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {}
+}
+
+/* ---------------------------------------------------------------------------
  * Address book — previously used delivery addresses, so sending another
  * piñata to grandma is one tap. localStorage, most-recent-first, capped.
  * ------------------------------------------------------------------------- */

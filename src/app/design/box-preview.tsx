@@ -135,6 +135,19 @@ export default function BoxPreview({
                   }}
                 />
               )}
+              {!artUrl && logoZone && (
+                <div
+                  className="box-art-placeholder"
+                  style={{
+                    left: `${logoZone.x * 100}%`,
+                    top: `${logoZone.y * 100}%`,
+                    width: `${logoZone.w * 100}%`,
+                    height: `${logoZone.h * 100}%`,
+                  }}
+                >
+                  your graphic goes here
+                </div>
+              )}
             </div>
           ) : (
             <div className="box-composite">
