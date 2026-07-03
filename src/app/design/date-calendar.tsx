@@ -25,13 +25,12 @@ export default function DateCalendar({
   value,
   onChange,
 }: {
-  value: string;
+  value: string; // "" = nothing chosen yet
   onChange: (ymd: string) => void;
 }) {
-  const selected = fromYmd(value);
-  const [view, setView] = useState({
-    y: selected.getFullYear(),
-    m: selected.getMonth(),
+  const [view, setView] = useState(() => {
+    const d = value ? fromYmd(value) : fromYmd(minDeliveryDate());
+    return { y: d.getFullYear(), m: d.getMonth() };
   });
 
   const min = fromYmd(minDeliveryDate());

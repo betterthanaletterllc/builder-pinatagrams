@@ -20,7 +20,7 @@ import {
   type GraphicChoice,
 } from "@/lib/flow";
 import type { DesignDocument } from "@/lib/design-document";
-import { deliveryProblem, firstAvailableDate } from "@/lib/delivery";
+import { deliveryProblem } from "@/lib/delivery";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
 import BoxPreview from "./box-preview";
@@ -64,7 +64,8 @@ export default function DesignFlow({
   const [editingDraft, setEditingDraft] = useState<DesignDocument | null>(null);
   const [message, setMessage] = useState("");
   const [filling, setFilling] = useState<Filling | null>(null);
-  const [date, setDate] = useState(firstAvailableDate());
+  // Empty until the customer taps a day — nothing pre-selected.
+  const [date, setDate] = useState("");
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
   const [cartError, setCartError] = useState(false);
@@ -262,7 +263,11 @@ export default function DesignFlow({
       {step === "Delivery" && (
         <div className="step-panel">
           <DateCalendar value={date} onChange={setDate} />
-          {dateProblem ? (
+          {!date ? (
+            <p className="note">
+              Tap a day — grayed-out days aren&apos;t available.
+            </p>
+          ) : dateProblem ? (
             <div className="notice warn">{dateProblem}</div>
           ) : (
             <div className="notice info">Arriving by {date}.</div>
