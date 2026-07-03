@@ -32,6 +32,7 @@ type StyleInfo = {
   imageUrl: string | null;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
+  pinataZone: LogoZone | null;
 };
 
 const STEPS = ["Graphic", "Message", "Filling", "Delivery", "Send to"] as const;
@@ -392,6 +393,7 @@ export default function DesignFlow({
               messageZone={boxInterior?.messageZone}
               pinataSrc={`/pinatas/${style.id}.png`}
               pinataFallback={style.imageUrl}
+              pinataZone={style.pinataZone}
             />
           </aside>
         </div>

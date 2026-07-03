@@ -17,6 +17,8 @@ export type HubBodyStyle = {
   imageUrl: string | null;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
+  // Admin-placed position of this piñata inside the open-box interior photo.
+  pinataZone?: LogoZone | null;
   inStock: boolean;
 };
 

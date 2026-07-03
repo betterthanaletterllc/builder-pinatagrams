@@ -60,6 +60,7 @@ export default function BoxPreview({
   messageZone,
   pinataSrc,
   pinataFallback,
+  pinataZone: pinataZoneProp,
 }: {
   styleName: string;
   boxImageUrl: string | null;
@@ -77,9 +78,11 @@ export default function BoxPreview({
   interiorUrl?: string | null;
   messageZone?: LogoZone | null;
   // The chosen piñata, nestled inside the open box: transparent cutout first
-  // (/pinatas/{id}.png), the hub catalog image as fallback.
+  // (/pinatas/{id}.png), the hub catalog image as fallback. The zone comes
+  // from the hub (admin "Box placement" per style) with a built-in default.
   pinataSrc?: string | null;
   pinataFallback?: string | null;
+  pinataZone?: LogoZone | null;
 }) {
   const [photoFailed, setPhotoFailed] = useState(false);
   // 0 = cutout, 1 = hub image fallback, 2 = give up
@@ -88,7 +91,9 @@ export default function BoxPreview({
     (!photoFailed ? messageZone : null) ??
     (photoFailed ? SVG_MESSAGE_ZONE : PHOTO_MESSAGE_ZONE);
   const interiorSrc = (!photoFailed && interiorUrl) || "/box-open.jpg";
-  const pinataZone = photoFailed ? SVG_PINATA_ZONE : PHOTO_PINATA_ZONE;
+  const pinataZone =
+    (!photoFailed ? pinataZoneProp : null) ??
+    (photoFailed ? SVG_PINATA_ZONE : PHOTO_PINATA_ZONE);
   const pinataImg =
     pinataAttempt === 0 ? pinataSrc : pinataAttempt === 1 ? pinataFallback : null;
 
