@@ -29,6 +29,7 @@ import DateCalendar from "./date-calendar";
 type StyleInfo = {
   id: string;
   name: string;
+  imageUrl: string | null;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
 };
@@ -389,6 +390,8 @@ export default function DesignFlow({
               variant={step === "Message" ? "bare" : "full"}
               interiorUrl={boxInterior?.interiorUrl}
               messageZone={boxInterior?.messageZone}
+              pinataSrc={`/pinatas/${style.id}.png`}
+              pinataFallback={style.imageUrl}
             />
           </aside>
         </div>
@@ -428,9 +431,11 @@ export default function DesignFlow({
             </strong>
             <span>
               {[
-                message ? "message ✓" : null,
+                message
+                  ? `“${message.slice(0, 22)}${message.length > 22 ? "…" : ""}”`
+                  : null,
                 filling,
-                !dateProblem && stepIndex >= 3 ? date : null,
+                !dateProblem && date && stepIndex >= 3 ? date : null,
               ]
                 .filter(Boolean)
                 .join(" · ") || "building…"}

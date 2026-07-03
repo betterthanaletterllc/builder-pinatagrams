@@ -1166,6 +1166,13 @@ a.style-card:focus-visible {
   object-fit: contain;
 }
 
+.box-pinata {
+  position: absolute;
+  object-fit: contain;
+  object-position: bottom center;
+  filter: drop-shadow(0 6px 10px rgba(24, 13, 56, 0.28));
+}
+
 .flap-message {
   /* the printed message card: solid white with breathing room inside the
      admin-drawn zone */

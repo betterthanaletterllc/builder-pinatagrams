@@ -20,6 +20,10 @@ import type { LogoZone } from "@/lib/hub";
 const PHOTO_MESSAGE_ZONE = { x: 0.25, y: 0.795, w: 0.5, h: 0.145 };
 // Same rectangle for the SVG fallback illustration below.
 const SVG_MESSAGE_ZONE = { x: 0.3, y: 0.78, w: 0.4, h: 0.17 };
+// Where the piñata cutout sits inside the open box (bottom-anchored so it
+// looks nestled against the box floor, just above the flap fold).
+const PHOTO_PINATA_ZONE = { x: 0.22, y: 0.2, w: 0.56, h: 0.47 };
+const SVG_PINATA_ZONE = { x: 0.3, y: 0.28, w: 0.4, h: 0.4 };
 
 function OpenBoxSvg() {
   // Minimal open-box illustration: interior + fold-out flap at the bottom.
@@ -54,6 +58,8 @@ export default function BoxPreview({
   variant = "full",
   interiorUrl,
   messageZone,
+  pinataSrc,
+  pinataFallback,
 }: {
   styleName: string;
   boxImageUrl: string | null;
@@ -70,12 +76,21 @@ export default function BoxPreview({
   // keep the preview working when the hub hasn't been configured yet.
   interiorUrl?: string | null;
   messageZone?: LogoZone | null;
+  // The chosen piñata, nestled inside the open box: transparent cutout first
+  // (/pinatas/{id}.png), the hub catalog image as fallback.
+  pinataSrc?: string | null;
+  pinataFallback?: string | null;
 }) {
   const [photoFailed, setPhotoFailed] = useState(false);
+  // 0 = cutout, 1 = hub image fallback, 2 = give up
+  const [pinataAttempt, setPinataAttempt] = useState(0);
   const zone =
     (!photoFailed ? messageZone : null) ??
     (photoFailed ? SVG_MESSAGE_ZONE : PHOTO_MESSAGE_ZONE);
   const interiorSrc = (!photoFailed && interiorUrl) || "/box-open.jpg";
+  const pinataZone = photoFailed ? SVG_PINATA_ZONE : PHOTO_PINATA_ZONE;
+  const pinataImg =
+    pinataAttempt === 0 ? pinataSrc : pinataAttempt === 1 ? pinataFallback : null;
 
   // Auto-fit: shrink the text until the whole message sits inside the white
   // card (padding included). Runs after layout; opacity-hidden layers still
@@ -140,6 +155,21 @@ export default function BoxPreview({
                 alt="open box"
                 className="box-img"
                 onError={() => setPhotoFailed(true)}
+              />
+            )}
+            {pinataImg && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={pinataImg}
+                alt="your piñata, in the box"
+                className="box-pinata"
+                onError={() => setPinataAttempt((a) => a + 1)}
+                style={{
+                  left: `${pinataZone.x * 100}%`,
+                  top: `${pinataZone.y * 100}%`,
+                  width: `${pinataZone.w * 100}%`,
+                  height: `${pinataZone.h * 100}%`,
+                }}
               />
             )}
             <div

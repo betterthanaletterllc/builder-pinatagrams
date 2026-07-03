@@ -44,6 +44,7 @@ export default async function DesignPage({
         style={{
           id: style,
           name: match?.name ?? style,
+          imageUrl: match?.imageUrl ?? null,
           boxImageUrl: match?.boxImageUrl ?? null,
           logoZone: match?.logoZone ?? null,
         }}
