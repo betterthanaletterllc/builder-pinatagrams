@@ -48,6 +48,7 @@ export default async function DesignPage({
           boxImageUrl: match?.boxImageUrl ?? null,
           logoZone: match?.logoZone ?? null,
           pinataZone: match?.pinataZone ?? null,
+          cutoutUrl: match?.cutoutUrl ?? null,
         }}
         boxInterior={box}
       />

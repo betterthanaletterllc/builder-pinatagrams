@@ -33,6 +33,7 @@ type StyleInfo = {
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
   pinataZone: LogoZone | null;
+  cutoutUrl: string | null;
 };
 
 const STEPS = ["Graphic", "Message", "Filling", "Delivery", "Send to"] as const;
@@ -350,7 +351,7 @@ export default function DesignFlow({
   );
 
   return (
-    <div>
+    <div className={"flow-root" + (choosing ? " wide" : "")}>
       <div className="chips">
         <span className="chip done">✓ {style.name}</span>
         {STEPS.map((s, i) => (
@@ -391,7 +392,7 @@ export default function DesignFlow({
               variant={step === "Message" ? "bare" : "full"}
               interiorUrl={boxInterior?.interiorUrl}
               messageZone={boxInterior?.messageZone}
-              pinataSrc={`/pinatas/${style.id}.png`}
+              pinataSrc={style.cutoutUrl ?? `/pinatas/${style.id}.png`}
               pinataFallback={style.imageUrl}
               pinataZone={style.pinataZone}
             />
@@ -403,6 +404,7 @@ export default function DesignFlow({
 
       {docked && (
         <div className="build-dock">
+          <div className="dock-inner">
           <div className="dock-thumb box-composite">
             {style.boxImageUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
@@ -442,6 +444,7 @@ export default function DesignFlow({
                 .filter(Boolean)
                 .join(" · ") || "building…"}
             </span>
+          </div>
           </div>
         </div>
       )}

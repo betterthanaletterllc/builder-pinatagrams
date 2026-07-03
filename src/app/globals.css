@@ -636,9 +636,16 @@ a.style-card:focus-visible {
   border-top: 1px solid var(--line);
   box-shadow: 0 -2px 12px rgba(24, 13, 56, 0.1);
   display: flex;
+  justify-content: center;
+  padding: 8px 16px;
+}
+
+.dock-inner {
+  display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 16px;
+  width: 100%;
+  max-width: 620px;
 }
 
 .dock-thumb {
@@ -1083,33 +1090,47 @@ a.style-card:focus-visible {
   max-height: 320px;
 }
 
-/* --- "your box" preview rail ------------------------------------------------ */
+/* --- the flow: one focused, centered column on every screen size ----------- */
+
+.flow-root {
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.flow-root.wide {
+  /* library + canvas need the room */
+  max-width: 980px;
+}
 
 .flow-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 24px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
 }
 
-@media (max-width: 900px) {
-  .flow-grid {
-    grid-template-columns: 1fr;
-  }
-  /* box first, actions right below it — the preview is compact and its
-     hidden layer no longer inflates the height, so nothing gets buried */
-  .flow-rail {
-    order: -1;
-    position: static;
-    max-width: 340px;
-    margin: 0 auto 16px;
-    width: 100%;
-  }
-}
-
+/* box first, actions right below it — same rhythm as mobile everywhere */
 .flow-rail {
-  position: sticky;
-  top: 16px;
+  order: -1;
+  max-width: 340px;
+  margin: 0 auto 16px;
+  width: 100%;
+}
+
+@media (min-width: 900px) {
+  .flow-root .chips {
+    justify-content: center;
+  }
+  .step-h1 {
+    text-align: center;
+  }
+  .step-panel {
+    margin: 0 auto;
+  }
+  .choice-cards {
+    margin: 0 auto;
+  }
+  .editor-v4 {
+    margin: 0 auto;
+  }
 }
 
 .box-preview {

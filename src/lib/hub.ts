@@ -19,6 +19,8 @@ export type HubBodyStyle = {
   logoZone: LogoZone | null;
   // Admin-placed position of this piñata inside the open-box interior photo.
   pinataZone?: LogoZone | null;
+  // Hub-hosted transparent cutout (catalog/cutouts/{id}.png) for the box scene.
+  cutoutUrl?: string | null;
   inStock: boolean;
 };
 
@@ -56,10 +58,10 @@ export type HubPrice = {
   asOf: string;
 };
 
-/** Server-side catalog fetch; cached briefly so the hub isn't hit per view. */
+/** Server-side catalog fetch; short cache so admin edits land in ~2 minutes. */
 export async function getCatalog(): Promise<HubCatalog> {
   const res = await fetch(`${HUB_URL}/api/public/catalog`, {
-    next: { revalidate: 300 },
+    next: { revalidate: 60 },
   });
   if (!res.ok) throw new Error(`hub catalog: HTTP ${res.status}`);
   return res.json();
