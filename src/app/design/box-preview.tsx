@@ -163,6 +163,9 @@ export default function BoxPreview({
               />
             )}
             {pinataImg && (
+              /* Width + bottom-edge anchored; height follows the image's own
+                 aspect — so scaling the zone directly scales the piñata with
+                 no dead air above it. zone.h only records the footprint. */
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={pinataImg}
@@ -171,9 +174,8 @@ export default function BoxPreview({
                 onError={() => setPinataAttempt((a) => a + 1)}
                 style={{
                   left: `${pinataZone.x * 100}%`,
-                  top: `${pinataZone.y * 100}%`,
+                  bottom: `${(1 - (pinataZone.y + pinataZone.h)) * 100}%`,
                   width: `${pinataZone.w * 100}%`,
-                  height: `${pinataZone.h * 100}%`,
                 }}
               />
             )}

@@ -1189,8 +1189,7 @@ a.style-card:focus-visible {
 
 .box-pinata {
   position: absolute;
-  object-fit: contain;
-  object-position: bottom center;
+  height: auto;
   filter: drop-shadow(0 6px 10px rgba(24, 13, 56, 0.28));
 }
 
