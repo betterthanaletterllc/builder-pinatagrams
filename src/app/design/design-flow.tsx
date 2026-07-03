@@ -19,6 +19,7 @@ import {
   type Filling,
   type GraphicChoice,
 } from "@/lib/flow";
+import type { DesignDocument } from "@/lib/design-document";
 import { deliveryProblem, firstAvailableDate } from "@/lib/delivery";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
@@ -58,6 +59,9 @@ export default function DesignFlow({
     null,
   );
   const [graphic, setGraphic] = useState<GraphicChoice | null>(null);
+  // Holds the design while re-editing it ("Edit graphic") so the canvas
+  // reopens with the photos and text intact.
+  const [editingDraft, setEditingDraft] = useState<DesignDocument | null>(null);
   const [message, setMessage] = useState("");
   const [filling, setFilling] = useState<Filling | null>(null);
   const [date, setDate] = useState(firstAvailableDate());
@@ -68,6 +72,12 @@ export default function DesignFlow({
   useEffect(() => {
     setSavedAddresses(loadAddresses());
   }, []);
+
+  // Deep in the library, picking a graphic lands on the next screen — start
+  // it at the top, not wherever the last page was scrolled to.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [step, graphic, graphicMode]);
 
   const dateProblem = useMemo(() => deliveryProblem(date), [date]);
   const stepIndex = STEPS.indexOf(step);
@@ -128,7 +138,13 @@ export default function DesignFlow({
               Browse our library of ready-made front graphics.
             </span>
           </button>
-          <button className="choice-card" onClick={() => setGraphicMode("canvas")}>
+          <button
+            className="choice-card"
+            onClick={() => {
+              setEditingDraft(null);
+              setGraphicMode("canvas");
+            }}
+          >
             <span className="choice-title">Design a graphic</span>
             <span className="choice-sub">
               Your words and photos, on the box — you make it.
@@ -152,11 +168,14 @@ export default function DesignFlow({
             </button>
           </p>
           <EditorShell
+            key={editingDraft ? "edit" : "new"}
             bodyStyleId={style.id}
             boxImageUrl={style.boxImageUrl}
             logoZone={style.logoZone}
+            initialDesign={editingDraft}
             onSave={(design, preview) => {
               setGraphic({ type: "custom", design, preview });
+              setEditingDraft(null);
             }}
           />
         </div>
@@ -164,21 +183,29 @@ export default function DesignFlow({
 
       {step === "Graphic" && graphic && (
         <div className="step-panel">
-          <h2>That&apos;s the one?</h2>
-          <p className="note">
-            {graphic.type === "custom" ? "Your design" : graphic.title}, on
-            your {style.name} box.
-          </p>
           <div className="el-controls">
             <button className="btn primary" onClick={() => setStep("Message")}>
               Looks good →
             </button>
+            {graphic.type === "custom" && (
+              <button
+                className="btn"
+                onClick={() => {
+                  // reopen the SAME design — photos and text intact
+                  setEditingDraft(graphic.design);
+                  setGraphicMode("canvas");
+                  setGraphic(null);
+                }}
+              >
+                Edit graphic
+              </button>
+            )}
             <button
               className="btn"
               onClick={() => {
-                // straight back to where they were choosing — the library for
-                // picked graphics, the canvas for designed ones
-                setGraphicMode(graphic.type === "shopify" ? "library" : "canvas");
+                // back to the pick-one / design-one choice
+                setEditingDraft(null);
+                setGraphicMode(null);
                 setGraphic(null);
               }}
             >

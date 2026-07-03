@@ -15,11 +15,13 @@ export default function EditorShell({
   boxImageUrl,
   logoZone,
   onSave,
+  initialDesign,
 }: {
   bodyStyleId: string;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
   onSave?: (design: DesignDocument, preview: string) => void;
+  initialDesign?: DesignDocument | null;
 }) {
   return (
     <Editor
@@ -27,6 +29,7 @@ export default function EditorShell({
       boxImageUrl={boxImageUrl}
       logoZone={logoZone}
       onSave={onSave}
+      initialDesign={initialDesign}
     />
   );
 }

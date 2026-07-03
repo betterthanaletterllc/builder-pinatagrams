@@ -106,13 +106,18 @@ export default function Editor({
   boxImageUrl,
   logoZone,
   onSave,
+  initialDesign,
 }: {
   bodyStyleId: string;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
   onSave?: (design: DesignDocument, preview: string) => void;
+  // Re-editing an existing design ("Edit graphic") — photos and text intact.
+  initialDesign?: DesignDocument | null;
 }) {
-  const [doc, setDoc] = useState<DesignDocument>(() => newDesign(bodyStyleId));
+  const [doc, setDoc] = useState<DesignDocument>(
+    () => initialDesign ?? newDesign(bodyStyleId),
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"flat" | "boxed">("boxed");
