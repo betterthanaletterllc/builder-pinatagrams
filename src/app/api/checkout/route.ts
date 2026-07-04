@@ -328,9 +328,24 @@ export async function POST(req: Request) {
     const gql = await gqlRes.json();
     const errs = gql?.data?.draftOrderCreate?.userErrors;
     if (!gqlRes.ok || gql.errors || (errs && errs.length)) {
+      // Full response to the function log (only ops sees that); the client
+      // gets Shopify's own error strings — field validation text, no secrets.
+      console.error("draftOrderCreate failed", JSON.stringify(gql));
+      const detail = [
+        ...(Array.isArray(gql?.errors)
+          ? gql.errors.map((e: { message?: string }) => e?.message)
+          : []),
+        ...(Array.isArray(errs)
+          ? errs.map(
+              (e: { field?: string[]; message?: string }) =>
+                `${e?.field?.join(".") ?? ""}: ${e?.message ?? ""}`,
+            )
+          : []),
+      ].filter(Boolean);
       return NextResponse.json(
         {
           error: `Shopify rejected the order for ${order.shipTo}. Any orders listed below WERE created — don't re-order those.`,
+          detail,
           createdSoFar: created,
         },
         { status: 502 },
