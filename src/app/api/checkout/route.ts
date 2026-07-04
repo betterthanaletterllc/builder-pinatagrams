@@ -33,6 +33,7 @@ const MAX_LINES = 20;
 const MAX_QTY = 25; // B2C sanity bound; bulk goes through quote/corporate
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
+const BLOB_RE = /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//;
 const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
 
 type CheckoutBody = { lines: CartLine[]; email: string };
@@ -97,6 +98,7 @@ export async function POST(req: Request) {
     styleId: string;
     design: string;
     frontGraphic: string;
+    designJson: string;
     filling: string;
     deliveryDate: string;
     message: string;
@@ -122,6 +124,7 @@ export async function POST(req: Request) {
 
     let design: string;
     let frontGraphic: string;
+    let designJson = "";
     let title: string;
     if (l.graphic?.type === "shopify") {
       design = str(l.graphic.design, 24).toUpperCase();
@@ -132,7 +135,12 @@ export async function POST(req: Request) {
       title = `${str(l.graphic.title, 120) || design} — ${style.name}`;
     } else if (l.graphic?.type === "custom") {
       design = "custom";
-      frontGraphic = "PENDING_RENDER_UPLOAD"; // TODO: Blob URL of flattened art
+      // The flattened print PNG the editor uploaded to Blob; Paper prints
+      // from this URL. Placeholder only if the upload failed.
+      const art = str(l.graphic.art, 500);
+      frontGraphic = BLOB_RE.test(art) ? art : "PENDING_RENDER_UPLOAD";
+      const sidecar = str(l.graphic.designUrl, 500);
+      designJson = BLOB_RE.test(sidecar) ? sidecar : "";
       title = `Custom Piñatagram — ${style.name}`;
     } else {
       return bad(`${label}: pick or design a graphic.`);
@@ -144,6 +152,7 @@ export async function POST(req: Request) {
       styleId: style.id,
       design,
       frontGraphic,
+      designJson,
       filling: l.filling,
       deliveryDate: l.deliveryDate,
       message,
@@ -215,6 +224,9 @@ export async function POST(req: Request) {
             { key: "_bodyStyle", value: l.styleId },
             { key: "_design", value: l.design },
             { key: "_frontGraphic", value: l.frontGraphic },
+            ...(l.designJson
+              ? [{ key: "_designJson", value: l.designJson }]
+              : []),
             { key: "_fillings", value: l.filling },
             { key: "_requestedDate", value: l.deliveryDate },
             ...(l.message ? [{ key: "message", value: l.message }] : []),

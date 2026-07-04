@@ -20,7 +20,11 @@ export default function EditorShell({
   bodyStyleId: string;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
-  onSave?: (design: DesignDocument, preview: string) => void;
+  onSave?: (
+    design: DesignDocument,
+    preview: string,
+    assets: { art: string | null; designUrl: string | null },
+  ) => void;
   initialDesign?: DesignDocument | null;
 }) {
   return (

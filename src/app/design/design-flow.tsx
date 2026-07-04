@@ -448,13 +448,15 @@ export default function DesignFlow({
             boxImageUrl={styleInfo.boxImageUrl}
             logoZone={styleInfo.logoZone}
             initialDesign={editingDraft}
-            onSave={(design, preview) => {
+            onSave={(design, preview, assets) => {
               // stamp the CURRENT style — the body may have been swapped
               // while the canvas was open
               setGraphic({
                 type: "custom",
                 design: { ...design, bodyStyleId: styleInfo.id },
                 preview,
+                art: assets.art,
+                designUrl: assets.designUrl,
               });
               setEditingDraft(null);
               goStep("Graphic");

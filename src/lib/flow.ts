@@ -32,6 +32,11 @@ export type GraphicChoice =
       type: "custom";
       design: DesignDocument;
       preview: string; // small dataURL for cart/library thumbnails
+      // Blob-hosted flattened print PNG + design JSON sidecar, uploaded when
+      // the customer finishes designing. art becomes the draft order's
+      // _frontGraphic (the file Paper prints).
+      art?: string | null;
+      designUrl?: string | null;
     };
 
 // Where ONE piñata ships. Addresses attach per line (a cart can send to

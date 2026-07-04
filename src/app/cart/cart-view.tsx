@@ -153,7 +153,16 @@ export default function CartView() {
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
       setResult(data);
-      if (data.dryRun === false) update([]);
+      if (data.dryRun === false) {
+        update([]);
+        // Single-destination order: hand off straight into Shopify's hosted
+        // checkout (card / Shop Pay / Apple Pay). Multi-destination stays on
+        // this page listing each invoice.
+        if (data.orders?.length === 1) {
+          window.location.assign(data.orders[0].invoiceUrl);
+          return;
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Checkout failed.");
     } finally {

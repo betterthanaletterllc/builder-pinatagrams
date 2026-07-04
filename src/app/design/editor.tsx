@@ -158,7 +158,11 @@ export default function Editor({
   bodyStyleId: string;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
-  onSave?: (design: DesignDocument, preview: string) => void;
+  onSave?: (
+    design: DesignDocument,
+    preview: string,
+    assets: { art: string | null; designUrl: string | null },
+  ) => void;
   // Re-editing an existing design ("Edit graphic") — photos and text intact.
   initialDesign?: DesignDocument | null;
 }) {
@@ -167,6 +171,7 @@ export default function Editor({
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState<"flat" | "boxed">("boxed");
   const userToggledView = useRef(false);
   const designRef = useRef<Konva.Group>(null);
@@ -339,11 +344,50 @@ export default function Editor({
     a.click();
   };
 
-  const useThisDesign = () => {
+  const useThisDesign = async () => {
+    if (saving) return;
     setSelectedId(null);
     setEditingId(null);
     const preview = exportPng(480);
-    if (preview && onSave) onSave(doc, preview);
+    if (!preview || !onSave) return;
+    // Upload the print-resolution PNG + design JSON straight to Blob — the
+    // art URL becomes the draft order's _frontGraphic. If the upload fails
+    // (offline, Blob unconfigured) the flow continues; checkout falls back
+    // to the PENDING placeholder.
+    let art: string | null = null;
+    let designUrl: string | null = null;
+    setSaving(true);
+    try {
+      const full = exportPng(px.width);
+      if (full) {
+        const { upload } = await import("@vercel/blob/client");
+        const id =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${doc.bodyStyleId}-${doc.elements.length}-${preview.length}`;
+        const pngBlob = await fetch(full).then((r) => r.blob());
+        const put = await upload(`builder-art/${id}/front.png`, pngBlob, {
+          access: "public",
+          handleUploadUrl: "/api/art/upload",
+          contentType: "image/png",
+        });
+        art = put.url;
+        const sidecar = await upload(
+          `builder-art/${id}/design.json`,
+          new Blob([JSON.stringify(doc)], { type: "application/json" }),
+          {
+            access: "public",
+            handleUploadUrl: "/api/art/upload",
+            contentType: "application/json",
+          },
+        );
+        designUrl = sidecar.url;
+      }
+    } catch {
+      // proceed without — the design itself is safe in the flow draft
+    }
+    setSaving(false);
+    onSave(doc, preview, { art, designUrl });
   };
 
   const deselect = () => setSelectedId(null);
@@ -633,8 +677,12 @@ export default function Editor({
 
       <div className="editor-cta">
         {onSave && (
-          <button className="btn primary block" onClick={useThisDesign}>
-            Use this design →
+          <button
+            className="btn primary block"
+            disabled={saving}
+            onClick={useThisDesign}
+          >
+            {saving ? "Saving your design…" : "Use this design →"}
           </button>
         )}
         <button className="btn mini" onClick={downloadPreview}>
