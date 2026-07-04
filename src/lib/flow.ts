@@ -62,6 +62,9 @@ export type CartLine = {
   graphic: GraphicChoice;
   message: string;
   filling: Filling;
+  // Hub add-on ids (e.g. "double-candy"); priced per unit, server re-resolves
+  // labels + prices from the live catalog at checkout. Absent on old carts.
+  addons?: string[];
   deliveryDate: string; // YYYY-MM-DD
   address: DeliveryAddress;
   qty: number;
@@ -104,6 +107,7 @@ export type FlowDraft = {
   graphic: GraphicChoice | null;
   message: string;
   filling: Filling | null;
+  addons?: string[];
   date: string;
   address: DeliveryAddress;
   editLineId?: string | null;

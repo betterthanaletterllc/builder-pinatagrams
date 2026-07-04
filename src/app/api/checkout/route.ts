@@ -91,6 +91,9 @@ export async function POST(req: Request) {
   }
   const catalog: HubCatalog = await catalogRes.json();
   const styleById = new Map(catalog.bodyStyles.map((s) => [s.id, s]));
+  // Add-ons re-resolve from the live catalog: the client sends ids only,
+  // labels + prices come from the hub at order time.
+  const addonById = new Map((catalog.addons ?? []).map((a) => [a.id, a]));
 
   type CleanLine = {
     title: string;
@@ -100,6 +103,8 @@ export async function POST(req: Request) {
     frontGraphic: string;
     designJson: string;
     filling: string;
+    addonLabels: string[];
+    addonCents: number;
     deliveryDate: string;
     message: string;
     address: DeliveryAddress;
@@ -116,6 +121,12 @@ export async function POST(req: Request) {
       return bad(`${label}: quantity must be between 1 and ${MAX_QTY}.`);
     if (!(FILLINGS as readonly string[]).includes(l.filling))
       return bad(`${label}: pick a filling.`);
+    const addonIds = Array.isArray(l.addons) ? [...new Set(l.addons)] : [];
+    const addons = addonIds.map((id) => addonById.get(String(id)));
+    if (addons.some((a) => !a))
+      return bad(
+        `${label}: one of its add-ons is no longer available — edit the piñata and re-pick.`,
+      );
     const dateIssue = deliveryProblemAtCheckout(String(l.deliveryDate ?? ""));
     if (dateIssue) return bad(`${label}: ${dateIssue}`);
     const message = str(l.message, 300);
@@ -154,6 +165,8 @@ export async function POST(req: Request) {
       frontGraphic,
       designJson,
       filling: l.filling,
+      addonLabels: addons.map((a) => a!.label),
+      addonCents: addons.reduce((s, a) => s + a!.priceCents, 0),
       deliveryDate: l.deliveryDate,
       message,
       address,
@@ -179,7 +192,10 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const unitPrice = (price.unitPriceCents / 100).toFixed(2);
+  // Add-ons ride on the line's unit price (no separate Shopify line item —
+  // one line = one piñata as fulfillment sees it).
+  const lineUnitPrice = (l: CleanLine) =>
+    ((price.unitPriceCents + l.addonCents) / 100).toFixed(2);
 
   // One draft order per delivery address (ShipStation: one order = one label).
   const groups = new Map<string, CleanLine[]>();
@@ -216,8 +232,10 @@ export async function POST(req: Request) {
           price: ((price.shipPerUnitCents * units) / 100).toFixed(2),
         },
         lineItems: groupLines.map((l) => ({
-          title: l.title,
-          originalUnitPrice: unitPrice,
+          title:
+            l.title +
+            (l.addonLabels.length ? ` + ${l.addonLabels.join(" + ")}` : ""),
+          originalUnitPrice: lineUnitPrice(l),
           quantity: l.qty,
           requiresShipping: true,
           customAttributes: [
@@ -228,6 +246,10 @@ export async function POST(req: Request) {
               ? [{ key: "_designJson", value: l.designJson }]
               : []),
             { key: "_fillings", value: l.filling },
+            // Comma-separated labels — exactly how Paper splits _addons.
+            ...(l.addonLabels.length
+              ? [{ key: "_addons", value: l.addonLabels.join(", ") }]
+              : []),
             { key: "_requestedDate", value: l.deliveryDate },
             ...(l.message ? [{ key: "message", value: l.message }] : []),
           ],

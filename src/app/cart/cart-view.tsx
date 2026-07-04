@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { formatCents, priceUrl, type HubPrice } from "@/lib/hub";
+import {
+  formatCents,
+  HUB_URL,
+  priceUrl,
+  type HubAddon,
+  type HubPrice,
+} from "@/lib/hub";
 import {
   addressComplete,
   addressKey,
@@ -70,6 +76,7 @@ export default function CartView() {
   const router = useRouter();
   const [lines, setLines] = useState<CartLine[] | null>(null);
   const [unitPrice, setUnitPrice] = useState<HubPrice | null>(null);
+  const [addonCatalog, setAddonCatalog] = useState<HubAddon[]>([]);
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckoutResult | null>(null);
@@ -90,7 +97,22 @@ export default function CartView() {
       .then((r) => (r.ok ? r.json() : null))
       .then(setUnitPrice)
       .catch(() => {});
+    // Add-on labels + prices come from the live catalog (display only —
+    // checkout re-resolves them server-side).
+    fetch(`${HUB_URL}/api/public/catalog`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => setAddonCatalog(c?.addons ?? []))
+      .catch(() => {});
   }, []);
+
+  const addonById = new Map(addonCatalog.map((a) => [a.id, a]));
+  // Per-unit add-on cost for one line; unknown ids price at 0 here and get
+  // rejected server-side if they somehow reach checkout.
+  const lineAddonCents = (l: CartLine) =>
+    (l.addons ?? []).reduce(
+      (s, id) => s + (addonById.get(id)?.priceCents ?? 0),
+      0,
+    );
 
   const update = (next: CartLine[]) => {
     setLines(next);
@@ -113,9 +135,13 @@ export default function CartView() {
   const totalUnits = lines.reduce((s, l) => s + l.qty, 0);
   const unitCents = unitPrice?.unitPriceCents ?? null;
   const shipCents = unitPrice?.shipPerUnitCents ?? null;
+  const addonTotalCents = lines.reduce(
+    (s, l) => s + lineAddonCents(l) * l.qty,
+    0,
+  );
   const totalCents =
     unitCents !== null && shipCents !== null
-      ? (unitCents + shipCents) * totalUnits
+      ? (unitCents + shipCents) * totalUnits + addonTotalCents
       : null;
 
   const missingAddress = lines.filter((l) => !addressComplete(l.address));
@@ -183,7 +209,13 @@ export default function CartView() {
                   : `${l.graphic.title} — ${l.styleName}`}
               </strong>
               <p className="note">
-                {l.filling} · arrives {l.deliveryDate}
+                {l.filling}
+                {(l.addons ?? [])
+                  .map((id) => addonById.get(id)?.label)
+                  .filter(Boolean)
+                  .map((label) => ` + ${label}`)
+                  .join("")}{" "}
+                · arrives {l.deliveryDate}
                 {l.message ? " · with gift message" : ""}
               </p>
               {addressComplete(l.address) ? (
@@ -206,6 +238,7 @@ export default function CartView() {
                       graphic: l.graphic,
                       message: l.message,
                       filling: l.filling,
+                      addons: l.addons ?? [],
                       date: l.deliveryDate,
                       address: l.address,
                       editLineId: l.id,
@@ -255,7 +288,7 @@ export default function CartView() {
             </div>
             {unitCents !== null && (
               <div className="cart-line-price">
-                {formatCents(unitCents * l.qty)}
+                {formatCents((unitCents + lineAddonCents(l)) * l.qty)}
               </div>
             )}
           </div>
@@ -333,6 +366,12 @@ export default function CartView() {
                 </span>
                 <span>{formatCents(unitCents * totalUnits)}</span>
               </div>
+              {addonTotalCents > 0 && (
+                <div className="row">
+                  <span>Add-ons</span>
+                  <span>{formatCents(addonTotalCents)}</span>
+                </div>
+              )}
               <div className="row">
                 <span>Shipping</span>
                 <span>{formatCents(shipCents * totalUnits)}</span>

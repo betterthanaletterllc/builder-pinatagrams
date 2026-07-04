@@ -21,7 +21,13 @@ import {
   type GraphicChoice,
 } from "@/lib/flow";
 import type { DesignDocument } from "@/lib/design-document";
-import { HUB_URL, type HubBodyStyle, type LogoZone } from "@/lib/hub";
+import {
+  formatCents,
+  HUB_URL,
+  type HubAddon,
+  type HubBodyStyle,
+  type LogoZone,
+} from "@/lib/hub";
 import { deliveryProblem } from "@/lib/delivery";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
@@ -65,9 +71,11 @@ const ADDRESS_FIELDS: [keyof DeliveryAddress, string][] = [
 export default function DesignFlow({
   style,
   boxInterior,
+  addonOptions,
 }: {
   style: StyleInfo;
   boxInterior: { interiorUrl: string | null; messageZone: LogoZone | null } | null;
+  addonOptions: HubAddon[];
 }) {
   // The style can be swapped in place (keeps the design/message/etc.).
   const [styleInfo, setStyleInfo] = useState<StyleInfo>(style);
@@ -79,6 +87,7 @@ export default function DesignFlow({
   const [editingDraft, setEditingDraft] = useState<DesignDocument | null>(null);
   const [message, setMessage] = useState("");
   const [filling, setFilling] = useState<Filling | null>(null);
+  const [addons, setAddons] = useState<string[]>([]);
   const [date, setDate] = useState("");
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
@@ -161,6 +170,7 @@ export default function DesignFlow({
       setGraphic(d.graphic);
       setMessage(d.message);
       setFilling(d.filling);
+      setAddons(d.addons ?? []);
       setDate(d.date);
       setAddress(d.address);
       setEditLineId(d.editLineId ?? null);
@@ -233,11 +243,12 @@ export default function DesignFlow({
       graphic,
       message,
       filling,
+      addons,
       date,
       address,
       editLineId,
     });
-  }, [hydrated, styleInfo.id, graphic, message, filling, date, address, editLineId]);
+  }, [hydrated, styleInfo.id, graphic, message, filling, addons, date, address, editLineId]);
 
   const stepIndex = STEPS.indexOf(step);
   const reachable = maxStep(graphic, filling, date);
@@ -312,6 +323,9 @@ export default function DesignFlow({
       graphic,
       message: message.trim(),
       filling,
+      // Only keep ids the catalog still offers — a stale draft can't order
+      // an add-on that was deactivated while it sat in sessionStorage.
+      addons: addons.filter((id) => addonOptions.some((a) => a.id === id)),
       deliveryDate: date,
       address,
       qty: existing ? existing.qty : 1,
@@ -332,6 +346,7 @@ export default function DesignFlow({
     setEditingDraft(null);
     setMessage("");
     setFilling(null);
+    setAddons([]);
     setDate("");
     setAddress(EMPTY_ADDRESS);
     setEditLineId(null);
@@ -494,6 +509,35 @@ export default function DesignFlow({
               </button>
             ))}
           </div>
+          {addonOptions.length > 0 && (
+            <div className="addon-list">
+              {addonOptions.map((a) => {
+                const on = addons.includes(a.id);
+                return (
+                  <label
+                    key={a.id}
+                    className={"addon-row" + (on ? " selected" : "")}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() =>
+                        setAddons(
+                          on
+                            ? addons.filter((id) => id !== a.id)
+                            : [...addons, a.id],
+                        )
+                      }
+                    />
+                    <span className="addon-label">{a.label}</span>
+                    <span className="addon-price">
+                      +{formatCents(a.priceCents)}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
           <button
             className="btn primary"
             disabled={!filling}

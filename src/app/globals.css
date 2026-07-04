@@ -872,6 +872,54 @@ a.style-card:focus-visible {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+/* Add-ons (e.g. Double Candy) under the filling cards */
+.addon-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  max-width: 380px;
+}
+
+.addon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 2px solid var(--line);
+  background: var(--card);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.addon-row:hover {
+  border-color: var(--accent);
+}
+
+.addon-row.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.addon-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.addon-label {
+  font-weight: 600;
+  flex: 1;
+}
+
+.addon-price {
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 .date-input {
   padding: 10px 12px;
   border: 1px solid var(--line-strong);

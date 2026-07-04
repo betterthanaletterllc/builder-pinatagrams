@@ -24,6 +24,15 @@ export type HubBodyStyle = {
   inStock: boolean;
 };
 
+// Optional per-piñata extras (e.g. Double Candy). label doubles as the
+// _addons token Paper reads off the order; priceCents is the retail price.
+export type HubAddon = {
+  id: string;
+  label: string;
+  priceCents: number;
+  sku: string | null;
+};
+
 export type HubCatalog = {
   bodyStyles: HubBodyStyle[];
   // Global box-interior config (gift-message step); absent on older deploys.
@@ -31,6 +40,8 @@ export type HubCatalog = {
     interiorUrl: string | null;
     messageZone: LogoZone | null;
   };
+  // Active add-ons from the hub's Pricing page; absent on older deploys.
+  addons?: HubAddon[];
   asOf: string;
 };
 
