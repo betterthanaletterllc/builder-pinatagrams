@@ -342,6 +342,24 @@ export async function POST(req: Request) {
             )
           : []),
       ].filter(Boolean);
+      // Scope trouble is the #1 setup failure: report what the minted token
+      // actually carries (scope handles are config, not secrets).
+      if (detail.some((d) => String(d).includes("Access denied"))) {
+        try {
+          const scopesRes = await fetch(
+            `https://${shop}.myshopify.com/admin/oauth/access_scopes.json`,
+            { headers: { "X-Shopify-Access-Token": access_token } },
+          );
+          const scopes = await scopesRes.json();
+          detail.push(
+            `token scopes: ${
+              (scopes?.access_scopes ?? [])
+                .map((s: { handle: string }) => s.handle)
+                .join(", ") || "(none)"
+            }`,
+          );
+        } catch {}
+      }
       return NextResponse.json(
         {
           error: `Shopify rejected the order for ${order.shipTo}. Any orders listed below WERE created — don't re-order those.`,
