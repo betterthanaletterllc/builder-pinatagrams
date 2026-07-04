@@ -1,202 +1,153 @@
 {
  "generatedAt": "2026-07-02",
- "source": "ShopifyQL net_items_sold by product_title, trailing 365d",
+ "source": "sales-ranked, trailing 365d (volumes withheld)",
  "ranking": [
   {
-   "design": "HBD01",
-   "units": 1473
+   "design": "HBD01"
   },
   {
-   "design": "HBD05",
-   "units": 574
+   "design": "HBD05"
   },
   {
-   "design": "HBD02",
-   "units": 397
+   "design": "HBD02"
   },
   {
-   "design": "HBD17",
-   "units": 390
+   "design": "HBD17"
   },
   {
-   "design": "CHRISTMAS02",
-   "units": 389
+   "design": "CHRISTMAS02"
   },
   {
-   "design": "APPR06",
-   "units": 380
+   "design": "APPR06"
   },
   {
-   "design": "HBD06",
-   "units": 373
+   "design": "HBD06"
   },
   {
-   "design": "HBD15",
-   "units": 353
+   "design": "HBD15"
   },
   {
-   "design": "HBD21",
-   "units": 299
+   "design": "HBD21"
   },
   {
-   "design": "HBD12",
-   "units": 288
+   "design": "HBD12"
   },
   {
-   "design": "SPORTS02",
-   "units": 277
+   "design": "SPORTS02"
   },
   {
-   "design": "HBD30",
-   "units": 247
+   "design": "HBD30"
   },
   {
-   "design": "HALLOWEEN11",
-   "units": 226
+   "design": "HALLOWEEN11"
   },
   {
-   "design": "SPORTS01",
-   "units": 207
+   "design": "SPORTS01"
   },
   {
-   "design": "SYMP21",
-   "units": 206
+   "design": "SYMP21"
   },
   {
-   "design": "HBD11",
-   "units": 196
+   "design": "HBD11"
   },
   {
-   "design": "CONGRATS03",
-   "units": 189
+   "design": "CONGRATS03"
   },
   {
-   "design": "REALSY05",
-   "units": 179
+   "design": "REALSY05"
   },
   {
-   "design": "SPORTS07",
-   "units": 163
+   "design": "SPORTS07"
   },
   {
-   "design": "HALLOWEEN01",
-   "units": 159
+   "design": "HALLOWEEN01"
   },
   {
-   "design": "HBD31",
-   "units": 158
+   "design": "HBD31"
   },
   {
-   "design": "CHONKY01",
-   "units": 146
+   "design": "CHONKY01"
   },
   {
-   "design": "APPR02",
-   "units": 144
+   "design": "APPR02"
   },
   {
-   "design": "APPR16",
-   "units": 136
+   "design": "APPR16"
   },
   {
-   "design": "HBD13",
-   "units": 134
+   "design": "HBD13"
   },
   {
-   "design": "SCHOOLFUN05",
-   "units": 131
+   "design": "SCHOOLFUN05"
   },
   {
-   "design": "CONGRATS08",
-   "units": 127
+   "design": "CONGRATS08"
   },
   {
-   "design": "SPORTS15",
-   "units": 124
+   "design": "SPORTS15"
   },
   {
-   "design": "HBD19",
-   "units": 121
+   "design": "HBD19"
   },
   {
-   "design": "MOTHERSDAY03",
-   "units": 114
+   "design": "MOTHERSDAY03"
   },
   {
-   "design": "CONGRATS02",
-   "units": 109
+   "design": "CONGRATS02"
   },
   {
-   "design": "CONGRATS07",
-   "units": 107
+   "design": "CONGRATS07"
   },
   {
-   "design": "HBD10",
-   "units": 102
+   "design": "HBD10"
   },
   {
-   "design": "SYMP12",
-   "units": 100
+   "design": "SYMP12"
   },
   {
-   "design": "HBD14",
-   "units": 98
+   "design": "HBD14"
   },
   {
-   "design": "APPR17",
-   "units": 97
+   "design": "APPR17"
   },
   {
-   "design": "HBD18",
-   "units": 95
+   "design": "HBD18"
   },
   {
-   "design": "HBD07",
-   "units": 95
+   "design": "HBD07"
   },
   {
-   "design": "SPORTS03",
-   "units": 95
+   "design": "SPORTS03"
   },
   {
-   "design": "HALLOWEEN19",
-   "units": 90
+   "design": "HALLOWEEN19"
   },
   {
-   "design": "HBD29",
-   "units": 89
+   "design": "HBD29"
   },
   {
-   "design": "HBD24",
-   "units": 87
+   "design": "HBD24"
   },
   {
-   "design": "HBD08",
-   "units": 85
+   "design": "HBD08"
   },
   {
-   "design": "HBD23",
-   "units": 83
+   "design": "HBD23"
   },
   {
-   "design": "HBD35",
-   "units": 79
+   "design": "HBD35"
   },
   {
-   "design": "HBD28",
-   "units": 75
+   "design": "HBD28"
   },
   {
-   "design": "HBD16",
-   "units": 75
+   "design": "HBD16"
   },
   {
-   "design": "SPORTS12",
-   "units": 73
+   "design": "SPORTS12"
   },
   {
-   "design": "HBD04",
-   "units": 69
+   "design": "HBD04"
   }
  ]
 }

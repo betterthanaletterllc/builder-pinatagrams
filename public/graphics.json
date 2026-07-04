@@ -1,6 +1,6 @@
 {
   "generatedAt": "2026-07-02",
-  "source": "shopify pinatagram.myshopify.com via MCP snapshot — replace with a hub /api/public/graphics endpoint once the admin.btal app has read_products scope",
+  "source": "shopify pinatagram.myshopify.com via MCP snapshot — replace with a hub /api/public/graphics endpoint once the admin.btal app has read_products scope — client-specific designs excluded at generation",
   "graphics": [
     {
       "design": "SPORTS01",
@@ -2193,12 +2193,6 @@
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/91_70b7b540-cf50-41cb-b1a8-d8c7578b87ed.png?v=1761153225"
     },
     {
-      "design": "RETENTION2",
-      "title": "Retention Halloween Piñatagram",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/Screenshot_2025-10-27_at_4.16.04_PM.png?v=1761599889",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/Pinata_Halloween_Graphic_-_Front.png?v=1761599839"
-    },
-    {
       "design": "CHRISTMAS14",
       "title": "Nice List Christmas Reindeer",
       "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/131_d08fe86e-ed34-4e2a-9615-0a57ba1e6526.png?v=1762986187",
@@ -2293,12 +2287,6 @@
       "title": "Sparkle Into the New Year",
       "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/17_72286ddf-6a0f-41df-92e1-b8bac2cd3a0a.png?v=1764968611",
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/16_13cfc871-f5e3-4b1d-a40d-0b479f497161.png?v=1764969051"
-    },
-    {
-      "design": "BSG01",
-      "title": "Berman Sobin Gross Green",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/Client_Box_Graphic_cd3cc59a-eb4d-4859-81d0-a89bf5fac8bc.png?v=1768843893",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976"
     },
     {
       "design": "APPR24",
@@ -2401,42 +2389,6 @@
       "title": "Happy Birthday Money",
       "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/74_e4b6a186-e497-41d3-8f50-b9aac8225c31.png?v=1769046317",
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/Money_Happy_Bday_Mesa_de_trabajo_1.jpg?v=1769046130"
-    },
-    {
-      "design": "BRYNNEIL01",
-      "title": "Bryn Neil: Confetti Birthday Piñatagram",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/1_Pinatagrams_Product_Images_aed31bcb-f7d1-485a-88c0-40d5c4107ca7.png?v=1769273798",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY_e52acaaf-9868-4ca3-915f-1fcbf0b52e13.png?v=1769273833"
-    },
-    {
-      "design": "BRYNNEIL02",
-      "title": "Bryn Neil: Fun Birthday Piñatagram",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/1_Pinatagrams_Product_Images_2.png?v=1769273895",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/7_81ae1c7b-a61e-47ee-9a3f-d2304edfa48a.png?v=1769273912"
-    },
-    {
-      "design": "BSG02",
-      "title": "Berman Sobin Gross Standard",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-STANDARD.png?v=1769791278",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976"
-    },
-    {
-      "design": "BSG03",
-      "title": "Berman Sobin Gross Tropical",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/6_304a7cd1-70ff-4776-b383-9cbf153d55be.png?v=1769791338",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976"
-    },
-    {
-      "design": "BSG04",
-      "title": "Berman Sobin Gross Orange",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-ORANGE.png?v=1770301914",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976"
-    },
-    {
-      "design": "BSG05",
-      "title": "Berman Sobin Gross Reindeer",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-REINDEER.png?v=1770302008",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976"
     },
     {
       "design": "CINCODEMAYO07",
@@ -2665,12 +2617,6 @@
       "title": "You made it Happen",
       "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/32_10b9840a-2c6e-4d0f-948c-8518c1c876e8.png?v=1771130869",
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/Referrals-06.jpg?v=1771129981"
-    },
-    {
-      "design": "BSG06",
-      "title": "Berman Sobin Gross Pink Unicorn",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG_Pink_Unicorn.png?v=1771523049",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976"
     },
     {
       "design": "MOTHERSDAY05",
@@ -2965,12 +2911,6 @@
       "title": "Too hot for bad vibes",
       "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/29_867b6d8f-2e47-4f54-af73-19d286fe829c.png?v=1779933074",
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/Summer-02.jpg?v=1779933081"
-    },
-    {
-      "design": "BSG10",
-      "title": "Berman Sobin Gross Rainbow",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-PRIDE.png?v=1782331433",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976"
     }
   ],
   "products": [
@@ -6695,16 +6635,6 @@
       "priceCents": 3499
     },
     {
-      "design": "RETENTION2",
-      "sku": "RETENTION2-STANDARD",
-      "bodyStyle": "STANDARD",
-      "title": "Retention Halloween Piñatagram",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/Screenshot_2025-10-27_at_4.16.04_PM.png?v=1761599889",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/Pinata_Halloween_Graphic_-_Front.png?v=1761599839",
-      "variantId": "gid://shopify/ProductVariant/42271638847586",
-      "priceCents": 2799
-    },
-    {
       "design": "CHRISTMAS14",
       "sku": "CHRISTMAS14-REINDEER",
       "bodyStyle": "REINDEER",
@@ -6883,16 +6813,6 @@
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/16_13cfc871-f5e3-4b1d-a40d-0b479f497161.png?v=1764969051",
       "variantId": "gid://shopify/ProductVariant/42350156611682",
       "priceCents": 3499
-    },
-    {
-      "design": "BSG01",
-      "sku": "BSG01-GREEN",
-      "bodyStyle": "GREEN",
-      "title": "Berman Sobin Gross Green",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/Client_Box_Graphic_cd3cc59a-eb4d-4859-81d0-a89bf5fac8bc.png?v=1768843893",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42373156208738",
-      "priceCents": 3024
     },
     {
       "design": "APPR19",
@@ -7185,26 +7105,6 @@
       "priceCents": 3499
     },
     {
-      "design": "BRYNNEIL01",
-      "sku": "BRYNNEIL01-GOOGLY",
-      "bodyStyle": "GOOGLY",
-      "title": "Bryn Neil: Confetti Birthday Piñatagram",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/1_Pinatagrams_Product_Images_aed31bcb-f7d1-485a-88c0-40d5c4107ca7.png?v=1769273798",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY_e52acaaf-9868-4ca3-915f-1fcbf0b52e13.png?v=1769273833",
-      "variantId": "gid://shopify/ProductVariant/42481339039842",
-      "priceCents": 2535
-    },
-    {
-      "design": "BRYNNEIL02",
-      "sku": "BRYNNEIL02-TROPICAL",
-      "bodyStyle": "TROPICAL",
-      "title": "Bryn Neil: Fun Birthday Piñatagram",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/1_Pinatagrams_Product_Images_2.png?v=1769273895",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/7_81ae1c7b-a61e-47ee-9a3f-d2304edfa48a.png?v=1769273912",
-      "variantId": "gid://shopify/ProductVariant/42481339203682",
-      "priceCents": 2535
-    },
-    {
       "design": "APPR29",
       "sku": "APPR29-GOOGLY",
       "bodyStyle": "GOOGLY",
@@ -7213,46 +7113,6 @@
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/84_95616531-bc28-4c3f-a236-80ce99b3067c.png?v=1769723273",
       "variantId": "gid://shopify/ProductVariant/42505346220130",
       "priceCents": 3499
-    },
-    {
-      "design": "BSG02",
-      "sku": "BSG02-STANDARD",
-      "bodyStyle": "STANDARD",
-      "title": "Berman Sobin Gross Standard",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-STANDARD.png?v=1769791278",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42506367107170",
-      "priceCents": 3024
-    },
-    {
-      "design": "BSG03",
-      "sku": "BSG03-TROPICAL",
-      "bodyStyle": "TROPICAL",
-      "title": "Berman Sobin Gross Tropical",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/6_304a7cd1-70ff-4776-b383-9cbf153d55be.png?v=1769791338",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42506368614498",
-      "priceCents": 3024
-    },
-    {
-      "design": "BSG04",
-      "sku": "BSG04-ORANGE",
-      "bodyStyle": "ORANGE",
-      "title": "Berman Sobin Gross Orange",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-ORANGE.png?v=1770301914",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42537335423074",
-      "priceCents": 2999
-    },
-    {
-      "design": "BSG05",
-      "sku": "BSG05-REINDEER",
-      "bodyStyle": "REINDEER",
-      "title": "Berman Sobin Gross Reindeer",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-REINDEER.png?v=1770302008",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42537336635490",
-      "priceCents": 3024
     },
     {
       "design": "CINCODEMAYO07",
@@ -7635,36 +7495,6 @@
       "priceCents": 2999
     },
     {
-      "design": "BSG05",
-      "sku": "BSG05-BLUE",
-      "bodyStyle": "BLUE",
-      "title": "Berman Sobin Gross Blue",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-BLUE.png?v=1771255524",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42573531840610",
-      "priceCents": 3024
-    },
-    {
-      "design": "BSG06",
-      "sku": "BSG06-PINK UNICORN",
-      "bodyStyle": "PINK UNICORN",
-      "title": "Berman Sobin Gross Pink Unicorn",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG_Pink_Unicorn.png?v=1771523049",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42578129846370",
-      "priceCents": 3024
-    },
-    {
-      "design": "BSG06",
-      "sku": "BSG06-PURPLE",
-      "bodyStyle": "PURPLE",
-      "title": "Berman Sobin Gross Purple",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG_Purple.png?v=1771523214",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42578131058786",
-      "priceCents": 3024
-    },
-    {
       "design": "MOTHERSDAY05",
       "sku": "MOTHERSDAY05-PINK UNICORN",
       "bodyStyle": "PINK UNICORN",
@@ -7793,26 +7623,6 @@
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/Spring-04.jpg?v=1773388090",
       "variantId": "gid://shopify/ProductVariant/42624143523938",
       "priceCents": 3499
-    },
-    {
-      "design": "BSG05",
-      "sku": "BSG05-WHITE UNICORN",
-      "bodyStyle": "WHITE UNICORN",
-      "title": "Berman Sobin Gross White Unicorn",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-WHITE_UNICORN.png?v=1774973992",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42674775097442",
-      "priceCents": 3024
-    },
-    {
-      "design": "BSG05",
-      "sku": "BSG05-VAMPIRE",
-      "bodyStyle": "VAMPIRE",
-      "title": "Berman Sobin Gross Vampire",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-VAMPIRE.png?v=1774974076",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42674778341474",
-      "priceCents": 3024
     },
     {
       "design": "PRIDEMONTH07",
@@ -8295,16 +8105,6 @@
       "priceCents": 3499
     },
     {
-      "design": "BSG02",
-      "sku": "BSG02-GOOGLY",
-      "bodyStyle": "GOOGLY",
-      "title": "Berman Sobin Gross Googly",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-GOOGLY.png?v=1777323491",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42836616314978",
-      "priceCents": 3024
-    },
-    {
       "design": "4THOFJULY13",
       "sku": "4THOFJULY13-STAR SPANGLED",
       "bodyStyle": "STAR SPANGLED",
@@ -8405,26 +8205,6 @@
       "priceCents": 3699
     },
     {
-      "design": "BSG02",
-      "sku": "BSG02-CAMO",
-      "bodyStyle": "CAMO",
-      "title": "Berman Sobin Gross Camo",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-CAMO.png?v=1779816076",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42966315171938",
-      "priceCents": 3024
-    },
-    {
-      "design": "BSG02",
-      "sku": "BSG02-GROOM",
-      "bodyStyle": "GROOM",
-      "title": "Berman Sobin Gross Tuxedo",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-TUXEDO.png?v=1779816348",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/42966319071330",
-      "priceCents": 3024
-    },
-    {
       "design": "SEASON015",
       "sku": "SEASON015-TROPICAL",
       "bodyStyle": "TROPICAL",
@@ -8463,16 +8243,6 @@
       "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/Summer-02.jpg?v=1779933081",
       "variantId": "gid://shopify/ProductVariant/42969316851810",
       "priceCents": 3499
-    },
-    {
-      "design": "BSG10",
-      "sku": "BSG10-PRIDE",
-      "bodyStyle": "PRIDE",
-      "title": "Berman Sobin Gross Rainbow",
-      "thumb": "https://cdn.shopify.com/s/files/1/1116/8788/files/BSG-PRIDE.png?v=1782331433",
-      "art": "https://cdn.shopify.com/s/files/1/1116/8788/files/BIRTHDAY.png?v=1765828976",
-      "variantId": "gid://shopify/ProductVariant/43057587683426",
-      "priceCents": 3024
     }
   ]
 }

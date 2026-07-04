@@ -13,15 +13,24 @@ import {
   type CartLine,
 } from "@/lib/flow";
 
+const MAX_QTY = 25;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 type CheckoutResult =
   | {
       dryRun: true;
       reason: string;
-      draftOrders: { shipTo: string; input: unknown }[];
+      draftOrders: { groupKey: string; shipTo: string; input?: unknown }[];
     }
   | {
       dryRun: false;
-      orders: { shipTo: string; invoiceUrl: string; draftOrderId: string }[];
+      orders: {
+        groupKey: string;
+        shipTo: string;
+        invoiceUrl: string;
+        draftOrderId: string;
+        invoiceSent: boolean;
+      }[];
     };
 
 // "Your box" thumbnail: the graphic composited onto the style's box photo
@@ -113,7 +122,7 @@ export default function CartView() {
   const destinations = new Set(
     lines.filter((l) => addressComplete(l.address)).map((l) => addressKey(l.address)),
   ).size;
-  const emailOk = email.includes("@") && email.includes(".");
+  const emailOk = EMAIL_RE.test(email.trim());
 
   const checkout = async () => {
     setSubmitting(true);
@@ -122,10 +131,27 @@ export default function CartView() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines, email }),
+        body: JSON.stringify({ lines, email: email.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        // Partial multi-destination failure: some orders WERE created.
+        // Mark those lines ordered (remove from cart) so a retry can't
+        // duplicate them, and show their invoice links.
+        const createdSoFar = data.createdSoFar as
+          | { groupKey: string; shipTo: string; invoiceUrl: string; draftOrderId: string; invoiceSent: boolean }[]
+          | undefined;
+        if (createdSoFar && createdSoFar.length > 0) {
+          const orderedKeys = new Set(createdSoFar.map((o) => o.groupKey));
+          update(
+            lines.filter(
+              (l) => !addressComplete(l.address) || !orderedKeys.has(addressKey(l.address)),
+            ),
+          );
+          setResult({ dryRun: false, orders: createdSoFar });
+        }
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
       setResult(data);
       if (data.dryRun === false) update([]);
     } catch (e) {
@@ -175,7 +201,7 @@ export default function CartView() {
                       address: l.address,
                       editLineId: l.id,
                     });
-                    router.push(`/design?style=${l.styleId}`);
+                    router.push(`/design?style=${l.styleId}&edit=${l.id}`);
                   }}
                 >
                   Edit
@@ -197,10 +223,13 @@ export default function CartView() {
                 <span className="qty">{l.qty}</span>
                 <button
                   className="btn mini"
+                  disabled={l.qty >= MAX_QTY}
                   onClick={() =>
                     update(
                       lines.map((x) =>
-                        x.id === l.id ? { ...x, qty: x.qty + 1 } : x,
+                        x.id === l.id
+                          ? { ...x, qty: Math.min(MAX_QTY, x.qty + 1) }
+                          : x,
                       ),
                     )
                   }
@@ -231,15 +260,17 @@ export default function CartView() {
 
         {result && result.dryRun && (
           <div className="notice info" style={{ overflowX: "auto" }}>
-            <strong>Checkout dry run</strong> — {result.reason}
+            <strong>Heads up</strong> — {result.reason}
             {result.draftOrders.map((o, i) => (
-              <div key={i}>
+              <div key={o.groupKey ?? i}>
                 <p className="note">
                   Order {i + 1} → {o.shipTo}
                 </p>
-                <pre className="payload-pre">
-                  {JSON.stringify(o.input, null, 2)}
-                </pre>
+                {o.input != null && (
+                  <pre className="payload-pre">
+                    {JSON.stringify(o.input, null, 2)}
+                  </pre>
+                )}
               </div>
             ))}
           </div>
@@ -255,6 +286,7 @@ export default function CartView() {
               {result.orders.map((o) => (
                 <li key={o.draftOrderId}>
                   {o.shipTo}: <a href={o.invoiceUrl}>pay this invoice</a>
+                  {o.invoiceSent === false && " (save this link — the email didn't send)"}
                 </li>
               ))}
             </ul>

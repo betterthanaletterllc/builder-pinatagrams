@@ -104,12 +104,19 @@ export default function BoxPreview({
   useLayoutEffect(() => {
     const el = msgRef.current;
     if (!el) return;
-    let size = 16;
-    el.style.fontSize = `${size}px`;
-    while (size > 6 && el.scrollHeight > el.clientHeight) {
-      size -= 0.5;
+    const fit = () => {
+      let size = 16;
       el.style.fontSize = `${size}px`;
-    }
+      while (size > 6 && el.scrollHeight > el.clientHeight) {
+        size -= 0.5;
+        el.style.fontSize = `${size}px`;
+      }
+    };
+    fit();
+    // re-fit when the zone's rendered size changes (rotation, window resize)
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [message, mode, zone.w, zone.h]);
 
   return (

@@ -39,9 +39,14 @@ const NARROW = 520;
 const SAFE_MARGIN_IN = 0.25;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
-function useImg(src: string | null): HTMLImageElement | null {
+function useImg(src: string | null): {
+  img: HTMLImageElement | null;
+  failed: boolean;
+} {
   const [img, setImg] = useState<HTMLImageElement | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
+    setFailed(false);
     if (!src) {
       setImg(null);
       return;
@@ -49,12 +54,50 @@ function useImg(src: string | null): HTMLImageElement | null {
     const i = new window.Image();
     i.crossOrigin = "anonymous"; // keep canvases untainted for export
     i.onload = () => setImg(i);
+    i.onerror = () => setFailed(true);
     i.src = src;
     return () => {
       i.onload = null;
+      i.onerror = null;
     };
   }, [src]);
-  return img;
+  return { img, failed };
+}
+
+/**
+ * Downscale + recompress an upload before it becomes a data URL. Raw photos
+ * ride inside the design document all the way to /api/checkout, and Vercel
+ * caps request bodies at ~4.5 MB — a phone photo embedded as base64 would
+ * make the cart permanently un-checkoutable. 1600px JPEG keeps well clear
+ * while still exceeding the ~740px the print zone needs from a photo layer.
+ */
+async function downscaleToDataUrl(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new window.Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("undecodable"));
+      i.src = url;
+    });
+    const MAX = 1600;
+    const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no-2d-context");
+    ctx.drawImage(img, 0, 0, w, h);
+    // JPEG unless the image likely has transparency (png keeps alpha).
+    const wantsAlpha = file.type === "image/png" || file.type === "image/webp";
+    return wantsAlpha
+      ? canvas.toDataURL("image/png")
+      : canvas.toDataURL("image/jpeg", 0.85);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function ImgEl({
@@ -62,13 +105,15 @@ function ImgEl({
   onSelect,
   onChange,
   refFn,
+  clampXY,
 }: {
   el: ImageElement;
   onSelect: () => void;
   onChange: (p: Partial<ImageElement>) => void;
   refFn: (n: Konva.Node | null) => void;
+  clampXY: (x: number, y: number, w: number, h: number) => { x: number; y: number };
 }) {
-  const img = useImg(el.src);
+  const { img } = useImg(el.src);
   return (
     <KonvaImage
       ref={refFn}
@@ -84,15 +129,17 @@ function ImgEl({
       onMouseDown={onSelect}
       onTap={onSelect}
       onDragEnd={(e) =>
-        onChange({ x: Math.round(e.target.x()), y: Math.round(e.target.y()) })
+        onChange(clampXY(e.target.x(), e.target.y(), el.width, el.height))
       }
       onTransformEnd={(e) => {
         const n = e.target;
+        // abs(): a flip gesture produces negative scale, which would
+        // collapse the element to the minimum size
         onChange({
           x: Math.round(n.x()),
           y: Math.round(n.y()),
-          width: Math.max(20, Math.round(el.width * n.scaleX())),
-          height: Math.max(20, Math.round(el.height * n.scaleY())),
+          width: Math.max(20, Math.round(el.width * Math.abs(n.scaleX()))),
+          height: Math.max(20, Math.round(el.height * Math.abs(n.scaleY()))),
           rotation: Math.round(n.rotation()),
         });
         n.scale({ x: 1, y: 1 });
@@ -127,7 +174,7 @@ export default function Editor({
   const nodeRefs = useRef<Map<string, Konva.Node>>(new Map());
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const boxImg = useImg(boxImageUrl);
+  const { img: boxImg, failed: boxFailed } = useImg(boxImageUrl);
   const px = artboardPx(doc.artboard);
   const safePx = SAFE_MARGIN_IN * doc.artboard.dpi;
 
@@ -148,7 +195,7 @@ export default function Editor({
     ro.observe(el);
     return () => ro.disconnect();
     // re-run when the loading gate lifts and the wrapper first renders
-  }, [boxImg]);
+  }, [boxImg, boxFailed]);
 
   const isNarrow = stageW < NARROW;
   const canBox = !!(boxImg && logoZone);
@@ -198,10 +245,19 @@ export default function Editor({
     tr.getLayer()?.batchDraw();
   }, [selectedId, editingId, doc.elements, geo]);
 
-  // Wait for the box photo — no flat-artboard flash.
-  if (boxImageUrl && !boxImg) {
+  // Wait for the box photo — no flat-artboard flash. If it FAILS, proceed in
+  // flat mode rather than gating forever.
+  if (boxImageUrl && !boxImg && !boxFailed) {
     return <p className="note">Setting up your box…</p>;
   }
+
+  // Keep at least this many artboard px of an element inside the clip after
+  // a drag — fully outside means invisible AND unselectable ghost data.
+  const KEEP = 90;
+  const clampXY = (x: number, y: number, w: number, h: number) => ({
+    x: Math.round(Math.min(px.width - KEEP, Math.max(KEEP - w, x))),
+    y: Math.round(Math.min(px.height - KEEP, Math.max(KEEP - h, y))),
+  });
 
   const patch = (id: string, p: Record<string, unknown>) =>
     setDoc((d) => ({
@@ -229,14 +285,13 @@ export default function Editor({
     setEditingId(el.id); // new text goes straight into typing mode
   };
 
-  const onUpload = (file: File) => {
+  const onUpload = async (file: File) => {
     if (file.size > MAX_UPLOAD_BYTES) {
       alert("Please pick an image under 8 MB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const src = String(reader.result);
+    try {
+      const src = await downscaleToDataUrl(file);
       const probe = new window.Image();
       probe.onload = () => {
         const el = newImageElement(
@@ -248,9 +303,12 @@ export default function Editor({
         setDoc((d) => ({ ...d, elements: [...d.elements, el] }));
         setSelectedId(el.id);
       };
+      probe.onerror = () =>
+        alert("That image couldn't be read — try a JPG or PNG.");
       probe.src = src;
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      alert("That image couldn't be read — try a JPG or PNG.");
+    }
   };
 
   const removeEl = (id: string) => {
@@ -388,6 +446,7 @@ export default function Editor({
                       refFn={refFn(el.id)}
                       onSelect={() => setSelectedId(el.id)}
                       onChange={(p) => patch(el.id, p)}
+                      clampXY={clampXY}
                     />
                   ) : (
                     <Text
@@ -411,20 +470,22 @@ export default function Editor({
                       onTap={() => setSelectedId(el.id)}
                       onDblClick={() => setEditingId(el.id)}
                       onDblTap={() => setEditingId(el.id)}
-                      onDragEnd={(e) =>
-                        patch(el.id, {
-                          x: Math.round(e.target.x()),
-                          y: Math.round(e.target.y()),
-                        })
-                      }
+                      onDragEnd={(e) => {
+                        const n = e.target;
+                        patch(
+                          el.id,
+                          clampXY(n.x(), n.y(), n.width(), n.height()),
+                        );
+                      }}
                       onTransformEnd={(e) => {
                         const n = e.target;
                         patch(el.id, {
                           x: Math.round(n.x()),
                           y: Math.round(n.y()),
+                          // abs(): flips produce negative scale
                           fontSizePx: Math.max(
                             24,
-                            Math.round(el.fontSizePx * n.scaleY()),
+                            Math.round(el.fontSizePx * Math.abs(n.scaleY())),
                           ),
                           rotation: Math.round(n.rotation()),
                         });

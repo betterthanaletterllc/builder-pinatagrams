@@ -99,6 +99,10 @@ export default function DateCalendar({
                 (deliveryProblem(ymd) ? " off" : "")
               }
               disabled={!!deliveryProblem(ymd)}
+              aria-label={`${MONTHS[view.m]} ${Number(ymd.slice(8))}, ${view.y}${
+                deliveryProblem(ymd) ? " — unavailable" : ""
+              }`}
+              aria-pressed={ymd === value}
               onClick={() => onChange(ymd)}
             >
               {Number(ymd.slice(8))}

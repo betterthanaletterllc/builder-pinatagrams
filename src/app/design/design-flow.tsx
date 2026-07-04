@@ -83,7 +83,10 @@ export default function DesignFlow({
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
   const [editLineId, setEditLineId] = useState<string | null>(null);
-  const [packedFor, setPackedFor] = useState<string | null>(null);
+  const [packedFor, setPackedFor] = useState<{
+    name: string;
+    art: string | null;
+  } | null>(null);
   const [cartError, setCartError] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [switcherStyles, setSwitcherStyles] = useState<HubBodyStyle[] | null>(null);
@@ -138,7 +141,15 @@ export default function DesignFlow({
   // Restore draft + URL step on mount, then keep listening for back/forward.
   useEffect(() => {
     setSavedAddresses(loadAddresses());
-    const d = loadDraft();
+    const urlEdit = new URLSearchParams(window.location.search).get("edit");
+    let d = loadDraft();
+    // An edit-mode draft is only valid when this page was entered through the
+    // cart's Edit button (?edit=<lineId>). Otherwise an abandoned edit would
+    // contaminate a fresh pinata and silently REPLACE the old cart line.
+    if (d?.editLineId && d.editLineId !== urlEdit) {
+      clearDraft();
+      d = null;
+    }
     let g: GraphicChoice | null = null;
     let f: Filling | null = null;
     let dt = "";
@@ -170,15 +181,20 @@ export default function DesignFlow({
     setHydrated(true);
 
     const onPop = () => {
-      // re-derive gating from the CURRENT state via a fresh draft read (state
-      // not in scope here) — clamp generously: allow any step, the render
-      // guards handle missing data gracefully.
+      // Clamp to what the CURRENT state (mirrored in a ref) can support, so
+      // forward-jumping through history can't land on a dead-end step.
       const p = new URLSearchParams(window.location.search);
       const target = SLUG_TO_STEP[p.get("step") ?? "graphic"] ?? "Graphic";
-      setStepState(target);
+      const s = stateRef.current;
+      const idx = Math.min(
+        STEPS.indexOf(target),
+        maxStep(s.graphic, s.filling, s.date),
+      );
+      const clamped = STEPS[Math.max(0, idx)];
+      setStepState(clamped);
       const view = p.get("view");
       setGraphicModeState(
-        target === "Graphic" && (view === "library" || view === "canvas")
+        clamped === "Graphic" && (view === "library" || view === "canvas")
           ? view
           : null,
       );
@@ -188,6 +204,25 @@ export default function DesignFlow({
     return () => window.removeEventListener("popstate", onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Mirror gating inputs for the popstate handler (stale-closure-proof).
+  const stateRef = useRef({ graphic, filling, date });
+  useEffect(() => {
+    stateRef.current = { graphic, filling, date };
+  }, [graphic, filling, date]);
+
+  // Step changes: back to the top with focus on the heading (keyboard and
+  // screen-reader users keep their place; mobile users don't land mid-page).
+  useEffect(() => {
+    if (!hydrated) return;
+    window.scrollTo({ top: 0 });
+    const h = document.querySelector<HTMLElement>(".step-h1");
+    h?.focus({ preventScroll: true });
+    document
+      .querySelector(".chip.active")
+      ?.scrollIntoView({ inline: "center", block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, graphicMode, packedFor]);
 
   // Persist the draft on every meaningful change (only once hydrated —
   // never on the initial commit, which still holds empty state).
@@ -213,7 +248,9 @@ export default function DesignFlow({
       : (graphic.art ?? graphic.thumb)
     : null;
 
-  const choosing = step === "Graphic" && !graphic && graphicMode !== null;
+  // choosing no longer requires !graphic: entering the canvas to EDIT keeps
+  // the saved graphic in state, so Back/refresh can't destroy the design.
+  const choosing = step === "Graphic" && graphicMode !== null;
   const docked =
     step === "Filling" || step === "Delivery" || step === "Send to";
   const railVisible = !choosing && !docked && !packedFor;
@@ -260,8 +297,14 @@ export default function DesignFlow({
   /* --- cart ---------------------------------------------------------------- */
   const addToCart = () => {
     if (!graphic || !filling || dateProblem || !addressOk) return;
+    const lines = loadCart();
+    // "Save changes" to a line that no longer exists (removed in another tab)
+    // must APPEND, not silently vanish.
+    const existing = editLineId
+      ? lines.find((l) => l.id === editLineId)
+      : undefined;
     const line = {
-      id: editLineId ?? newLineId(),
+      id: existing ? existing.id : newLineId(),
       styleId: styleInfo.id,
       styleName: styleInfo.name,
       boxImageUrl: styleInfo.boxImageUrl,
@@ -271,11 +314,10 @@ export default function DesignFlow({
       filling,
       deliveryDate: date,
       address,
-      qty: 1,
+      qty: existing ? existing.qty : 1,
     };
-    const lines = loadCart();
-    const next = editLineId
-      ? lines.map((l) => (l.id === editLineId ? { ...line, qty: l.qty } : l))
+    const next = existing
+      ? lines.map((l) => (l.id === existing.id ? line : l))
       : [...lines, line];
     if (!saveCart(next)) {
       setCartError(true);
@@ -283,7 +325,22 @@ export default function DesignFlow({
     }
     rememberAddress(address);
     clearDraft();
-    setPackedFor(address.name || styleInfo.name);
+    // Show the packed screen, then fully disarm the flow so browser Back
+    // can't resurrect a completed order and duplicate the cart line.
+    setPackedFor({ name: address.name || styleInfo.name, art: artUrl });
+    setGraphic(null);
+    setEditingDraft(null);
+    setMessage("");
+    setFilling(null);
+    setDate("");
+    setAddress(EMPTY_ADDRESS);
+    setEditLineId(null);
+    setStepState("Graphic");
+    const u = new URL(window.location.href);
+    u.searchParams.set("step", "graphic");
+    u.searchParams.delete("view");
+    u.searchParams.delete("edit");
+    window.history.replaceState({}, "", u);
   };
 
   /* --- packed! ------------------------------------------------------------- */
@@ -295,14 +352,14 @@ export default function DesignFlow({
             styleName={styleInfo.name}
             boxImageUrl={styleInfo.boxImageUrl}
             logoZone={styleInfo.logoZone}
-            artUrl={artUrl}
+            artUrl={packedFor.art}
             message=""
             filling={null}
             deliveryDate={null}
             mode="closed"
             variant="bare"
           />
-          <h1 className="step-h1">{packedFor}&apos;s box is packed! 🎉</h1>
+          <h1 className="step-h1">{packedFor.name}&apos;s box is packed! 🎉</h1>
           <div className="el-controls packed-actions">
             <Link className="btn primary" href="/">
               Send another piñata
@@ -345,8 +402,9 @@ export default function DesignFlow({
                 <button
                   className="btn"
                   onClick={() => {
+                    // keep `graphic` — the saved design must survive a
+                    // cancelled edit (browser Back) or a refresh
                     setEditingDraft(graphic.design);
-                    setGraphic(null);
                     goView("canvas");
                   }}
                 >
@@ -369,7 +427,7 @@ export default function DesignFlow({
 
       {choosing && graphicMode === "library" && (
         <GraphicLibrary
-          onBack={() => window.history.back()}
+          onBack={() => goView(null)}
           onPick={(g) => {
             setGraphic(g);
             goStep("Graphic");
@@ -380,7 +438,7 @@ export default function DesignFlow({
       {choosing && graphicMode === "canvas" && (
         <div>
           <p className="note">
-            <button className="btn mini" onClick={() => window.history.back()}>
+            <button className="btn mini" onClick={() => goView(null)}>
               ← Back
             </button>
           </p>
@@ -391,7 +449,13 @@ export default function DesignFlow({
             logoZone={styleInfo.logoZone}
             initialDesign={editingDraft}
             onSave={(design, preview) => {
-              setGraphic({ type: "custom", design, preview });
+              // stamp the CURRENT style — the body may have been swapped
+              // while the canvas was open
+              setGraphic({
+                type: "custom",
+                design: { ...design, bodyStyleId: styleInfo.id },
+                preview,
+              });
               setEditingDraft(null);
               goStep("Graphic");
             }}
@@ -531,20 +595,26 @@ export default function DesignFlow({
         <button className="chip done" onClick={openSwitcher}>
           ✓ {styleInfo.name} ▾
         </button>
-        {STEPS.map((s, i) => (
-          <button
-            key={s}
-            className={
-              "chip" +
-              (s === step ? " active" : "") +
-              (i < stepIndex ? " done" : "")
-            }
-            onClick={() => i <= Math.max(stepIndex, reachable) && goStep(s)}
-          >
-            {i < stepIndex ? "✓ " : ""}
-            {s}
-          </button>
-        ))}
+        {STEPS.map((s, i) => {
+          const unreachable = i > Math.max(stepIndex, reachable);
+          return (
+            <button
+              key={s}
+              className={
+                "chip" +
+                (s === step ? " active" : "") +
+                (i < stepIndex ? " done" : "")
+              }
+              disabled={unreachable}
+              aria-disabled={unreachable}
+              aria-current={s === step ? "step" : undefined}
+              onClick={() => !unreachable && goStep(s)}
+            >
+              {i < stepIndex ? "✓ " : ""}
+              {s}
+            </button>
+          );
+        })}
       </div>
 
       {switcherOpen && (
@@ -579,7 +649,11 @@ export default function DesignFlow({
         </div>
       )}
 
-      {showHeading && <h1 className="step-h1">{STEP_HEADINGS[step]}</h1>}
+      {showHeading && (
+        <h1 className="step-h1" tabIndex={-1}>
+          {STEP_HEADINGS[step]}
+        </h1>
+      )}
 
       {railVisible ? (
         <div className="flow-grid">

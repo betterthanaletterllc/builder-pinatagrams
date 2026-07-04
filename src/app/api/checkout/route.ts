@@ -1,44 +1,65 @@
 import { NextResponse } from "next/server";
-import { HUB_URL, type HubPrice } from "@/lib/hub";
+import { HUB_URL, type HubCatalog, type HubPrice } from "@/lib/hub";
 import {
-  addressComplete,
   addressKey,
   FILLINGS,
   formatAddress,
   type CartLine,
+  type DeliveryAddress,
 } from "@/lib/flow";
-import { deliveryProblem } from "@/lib/delivery";
+import { deliveryProblemAtCheckout } from "@/lib/delivery";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
  * Draft-order checkout. The client sends a SELECTION (cart lines + payer
- * email), never a price — money is recomputed here from the hub's public
- * plane. Addresses attach PER LINE; fulfillment (ShipStation) is one order =
- * one ship-to = one label, so lines are GROUPED BY ADDRESS and each group
- * becomes its own draft order + invoice. Single-destination carts get exactly
- * one. (One payment across N orders = the roadmap's phase-2 Stripe work.)
+ * email), never a price — everything money-related is recomputed here from
+ * the hub, and every line is re-validated against the live catalog (style
+ * must exist and be in stock). Addresses attach PER LINE; lines are grouped
+ * by address and each group becomes its own draft order + invoice
+ * (fulfillment: one order = one ship-to = one ShipStation label).
  *
- * Line-item properties carry everything Paper's ingestion reads: _fillings,
- * message, _requestedDate, plus _bodyStyle/_design for print resolution.
+ * Partial failure: created orders are returned in `createdSoFar` with their
+ * address group keys so the client can mark those lines ordered and retry
+ * only the remainder — no duplicate orders.
  *
- * Modes: with SHOPIFY_SHOP + SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET (the
- * admin.btal app with write_draft_orders) it creates real draft orders;
- * otherwise it returns the exact inputs it WOULD send (dry run).
- *
- * TODO before real orders: custom designs need their flattened art on Blob
- * (today _frontGraphic is a placeholder) and Paper needs the _frontGraphic
- * read-rail + financial_status paid-gate release.
+ * Modes: with SHOPIFY_SHOP + SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET it
+ * creates real draft orders AND sends each invoice email; otherwise dry-run.
+ * The raw draft-order payload is only included outside production.
  */
 
 const MAX_LINES = 20;
 const MAX_QTY = 25; // B2C sanity bound; bulk goes through quote/corporate
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
+const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
 
 type CheckoutBody = { lines: CartLine[]; email: string };
 
 function bad(error: string): NextResponse {
   return NextResponse.json({ error }, { status: 400 });
+}
+
+function str(v: unknown, max: number): string {
+  return typeof v === "string" ? v.slice(0, max).trim() : "";
+}
+
+function cleanAddress(a: unknown): DeliveryAddress | null {
+  if (!a || typeof a !== "object") return null;
+  const o = a as Record<string, unknown>;
+  const out: DeliveryAddress = {
+    name: str(o.name, 80),
+    address1: str(o.address1, 120),
+    address2: str(o.address2, 120),
+    city: str(o.city, 60),
+    province: str(o.province, 40),
+    zip: str(o.zip, 16),
+    phone: str(o.phone, 24),
+  };
+  if (!out.name || !out.address1 || !out.city || !out.province || !out.zip)
+    return null;
+  return out;
 }
 
 export async function POST(req: Request) {
@@ -49,24 +70,85 @@ export async function POST(req: Request) {
     return bad("Malformed JSON.");
   }
 
-  const { lines, email } = body;
-  if (!email?.includes("@")) return bad("A valid email is required.");
-  if (!Array.isArray(lines) || lines.length === 0) return bad("Cart is empty.");
-  if (lines.length > MAX_LINES) return bad("Too many cart lines.");
-  for (const l of lines) {
-    if (!l?.styleId || typeof l.styleId !== "string") return bad("Bad line: style.");
+  const email = str(body?.email, 120);
+  if (!EMAIL_RE.test(email)) return bad("A valid email is required.");
+  const rawLines = body?.lines;
+  if (!Array.isArray(rawLines) || rawLines.length === 0)
+    return bad("Cart is empty.");
+  if (rawLines.length > MAX_LINES)
+    return bad(`That's a lot of piñatas — the builder caps at ${MAX_LINES} lines. For bulk orders use the quote form.`);
+
+  // Live catalog: styles must exist and be in stock at order time.
+  const catalogRes = await fetch(`${HUB_URL}/api/public/catalog`, {
+    next: { revalidate: 60 },
+  });
+  if (!catalogRes.ok) {
+    return NextResponse.json(
+      { error: "The catalog is unavailable right now — try again shortly." },
+      { status: 503 },
+    );
+  }
+  const catalog: HubCatalog = await catalogRes.json();
+  const styleById = new Map(catalog.bodyStyles.map((s) => [s.id, s]));
+
+  type CleanLine = {
+    title: string;
+    qty: number;
+    styleId: string;
+    design: string;
+    frontGraphic: string;
+    filling: string;
+    deliveryDate: string;
+    message: string;
+    address: DeliveryAddress;
+  };
+  const lines: CleanLine[] = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const l = rawLines[i];
+    const label = `Piñata ${i + 1}`;
+    const style = typeof l?.styleId === "string" ? styleById.get(l.styleId) : undefined;
+    if (!style) return bad(`${label}: that body style no longer exists — remove it and pick another.`);
+    if (!style.inStock)
+      return bad(`${label}: the ${style.name} body is out of stock right now — swap its style and try again.`);
     if (!Number.isInteger(l.qty) || l.qty < 1 || l.qty > MAX_QTY)
-      return bad(`Bad line: qty must be 1..${MAX_QTY}.`);
+      return bad(`${label}: quantity must be between 1 and ${MAX_QTY}.`);
     if (!(FILLINGS as readonly string[]).includes(l.filling))
-      return bad("Bad line: filling.");
-    const dateIssue = deliveryProblem(l.deliveryDate);
-    if (dateIssue) return bad(`Bad line: ${dateIssue}`);
-    if (l.graphic?.type !== "shopify" && l.graphic?.type !== "custom")
-      return bad("Bad line: graphic.");
-    if (typeof l.message !== "string" || l.message.length > 300)
-      return bad("Bad line: message.");
-    if (!addressComplete(l.address))
-      return bad("Bad line: missing delivery address.");
+      return bad(`${label}: pick a filling.`);
+    const dateIssue = deliveryProblemAtCheckout(String(l.deliveryDate ?? ""));
+    if (dateIssue) return bad(`${label}: ${dateIssue}`);
+    const message = str(l.message, 300);
+    const address = cleanAddress(l.address);
+    if (!address) return bad(`${label}: its delivery address is incomplete.`);
+
+    let design: string;
+    let frontGraphic: string;
+    let title: string;
+    if (l.graphic?.type === "shopify") {
+      design = str(l.graphic.design, 24).toUpperCase();
+      if (!DESIGN_RE.test(design)) return bad(`${label}: unrecognized graphic.`);
+      const art = str(l.graphic.art, 500);
+      if (!ART_RE.test(art)) return bad(`${label}: unrecognized graphic art.`);
+      frontGraphic = art;
+      title = `${str(l.graphic.title, 120) || design} — ${style.name}`;
+    } else if (l.graphic?.type === "custom") {
+      design = "custom";
+      frontGraphic = "PENDING_RENDER_UPLOAD"; // TODO: Blob URL of flattened art
+      title = `Custom Piñatagram — ${style.name}`;
+    } else {
+      return bad(`${label}: pick or design a graphic.`);
+    }
+
+    lines.push({
+      title,
+      qty: l.qty,
+      styleId: style.id,
+      design,
+      frontGraphic,
+      filling: l.filling,
+      deliveryDate: l.deliveryDate,
+      message,
+      address,
+    });
   }
 
   // Server-side price: single-destination B2C — per-unit product + shipping.
@@ -81,21 +163,29 @@ export async function POST(req: Request) {
     );
   }
   const price: HubPrice = await priceRes.json();
+  // Never sell at zero — a misconfigured pricing table must fail loudly.
+  if (!Number.isFinite(price.unitPriceCents) || price.unitPriceCents <= 0) {
+    return NextResponse.json(
+      { error: "Pricing is unavailable right now — try again shortly." },
+      { status: 503 },
+    );
+  }
   const unitPrice = (price.unitPriceCents / 100).toFixed(2);
 
   // One draft order per delivery address (ShipStation: one order = one label).
-  const groups = new Map<string, CartLine[]>();
+  const groups = new Map<string, CleanLine[]>();
   for (const l of lines) {
     const key = addressKey(l.address);
     groups.set(key, [...(groups.get(key) ?? []), l]);
   }
 
-  const draftOrders = [...groups.values()].map((groupLines) => {
+  const draftOrders = [...groups.entries()].map(([groupKey, groupLines]) => {
     const a = groupLines[0].address;
     const units = groupLines.reduce((s, l) => s + l.qty, 0);
-    const [firstName, ...rest] = a.name.trim().split(/\s+/);
+    const [firstName, ...rest] = a.name.split(/\s+/);
     const lastName = rest.join(" ") || firstName;
     return {
+      groupKey,
       shipTo: formatAddress(a),
       input: {
         email,
@@ -117,30 +207,18 @@ export async function POST(req: Request) {
           price: ((price.shipPerUnitCents * units) / 100).toFixed(2),
         },
         lineItems: groupLines.map((l) => ({
-          title:
-            l.graphic.type === "custom"
-              ? `Custom Piñatagram — ${l.styleName}`
-              : `${l.graphic.title} — ${l.styleName}`,
+          title: l.title,
           originalUnitPrice: unitPrice,
           quantity: l.qty,
           requiresShipping: true,
           customAttributes: [
             { key: "_bodyStyle", value: l.styleId },
-            {
-              key: "_design",
-              value: l.graphic.type === "custom" ? "custom" : l.graphic.design,
-            },
-            {
-              key: "_frontGraphic",
-              value:
-                l.graphic.type === "shopify"
-                  ? (l.graphic.art ?? "")
-                  : "PENDING_RENDER_UPLOAD", // TODO: Blob URL of flattened art
-            },
+            { key: "_design", value: l.design },
+            { key: "_frontGraphic", value: l.frontGraphic },
             { key: "_fillings", value: l.filling },
             { key: "_requestedDate", value: l.deliveryDate },
             ...(l.message ? [{ key: "message", value: l.message }] : []),
-          ].filter((attr) => attr.value !== ""),
+          ],
         })),
       },
     };
@@ -151,16 +229,20 @@ export async function POST(req: Request) {
   const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
 
   if (!shop || !clientId || !clientSecret) {
+    const isProd = process.env.VERCEL_ENV === "production";
     return NextResponse.json({
       dryRun: true,
-      reason:
-        "Shopify credentials aren't configured on this deployment yet (needs SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET from the admin.btal app with the write_draft_orders scope). This is exactly what would be sent:",
-      draftOrders,
+      reason: isProd
+        ? "Checkout isn't taking live orders quite yet — your cart is saved and nothing was charged."
+        : "Shopify credentials aren't configured (needs SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET). This is exactly what would be sent:",
+      // The raw payload is a debugging tool, not customer content.
+      draftOrders: isProd
+        ? draftOrders.map(({ groupKey, shipTo }) => ({ groupKey, shipTo }))
+        : draftOrders,
     });
   }
 
-  // Mint a short-lived Admin token (client-credentials grant — same flow the
-  // hub proved for webhook registration).
+  // Mint a short-lived Admin token (client-credentials grant).
   const tokenRes = await fetch(
     `https://${shop}.myshopify.com/admin/oauth/access_token`,
     {
@@ -181,45 +263,78 @@ export async function POST(req: Request) {
   }
   const { access_token } = await tokenRes.json();
 
-  const created: { shipTo: string; invoiceUrl: string; draftOrderId: string }[] =
-    [];
+  const gqlHeaders = {
+    "Content-Type": "application/json",
+    "X-Shopify-Access-Token": access_token,
+  };
+  const gqlUrl = `https://${shop}.myshopify.com/admin/api/2025-01/graphql.json`;
+
+  const created: {
+    groupKey: string;
+    shipTo: string;
+    invoiceUrl: string;
+    draftOrderId: string;
+    invoiceSent: boolean;
+  }[] = [];
+
   for (const order of draftOrders) {
-    const gqlRes = await fetch(
-      `https://${shop}.myshopify.com/admin/api/2025-01/graphql.json`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": access_token,
-        },
-        body: JSON.stringify({
-          query: `mutation($input: DraftOrderInput!) {
-            draftOrderCreate(input: $input) {
-              draftOrder { id invoiceUrl }
-              userErrors { field message }
-            }
-          }`,
-          variables: { input: order.input },
-        }),
-      },
-    );
+    const gqlRes = await fetch(gqlUrl, {
+      method: "POST",
+      headers: gqlHeaders,
+      body: JSON.stringify({
+        query: `mutation($input: DraftOrderInput!) {
+          draftOrderCreate(input: $input) {
+            draftOrder { id invoiceUrl }
+            userErrors { field message }
+          }
+        }`,
+        variables: { input: order.input },
+      }),
+    });
     const gql = await gqlRes.json();
     const errs = gql?.data?.draftOrderCreate?.userErrors;
     if (!gqlRes.ok || gql.errors || (errs && errs.length)) {
       return NextResponse.json(
         {
-          error: `Shopify rejected the order for ${order.shipTo}.`,
-          details: gql.errors ?? errs,
+          error: `Shopify rejected the order for ${order.shipTo}. Any orders listed below WERE created — don't re-order those.`,
           createdSoFar: created,
         },
         { status: 502 },
       );
     }
     const draft = gql.data.draftOrderCreate.draftOrder;
+
+    // Send the invoice email — the UI promises it.
+    let invoiceSent = false;
+    try {
+      const sendRes = await fetch(gqlUrl, {
+        method: "POST",
+        headers: gqlHeaders,
+        body: JSON.stringify({
+          query: `mutation($id: ID!) {
+            draftOrderInvoiceSend(id: $id) {
+              draftOrder { id }
+              userErrors { field message }
+            }
+          }`,
+          variables: { id: draft.id },
+        }),
+      });
+      const sendGql = await sendRes.json();
+      invoiceSent =
+        sendRes.ok &&
+        !sendGql.errors &&
+        !(sendGql?.data?.draftOrderInvoiceSend?.userErrors?.length > 0);
+    } catch {
+      invoiceSent = false;
+    }
+
     created.push({
+      groupKey: order.groupKey,
       shipTo: order.shipTo,
       draftOrderId: draft.id,
       invoiceUrl: draft.invoiceUrl,
+      invoiceSent,
     });
   }
 
