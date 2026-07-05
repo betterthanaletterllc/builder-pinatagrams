@@ -36,7 +36,7 @@ const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
 const BLOB_RE = /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//;
 const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
 
-type CheckoutBody = { lines: CartLine[]; email: string };
+type CheckoutBody = { lines: CartLine[]; email?: string };
 
 function bad(error: string): NextResponse {
   return NextResponse.json({ error }, { status: 400 });
@@ -71,8 +71,11 @@ export async function POST(req: Request) {
     return bad("Malformed JSON.");
   }
 
+  // Email is OPTIONAL: consumers go straight to Shopify's payment page,
+  // which collects contact info itself. When present (older clients, future
+  // corporate flows) it goes on the draft and the invoice email still sends.
   const email = str(body?.email, 120);
-  if (!EMAIL_RE.test(email)) return bad("A valid email is required.");
+  if (email && !EMAIL_RE.test(email)) return bad("That email doesn't look right.");
   const rawLines = body?.lines;
   if (!Array.isArray(rawLines) || rawLines.length === 0)
     return bad("Cart is empty.");
@@ -99,6 +102,7 @@ export async function POST(req: Request) {
     title: string;
     qty: number;
     styleId: string;
+    styleName: string;
     design: string;
     frontGraphic: string;
     designJson: string;
@@ -161,6 +165,7 @@ export async function POST(req: Request) {
       title,
       qty: l.qty,
       styleId: style.id,
+      styleName: style.name,
       design,
       frontGraphic,
       designJson,
@@ -213,7 +218,7 @@ export async function POST(req: Request) {
       groupKey,
       shipTo: formatAddress(a),
       input: {
-        email,
+        ...(email ? { email } : {}),
         tags: ["builder"],
         note: "builder.pinatagrams.com",
         shippingAddress: {
@@ -239,6 +244,15 @@ export async function POST(req: Request) {
           quantity: l.qty,
           requiresShipping: true,
           customAttributes: [
+            // No leading underscore = SHOWS on the payment page under the
+            // line title — the customer sees their choices while paying.
+            { key: "Body style", value: l.styleName },
+            { key: "Filling", value: l.filling },
+            ...(l.addonLabels.length
+              ? [{ key: "Add-ons", value: l.addonLabels.join(", ") }]
+              : []),
+            { key: "Arrives by", value: l.deliveryDate },
+            // Underscored = hidden machine rails Paper reads at fulfillment.
             { key: "_bodyStyle", value: l.styleId },
             { key: "_design", value: l.design },
             { key: "_frontGraphic", value: l.frontGraphic },
@@ -371,8 +385,19 @@ export async function POST(req: Request) {
     }
     const draft = gql.data.draftOrderCreate.draftOrder;
 
-    // Send the invoice email — the UI promises it.
+    // Invoice email only when we have an address to send it to — the
+    // consumer flow skips email entirely and pays via redirect instead.
     let invoiceSent = false;
+    if (!email) {
+      created.push({
+        groupKey: order.groupKey,
+        shipTo: order.shipTo,
+        draftOrderId: draft.id,
+        invoiceUrl: draft.invoiceUrl,
+        invoiceSent,
+      });
+      continue;
+    }
     try {
       const sendRes = await fetch(gqlUrl, {
         method: "POST",

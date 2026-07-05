@@ -22,6 +22,7 @@ import {
   type DesignDocument,
   type ImageElement,
 } from "@/lib/design-document";
+import { toPrintPngBlob } from "@/lib/print-png";
 
 /**
  * Canvas-first editor. The canvas is the page; a toolbar sits above it and a
@@ -329,7 +330,16 @@ export default function Editor({
     trRef.current?.nodes([]);
     const g = designRef.current;
     if (!g) return null;
+    // Crop to the ARTBOARD region (stage coords), never Konva's default
+    // content bounding box: an element hanging past the artboard edge grows
+    // that box (the clip doesn't shrink it), which ships transparent margins
+    // — the preview then letterboxes ("my image shrunk") and the print file
+    // stops being 8"×3.9".
     return g.toDataURL({
+      x: geo.gx,
+      y: geo.gy,
+      width: px.width * geo.scale,
+      height: px.height * geo.scale,
       pixelRatio: targetWidthPx / (px.width * geo.scale),
     });
   };
@@ -365,7 +375,14 @@ export default function Editor({
           typeof crypto !== "undefined" && crypto.randomUUID
             ? crypto.randomUUID()
             : `${doc.bodyStyleId}-${doc.elements.length}-${preview.length}`;
-        const pngBlob = await fetch(full).then((r) => r.blob());
+        // Exactly artboard-sized (2400×1170) with real 300-DPI metadata, so
+        // the file measures 8"×3.9" in print tools instead of 72-DPI-huge.
+        const pngBlob = await toPrintPngBlob(
+          full,
+          px.width,
+          px.height,
+          doc.artboard.dpi,
+        );
         const put = await upload(`builder-art/${id}/front.png`, pngBlob, {
           access: "public",
           handleUploadUrl: "/api/art/upload",

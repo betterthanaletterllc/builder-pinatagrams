@@ -20,7 +20,6 @@ import {
 } from "@/lib/flow";
 
 const MAX_QTY = 25;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 type CheckoutResult =
   | {
@@ -77,7 +76,6 @@ export default function CartView() {
   const [lines, setLines] = useState<CartLine[] | null>(null);
   const [unitPrice, setUnitPrice] = useState<HubPrice | null>(null);
   const [addonCatalog, setAddonCatalog] = useState<HubAddon[]>([]);
-  const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -148,16 +146,16 @@ export default function CartView() {
   const destinations = new Set(
     lines.filter((l) => addressComplete(l.address)).map((l) => addressKey(l.address)),
   ).size;
-  const emailOk = EMAIL_RE.test(email.trim());
 
   const checkout = async () => {
     setSubmitting(true);
     setError(null);
     try {
+      // No email squeeze: Shopify's payment page collects contact info.
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines, email: email.trim() }),
+        body: JSON.stringify({ lines }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -324,11 +322,16 @@ export default function CartView() {
                 ? "Order created!"
                 : `${result.orders.length} orders created!`}
             </strong>
+            {result.orders.length > 1 && (
+              <p className="note">
+                Each destination is its own order — open and pay each one
+                below. Keep this page open until they&apos;re all paid.
+              </p>
+            )}
             <ul>
               {result.orders.map((o) => (
                 <li key={o.draftOrderId}>
-                  {o.shipTo}: <a href={o.invoiceUrl}>pay this invoice</a>
-                  {o.invoiceSent === false && " (save this link — the email didn't send)"}
+                  {o.shipTo}: <a href={o.invoiceUrl}>pay now</a>
                 </li>
               ))}
             </ul>
@@ -346,16 +349,6 @@ export default function CartView() {
             own order and invoice.
           </div>
         )}
-
-        <div className="field">
-          <label htmlFor="payer-email">Your email (for the invoice)</label>
-          <input
-            id="payer-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
 
         <div className="price-lines">
           {unitCents !== null && shipCents !== null ? (
@@ -397,17 +390,15 @@ export default function CartView() {
         <button
           className="btn primary block"
           disabled={
-            !emailOk ||
-            submitting ||
-            lines.length === 0 ||
-            missingAddress.length > 0
+            submitting || lines.length === 0 || missingAddress.length > 0
           }
           onClick={checkout}
         >
-          {submitting ? "Placing order…" : "Place order"}
+          {submitting ? "Heading to checkout…" : "Check out"}
         </button>
         <p className="note">
-          You&apos;ll get a Shopify invoice by email — orders ship once paid.
+          You&apos;ll finish up on our secure Shopify checkout — card, Shop
+          Pay, or Apple Pay.
         </p>
       </aside>
     </div>
