@@ -858,6 +858,68 @@ a.style-card:focus-visible {
   text-overflow: ellipsis;
 }
 
+.dock-price {
+  margin-left: auto;
+  display: grid;
+  text-align: right;
+  flex: none;
+}
+
+.dock-price strong {
+  font-size: 15px;
+  color: var(--accent-hover);
+  white-space: nowrap;
+}
+
+.dock-price span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dock-toggle {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* collapsed: one slim tappable strip */
+.build-dock.dock-closed {
+  padding: 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  background: var(--card);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.dock-mini {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 620px;
+  padding: 7px 16px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.dock-mini-price {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+.dock-chev {
+  color: var(--muted);
+}
+
 .has-dock {
   padding-bottom: 88px;
 }

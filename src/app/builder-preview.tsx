@@ -1,52 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import {
-  formatCents,
-  priceUrl,
-  type HubBodyStyle,
-  type HubPrice,
-} from "@/lib/hub";
+import type { HubBodyStyle } from "@/lib/hub";
 
 /**
  * Step 1 of the flow: pick a body style. One tap goes straight into the
- * design flow — no intermediate panel. Quantity/shipping live in the cart.
+ * design flow — no intermediate panel. The running price lives in the
+ * build dock once a style is picked; quantity/shipping live in the cart.
  */
-
-const PRICE_KNOBS = {
-  qty: 1,
-  fill: "filled",
-  bodyType: "standard",
-  graphicType: "custom",
-  mode: "individual",
-  carrier: "standard",
-} as const;
 
 export default function BuilderPreview({
   bodyStyles,
 }: {
   bodyStyles: HubBodyStyle[];
 }) {
-  const [price, setPrice] = useState<HubPrice | null>(null);
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    fetch(priceUrl(PRICE_KNOBS), { signal: ctrl.signal })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setPrice)
-      .catch(() => {});
-    return () => ctrl.abort();
-  }, []);
-
   return (
     <div>
-      {price && (
-        <p className="price-from">
-          Every Piñatagram is{" "}
-          <strong>{formatCents(price.unitDeliveredCents)}</strong> delivered.
-        </p>
-      )}
       <div className="style-grid">
         {bodyStyles.map((s) =>
           s.inStock ? (

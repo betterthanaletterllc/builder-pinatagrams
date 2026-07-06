@@ -27,8 +27,10 @@ import {
 import {
   formatCents,
   HUB_URL,
+  priceUrl,
   type HubAddon,
   type HubBodyStyle,
+  type HubPrice,
   type LogoZone,
 } from "@/lib/hub";
 import { deliveryProblem, type DeliveryConfig } from "@/lib/delivery";
@@ -104,6 +106,9 @@ export default function DesignFlow({
   const [cartError, setCartError] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [switcherStyles, setSwitcherStyles] = useState<HubBodyStyle[] | null>(null);
+  // The build dock: running summary + price, collapsible, on every step.
+  const [dockOpen, setDockOpen] = useState(true);
+  const [unitPrice, setUnitPrice] = useState<HubPrice | null>(null);
   // STATE, not a ref: the persist effect must not run until the commit AFTER
   // the restore lands, or it clobbers the stored draft with empty state.
   const [hydrated, setHydrated] = useState(false);
@@ -223,6 +228,26 @@ export default function DesignFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Live per-piñata price for the dock (display only — checkout re-prices).
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(
+      priceUrl({
+        qty: 1,
+        fill: "filled",
+        bodyType: "standard",
+        graphicType: "custom",
+        mode: "individual",
+        carrier: "standard",
+      }),
+      { signal: ctrl.signal },
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setUnitPrice)
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+
   // Mirror gating inputs for the popstate handler (stale-closure-proof).
   const stateRef = useRef({ graphic, filling, date });
   useEffect(() => {
@@ -273,6 +298,20 @@ export default function DesignFlow({
   const docked =
     step === "Filling" || step === "Delivery" || step === "Send to";
   const railVisible = !choosing && !docked && !packedFor;
+  // The dock shows on EVERY step (not just the docked ones) — inside the
+  // library/canvas it would fight the editor's own bottom UI, so not there.
+  const dockVisible = !choosing && !packedFor;
+
+  const selectedAddonLabels = addons
+    .map((id) => addonOptions.find((a) => a.id === id)?.label)
+    .filter(Boolean) as string[];
+  const addonCents = addons.reduce(
+    (s, id) => s + (addonOptions.find((a) => a.id === id)?.priceCents ?? 0),
+    0,
+  );
+  const deliveredCents = unitPrice
+    ? unitPrice.unitPriceCents + addonCents + unitPrice.shipPerUnitCents
+    : null;
 
   const selectedSavedKey = addressKey(address);
   const addressOk = addressComplete(address);
@@ -743,55 +782,96 @@ export default function DesignFlow({
           </aside>
         </div>
       ) : (
-        <div className={docked ? "has-dock" : undefined}>{steps}</div>
+        <div className={dockVisible ? "has-dock" : undefined}>{steps}</div>
       )}
 
-      {docked && (
-        <div className="build-dock">
-          <div className="dock-inner">
-            <div className="dock-thumb box-composite">
-              {styleInfo.boxImageUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={styleInfo.boxImageUrl} alt="" className="box-img" />
-              ) : null}
-              {artUrl && styleInfo.logoZone && (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={artUrl}
-                  alt=""
-                  className="box-art"
-                  style={{
-                    left: `${styleInfo.logoZone.x * 100}%`,
-                    top: `${styleInfo.logoZone.y * 100}%`,
-                    width: `${styleInfo.logoZone.w * 100}%`,
-                    height: `${styleInfo.logoZone.h * 100}%`,
-                  }}
-                />
+      {dockVisible &&
+        (dockOpen ? (
+          <div className="build-dock">
+            <div className="dock-inner">
+              <div className="dock-thumb box-composite">
+                {styleInfo.boxImageUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={styleInfo.boxImageUrl} alt="" className="box-img" />
+                ) : null}
+                {artUrl && styleInfo.logoZone && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={artUrl}
+                    alt=""
+                    className="box-art"
+                    style={{
+                      left: `${styleInfo.logoZone.x * 100}%`,
+                      top: `${styleInfo.logoZone.y * 100}%`,
+                      width: `${styleInfo.logoZone.w * 100}%`,
+                      height: `${styleInfo.logoZone.h * 100}%`,
+                    }}
+                  />
+                )}
+              </div>
+              <div className="dock-info">
+                <strong>
+                  {graphic?.type === "custom"
+                    ? `Your design — ${styleInfo.name}`
+                    : graphic
+                      ? `${graphic.title} — ${styleInfo.name}`
+                      : styleInfo.name}
+                </strong>
+                <span>
+                  {[
+                    message
+                      ? `“${message.slice(0, 22)}${message.length > 22 ? "…" : ""}”`
+                      : null,
+                    filling
+                      ? filling +
+                        (selectedAddonLabels.length
+                          ? ` + ${selectedAddonLabels.join(" + ")}`
+                          : "")
+                      : null,
+                    !dateProblem && date && stepIndex >= 3 ? date : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "building…"}
+                </span>
+              </div>
+              {deliveredCents !== null && (
+                <div className="dock-price">
+                  <strong>{formatCents(deliveredCents)}</strong>
+                  <span>delivered</span>
+                </div>
               )}
-            </div>
-            <div className="dock-info">
-              <strong>
-                {graphic?.type === "custom"
-                  ? `Your design — ${styleInfo.name}`
-                  : graphic
-                    ? `${graphic.title} — ${styleInfo.name}`
-                    : styleInfo.name}
-              </strong>
-              <span>
-                {[
-                  message
-                    ? `“${message.slice(0, 22)}${message.length > 22 ? "…" : ""}”`
-                    : null,
-                  filling,
-                  !dateProblem && date && stepIndex >= 3 ? date : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || "building…"}
-              </span>
+              <button
+                type="button"
+                className="dock-toggle"
+                aria-label="Collapse the order summary"
+                aria-expanded="true"
+                onClick={() => setDockOpen(false)}
+              >
+                ⌄
+              </button>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <button
+            type="button"
+            className="build-dock dock-closed"
+            aria-label="Expand the order summary"
+            aria-expanded="false"
+            onClick={() => setDockOpen(true)}
+          >
+            <span className="dock-mini">
+              <strong>{styleInfo.name}</strong>
+              {deliveredCents !== null && (
+                <span className="dock-mini-price">
+                  {formatCents(deliveredCents)} delivered
+                </span>
+              )}
+              <span className="dock-chev" aria-hidden>
+                ⌃
+              </span>
+            </span>
+          </button>
+        ))}
     </div>
   );
 }
