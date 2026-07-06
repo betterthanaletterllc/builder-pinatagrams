@@ -148,6 +148,43 @@ export const SHELF_OCCASIONS = [
   "Sympathy",
 ];
 
+/* ---------------------------------------------------------------------------
+ * Library view state — where the shopper was (aisle, sub-pick, search,
+ * scroll). Saved on every change + on pick, so "Change graphic" lands them
+ * EXACTLY where they left off. sessionStorage: dies with the tab, cleared
+ * on add-to-cart (a new piñata browses fresh).
+ * ------------------------------------------------------------------------- */
+
+export type LibraryViewState = {
+  q: string;
+  a: string | null;
+  s: string | null;
+  y: number;
+};
+
+const LIB_STATE_KEY = "pinatagrams-library-state";
+
+export function saveLibraryState(st: LibraryViewState): void {
+  try {
+    sessionStorage.setItem(LIB_STATE_KEY, JSON.stringify(st));
+  } catch {}
+}
+
+export function loadLibraryState(): LibraryViewState | null {
+  try {
+    const raw = sessionStorage.getItem(LIB_STATE_KEY);
+    return raw ? (JSON.parse(raw) as LibraryViewState) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearLibraryState(): void {
+  try {
+    sessionStorage.removeItem(LIB_STATE_KEY);
+  } catch {}
+}
+
 export async function loadJson<T>(url: string): Promise<T | null> {
   try {
     const r = await fetch(url);
