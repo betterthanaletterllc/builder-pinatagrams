@@ -240,7 +240,7 @@ export async function POST(req: Request) {
           phone: a.phone || null,
         },
         shippingLine: {
-          title: "Standard delivery",
+          title: "FedEx 2-Day delivery",
           price: ((price.shipPerUnitCents * units) / 100).toFixed(2),
         },
         lineItems: groupLines.map((l) => ({
