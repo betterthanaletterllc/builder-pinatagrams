@@ -31,7 +31,7 @@ import {
   type HubBodyStyle,
   type LogoZone,
 } from "@/lib/hub";
-import { deliveryProblem } from "@/lib/delivery";
+import { deliveryProblem, type DeliveryConfig } from "@/lib/delivery";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
 import BoxPreview from "./box-preview";
@@ -75,10 +75,12 @@ export default function DesignFlow({
   style,
   boxInterior,
   addonOptions,
+  deliveryCfg,
 }: {
   style: StyleInfo;
   boxInterior: { interiorUrl: string | null; messageZone: LogoZone | null } | null;
   addonOptions: HubAddon[];
+  deliveryCfg: DeliveryConfig;
 }) {
   // The style can be swapped in place (keeps the design/message/etc.).
   const [styleInfo, setStyleInfo] = useState<StyleInfo>(style);
@@ -106,17 +108,20 @@ export default function DesignFlow({
   // the restore lands, or it clobbers the stored draft with empty state.
   const [hydrated, setHydrated] = useState(false);
 
-  const dateProblem = useMemo(() => deliveryProblem(date), [date]);
+  const dateProblem = useMemo(
+    () => deliveryProblem(date, deliveryCfg),
+    [date, deliveryCfg],
+  );
 
   /* --- step gating: the furthest step the current state supports ---------- */
   const maxStep = useCallback(
     (g: GraphicChoice | null, f: Filling | null, d: string): number => {
       if (!g) return 0; // Graphic
       if (!f) return 2; // through Filling
-      if (deliveryProblem(d)) return 3; // through Delivery
+      if (deliveryProblem(d, deliveryCfg)) return 3; // through Delivery
       return 4; // everything
     },
-    [],
+    [deliveryCfg],
   );
 
   /* --- history-backed navigation ------------------------------------------ */
@@ -560,7 +565,7 @@ export default function DesignFlow({
 
       {step === "Delivery" && (
         <div className="step-panel">
-          <DateCalendar value={date} onChange={setDate} />
+          <DateCalendar value={date} onChange={setDate} cfg={deliveryCfg} />
           {!date ? (
             <p className="note">
               Tap a day — grayed-out days aren&apos;t available.

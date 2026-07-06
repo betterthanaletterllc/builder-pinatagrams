@@ -5,6 +5,7 @@ import {
   type HubBodyStyle,
   type LogoZone,
 } from "@/lib/hub";
+import { resolveDeliveryConfig, type DeliveryConfig } from "@/lib/delivery";
 import DesignFlow from "./design-flow";
 
 export const dynamic = "force-dynamic";
@@ -20,12 +21,14 @@ export default async function DesignPage({
   let box: { interiorUrl: string | null; messageZone: LogoZone | null } | null =
     null;
   let addons: HubAddon[] = [];
+  let deliveryCfg: DeliveryConfig = resolveDeliveryConfig(undefined);
   let hubDown = false;
   try {
     const catalog = await getCatalog();
     match = catalog.bodyStyles.find((s) => s.id === style && s.inStock) ?? null;
     box = catalog.box ?? null;
     addons = catalog.addons ?? [];
+    deliveryCfg = resolveDeliveryConfig(catalog.delivery);
   } catch {
     // Hub unreachable — the flow still works; the style is re-validated
     // server-side at order time anyway.
@@ -59,6 +62,7 @@ export default async function DesignPage({
         }}
         boxInterior={box}
         addonOptions={addons}
+        deliveryCfg={deliveryCfg}
       />
     </main>
   );

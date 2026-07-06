@@ -7,7 +7,10 @@ import {
   type CartLine,
   type DeliveryAddress,
 } from "@/lib/flow";
-import { deliveryProblemAtCheckout } from "@/lib/delivery";
+import {
+  deliveryProblemAtCheckout,
+  resolveDeliveryConfig,
+} from "@/lib/delivery";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +97,7 @@ export async function POST(req: Request) {
   }
   const catalog: HubCatalog = await catalogRes.json();
   const styleById = new Map(catalog.bodyStyles.map((s) => [s.id, s]));
+  const deliveryCfg = resolveDeliveryConfig(catalog.delivery);
   // Add-ons re-resolve from the live catalog: the client sends ids only,
   // labels + prices come from the hub at order time.
   const addonById = new Map((catalog.addons ?? []).map((a) => [a.id, a]));
@@ -131,7 +135,10 @@ export async function POST(req: Request) {
       return bad(
         `${label}: one of its add-ons is no longer available — edit the piñata and re-pick.`,
       );
-    const dateIssue = deliveryProblemAtCheckout(String(l.deliveryDate ?? ""));
+    const dateIssue = deliveryProblemAtCheckout(
+      String(l.deliveryDate ?? ""),
+      deliveryCfg,
+    );
     if (dateIssue) return bad(`${label}: ${dateIssue}`);
     const message = str(l.message, 300);
     const address = cleanAddress(l.address);

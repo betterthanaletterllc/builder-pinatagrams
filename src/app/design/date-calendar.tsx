@@ -7,12 +7,14 @@ import {
   maxDeliveryDate,
   minDeliveryDate,
   toYmd,
+  type DeliveryConfig,
 } from "@/lib/delivery";
 
 /**
  * Inline month calendar — always open, no popup to summon (native date inputs
  * need an extra tap and iOS can't be auto-opened reliably). Undeliverable
- * days (lead time, blackouts, Sundays) render disabled.
+ * days (make+fly lead time, carrier holidays, FedEx off-days) render disabled;
+ * the rules come from the hub's delivery calendars (admin /delivery).
  */
 
 const MONTHS = [
@@ -24,17 +26,19 @@ const DOW = ["S", "M", "T", "W", "T", "F", "S"];
 export default function DateCalendar({
   value,
   onChange,
+  cfg,
 }: {
   value: string; // "" = nothing chosen yet
   onChange: (ymd: string) => void;
+  cfg: DeliveryConfig;
 }) {
   const [view, setView] = useState(() => {
-    const d = value ? fromYmd(value) : fromYmd(minDeliveryDate());
+    const d = value ? fromYmd(value) : fromYmd(minDeliveryDate(cfg));
     return { y: d.getFullYear(), m: d.getMonth() };
   });
 
-  const min = fromYmd(minDeliveryDate());
-  const max = fromYmd(maxDeliveryDate());
+  const min = fromYmd(minDeliveryDate(cfg));
+  const max = fromYmd(maxDeliveryDate(cfg));
   const atMin =
     view.y === min.getFullYear() && view.m === min.getMonth();
   const atMax =
@@ -96,11 +100,11 @@ export default function DateCalendar({
               className={
                 "cal-day" +
                 (ymd === value ? " selected" : "") +
-                (deliveryProblem(ymd) ? " off" : "")
+                (deliveryProblem(ymd, cfg) ? " off" : "")
               }
-              disabled={!!deliveryProblem(ymd)}
+              disabled={!!deliveryProblem(ymd, cfg)}
               aria-label={`${MONTHS[view.m]} ${Number(ymd.slice(8))}, ${view.y}${
-                deliveryProblem(ymd) ? " — unavailable" : ""
+                deliveryProblem(ymd, cfg) ? " — unavailable" : ""
               }`}
               aria-pressed={ymd === value}
               onClick={() => onChange(ymd)}

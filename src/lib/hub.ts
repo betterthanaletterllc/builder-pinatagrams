@@ -42,6 +42,9 @@ export type HubCatalog = {
   };
   // Active add-ons from the hub's Pricing page; absent on older deploys.
   addons?: HubAddon[];
+  // Delivery calendars (admin /delivery); parse with resolveDeliveryConfig —
+  // absent or partial blocks fall back to the compiled defaults.
+  delivery?: unknown;
   asOf: string;
 };
 
