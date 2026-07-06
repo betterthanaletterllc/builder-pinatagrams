@@ -1229,6 +1229,26 @@ a.style-card:focus-visible {
   flex: 0 0 auto;
 }
 
+/* aisles: bold top-level categories; sub-chips slightly smaller with counts */
+.aisle-row {
+  margin-bottom: 6px;
+}
+
+.aisle-row .chip {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.aisle-row .chip.active {
+  color: var(--accent-hover);
+  background: #eef1fd;
+}
+
+.sub-row .chip.sub {
+  font-size: 12px;
+  padding: 5px 12px;
+}
+
 .shelves {
   margin-top: 8px;
 }

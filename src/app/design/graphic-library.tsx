@@ -5,9 +5,13 @@ import type { GraphicChoice } from "@/lib/flow";
 import {
   EXCLUDED_PREFIXES,
   FALLBACK_OCCASION,
+  FAMILY_RECIPIENTS,
+  FRIEND_RECIPIENTS,
+  HOLIDAY_LABELS,
+  holidaysFromToday,
   loadJson,
   occasionOf,
-  RECIPIENTS,
+  PET_RECIPIENTS,
   SHELF_OCCASIONS,
   VIBES,
   type LibraryGraphic,
@@ -16,16 +20,41 @@ import {
 } from "@/lib/library-data";
 
 /**
- * Gift-finding library. Default view = shelves (Popular right now, This
- * season, top occasions); any search/facet flips to a filtered grid. Facets
- * answer the three questions a gift-giver asks: who's it for, what's the
- * occasion, what's the vibe. Tags + popularity are optional data files —
- * without them the shelves quietly reduce to occasions only.
+ * Gift-finding library. Default view = shelves (next holiday, Popular right
+ * now, This season, top occasions); search or an aisle pick flips to a
+ * filtered grid.
+ *
+ * Browsing = two-level AISLES: one row of broad categories (Birthdays first —
+ * the #1 use case gets one tap), tapping an aisle opens its sub-chips.
+ * Holidays sort by the calendar starting from today, so the next holiday is
+ * always the first chip. Chips show counts; empty ones don't render.
  */
 
 type Manifest = { graphics: LibraryGraphic[] };
 type PopularFile = { ranking: PopularRanking };
 type TagFile = { tags: TagIndex };
+
+type Aisle =
+  | "birthdays"
+  | "occasions"
+  | "holidays"
+  | "family"
+  | "friends"
+  | "pets"
+  | "vibe";
+
+// "All …" sub-chip sentinel (the union of the aisle's sub-filters).
+const ALL = "__all__";
+
+const AISLES: { id: Aisle; label: string; needsTags?: boolean }[] = [
+  { id: "birthdays", label: "🎂 Birthdays" },
+  { id: "occasions", label: "🎉 Occasions" },
+  { id: "holidays", label: "🎄 Holidays" },
+  { id: "family", label: "👪 Family", needsTags: true },
+  { id: "friends", label: "🧑‍🤝‍🧑 Friends & work", needsTags: true },
+  { id: "pets", label: "🐾 Pets", needsTags: true },
+  { id: "vibe", label: "✨ Vibe", needsTags: true },
+];
 
 // Shopify's CDN resizes on the fly — a 360px thumb is ~10x lighter than the
 // print-resolution original, which is what makes shelf scrolling feel instant.
@@ -79,9 +108,8 @@ export default function GraphicLibrary({
   const [failed, setFailed] = useState(false);
 
   const [query, setQuery] = useState("");
-  const [occasion, setOccasion] = useState<string | null>(null);
-  const [recipient, setRecipient] = useState<string | null>(null);
-  const [vibe, setVibe] = useState<string | null>(null);
+  const [aisle, setAisle] = useState<Aisle | null>(null);
+  const [sub, setSub] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -112,8 +140,70 @@ export default function GraphicLibrary({
       art: g.art,
     });
 
+  const hasTags = Object.keys(tags).length > 0;
+
+  const pickAisle = (id: Aisle) => {
+    if (aisle === id) {
+      setAisle(null);
+      setSub(null);
+    } else {
+      setAisle(id);
+      setSub(null);
+    }
+  };
+
+  // Shelf "See all →" jumps into the right aisle for its occasion.
+  const jumpToOccasion = (label: string) => {
+    if (label === "Birthday") {
+      setAisle("birthdays");
+      setSub(null);
+    } else if (HOLIDAY_LABELS.has(label)) {
+      setAisle("holidays");
+      setSub(label);
+    } else {
+      setAisle("occasions");
+      setSub(label);
+    }
+  };
+
+  const recipientsOf = (g: LibraryGraphic) => tags[g.design]?.r ?? [];
+  const vibesOf = (g: LibraryGraphic) => tags[g.design]?.v ?? [];
+
+  const inAisle = useMemo(() => {
+    return (g: LibraryGraphic): boolean => {
+      if (!aisle) return true;
+      if (aisle === "birthdays") return occasionOf(g.design) === "Birthday";
+      if (!sub) return true; // aisle open, nothing picked yet
+      const o = occasionOf(g.design);
+      const r = recipientsOf(g);
+      switch (aisle) {
+        case "occasions":
+          return o === sub;
+        case "holidays":
+          return sub === ALL ? HOLIDAY_LABELS.has(o) : o === sub;
+        case "family":
+          return sub === ALL
+            ? FAMILY_RECIPIENTS.some(([k]) => r.includes(k))
+            : r.includes(sub);
+        case "friends":
+          return sub === ALL
+            ? FRIEND_RECIPIENTS.some(([k]) => r.includes(k))
+            : r.includes(sub);
+        case "pets":
+          return sub === ALL
+            ? PET_RECIPIENTS.some(([k]) => r.includes(k))
+            : r.includes(sub);
+        case "vibe":
+          return vibesOf(g).includes(sub);
+        default:
+          return true;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aisle, sub, tags]);
+
   const filtering =
-    query.trim() !== "" || occasion !== null || recipient !== null || vibe !== null;
+    query.trim() !== "" || aisle === "birthdays" || (aisle !== null && sub !== null);
 
   const byDesign = useMemo(() => {
     const m = new Map<string, LibraryGraphic>();
@@ -121,24 +211,134 @@ export default function GraphicLibrary({
     return m;
   }, [graphics]);
 
+  const occasionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const g of graphics ?? []) {
+      const o = occasionOf(g.design);
+      counts.set(o, (counts.get(o) ?? 0) + 1);
+    }
+    return counts;
+  }, [graphics]);
+
+  const recipientCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const g of graphics ?? []) {
+      for (const r of tags[g.design]?.r ?? []) {
+        counts.set(r, (counts.get(r) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [graphics, tags]);
+
+  const vibeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const g of graphics ?? []) {
+      for (const v of tags[g.design]?.v ?? []) {
+        counts.set(v, (counts.get(v) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [graphics, tags]);
+
+  // Sub-chips for the open aisle: [key, label, count], zero-count hidden.
+  const subChips = useMemo((): [string, string, number][] => {
+    if (!aisle || aisle === "birthdays") return [];
+    const fromRecipients = (pairs: [string, string][], allLabel: string) => {
+      const chips = pairs
+        .map(([k, label]): [string, string, number] => [
+          k,
+          label,
+          recipientCounts.get(k) ?? 0,
+        ])
+        .filter(([, , n]) => n > 0);
+      if (chips.length > 1) {
+        const union = (graphics ?? []).filter((g) =>
+          pairs.some(([k]) => recipientsOf(g).includes(k)),
+        ).length;
+        chips.unshift([ALL, allLabel, union]);
+      }
+      return chips;
+    };
+    switch (aisle) {
+      case "occasions":
+        return [...occasionCounts.entries()]
+          .filter(
+            ([o]) => o !== "Birthday" && !HOLIDAY_LABELS.has(o),
+          )
+          .sort((a, b) =>
+            a[0] === FALLBACK_OCCASION ? 1 :
+            b[0] === FALLBACK_OCCASION ? -1 :
+            b[1] - a[1],
+          )
+          .map(([o, n]): [string, string, number] => [o, o, n]);
+      case "holidays": {
+        const chips = holidaysFromToday()
+          .map((h): [string, string, number] => [
+            h.label,
+            h.label,
+            occasionCounts.get(h.label) ?? 0,
+          ])
+          .filter(([, , n]) => n > 0);
+        if (chips.length > 1) {
+          const union = (graphics ?? []).filter((g) =>
+            HOLIDAY_LABELS.has(occasionOf(g.design)),
+          ).length;
+          chips.unshift([ALL, "All holidays", union]);
+        }
+        return chips;
+      }
+      case "family":
+        return fromRecipients(FAMILY_RECIPIENTS, "All family");
+      case "friends":
+        return fromRecipients(FRIEND_RECIPIENTS, "Everyone");
+      case "pets":
+        return fromRecipients(PET_RECIPIENTS, "All pets");
+      case "vibe":
+        return VIBES.map(([k, label]): [string, string, number] => [
+          k,
+          label,
+          vibeCounts.get(k) ?? 0,
+        ]).filter(([, , n]) => n > 0);
+      default:
+        return [];
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aisle, graphics, occasionCounts, recipientCounts, vibeCounts]);
+
   const shown = useMemo(() => {
     if (!graphics) return [];
     const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
     return graphics.filter((g) => {
+      if (!inAisle(g)) return false;
+      if (tokens.length === 0) return true;
       const o = occasionOf(g.design);
       const t = tags[g.design];
-      if (occasion && o !== occasion) return false;
-      if (recipient && !(t?.r ?? []).includes(recipient)) return false;
-      if (vibe && !(t?.v ?? []).includes(vibe)) return false;
-      if (tokens.length === 0) return true;
       const hay = `${g.title} ${o} ${g.design} ${(t?.r ?? []).join(" ")} ${(t?.v ?? []).join(" ")}`.toLowerCase();
       return tokens.every((tok) => hay.includes(tok));
     });
-  }, [graphics, tags, query, occasion, recipient, vibe]);
+  }, [graphics, tags, query, inAisle]);
 
   const shelves = useMemo(() => {
     if (!graphics || filtering) return [];
-    const out: { title: string; items: LibraryGraphic[]; seeAll?: string }[] = [];
+    const out: {
+      title: string;
+      items: LibraryGraphic[];
+      seeAll?: string;
+    }[] = [];
+
+    // Next holiday within ~6 weeks that we have designs for — pinned first.
+    const next = holidaysFromToday().find(
+      (h) => h.days <= 45 && (occasionCounts.get(h.label) ?? 0) > 0,
+    );
+    if (next) {
+      out.push({
+        title: `${next.label} is coming`,
+        items: graphics
+          .filter((g) => occasionOf(g.design) === next.label)
+          .slice(0, 12),
+        seeAll: next.label,
+      });
+    }
 
     if (popular.length > 0) {
       const items = popular
@@ -156,28 +356,21 @@ export default function GraphicLibrary({
       out.push({ title: "This season", items: seasonal.slice(0, 12) });
 
     for (const o of SHELF_OCCASIONS) {
+      if (o === next?.label) continue; // already pinned up top
       const items = graphics.filter((g) => occasionOf(g.design) === o);
       if (items.length)
         out.push({ title: o, items: items.slice(0, 12), seeAll: o });
     }
     return out;
-  }, [graphics, tags, popular, byDesign, filtering]);
+  }, [graphics, tags, popular, byDesign, filtering, occasionCounts]);
 
-  const occasions = useMemo(() => {
-    if (!graphics) return [];
-    const counts = new Map<string, number>();
-    for (const g of graphics) {
-      const o = occasionOf(g.design);
-      counts.set(o, (counts.get(o) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) =>
-      a[0] === FALLBACK_OCCASION ? 1 :
-      b[0] === FALLBACK_OCCASION ? -1 :
-      b[1] - a[1],
-    );
-  }, [graphics]);
-
-  const hasTags = Object.keys(tags).length > 0;
+  // Human summary of the active pick for the grid header.
+  const filterSummary = useMemo(() => {
+    if (aisle === "birthdays") return "Birthdays";
+    if (!aisle || !sub) return null;
+    const chip = subChips.find(([k]) => k === sub);
+    return chip ? chip[1] : null;
+  }, [aisle, sub, subChips]);
 
   return (
     <div>
@@ -205,49 +398,30 @@ export default function GraphicLibrary({
             onChange={(e) => setQuery(e.target.value)}
           />
 
-          {hasTags && (
-            <div className="facet-row">
-              <span className="facet-label">Who&apos;s it for?</span>
-              <div className="facet-scroll">
-                {RECIPIENTS.map(([key, label]) => (
-                  <button
-                    key={key}
-                    className={"chip" + (recipient === key ? " active" : "")}
-                    onClick={() => setRecipient(recipient === key ? null : key)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="facet-row">
-            <span className="facet-label">Occasion</span>
+          <div className="facet-row aisle-row">
             <div className="facet-scroll">
-              {occasions.map(([o, n]) => (
+              {AISLES.filter((a) => !a.needsTags || hasTags).map((a) => (
                 <button
-                  key={o}
-                  className={"chip" + (occasion === o ? " active" : "")}
-                  onClick={() => setOccasion(occasion === o ? null : o)}
+                  key={a.id}
+                  className={"chip" + (aisle === a.id ? " active" : "")}
+                  onClick={() => pickAisle(a.id)}
                 >
-                  {o} ({n})
+                  {a.label}
                 </button>
               ))}
             </div>
           </div>
 
-          {hasTags && (
-            <div className="facet-row">
-              <span className="facet-label">Vibe</span>
+          {subChips.length > 0 && (
+            <div className="facet-row sub-row">
               <div className="facet-scroll">
-                {VIBES.map(([key, label]) => (
+                {subChips.map(([key, label, n]) => (
                   <button
                     key={key}
-                    className={"chip" + (vibe === key ? " active" : "")}
-                    onClick={() => setVibe(vibe === key ? null : key)}
+                    className={"chip sub" + (sub === key ? " active" : "")}
+                    onClick={() => setSub(sub === key ? null : key)}
                   >
-                    {label}
+                    {label} · {n}
                   </button>
                 ))}
               </div>
@@ -263,7 +437,7 @@ export default function GraphicLibrary({
                     {s.seeAll && (
                       <button
                         className="btn mini"
-                        onClick={() => setOccasion(s.seeAll!)}
+                        onClick={() => jumpToOccasion(s.seeAll!)}
                       >
                         See all →
                       </button>
@@ -284,15 +458,13 @@ export default function GraphicLibrary({
           ) : shown.length === 0 ? (
             <div className="notice info">
               Nothing matches{query ? ` “${query}”` : ""} — try another word,
-              a different occasion, or design your own graphic.
+              a different aisle, or design your own graphic.
             </div>
           ) : (
             <>
               <p className="note">
                 {shown.length} graphic{shown.length === 1 ? "" : "s"}
-                {occasion ? ` · ${occasion}` : ""}
-                {recipient ? ` · for ${recipient}` : ""}
-                {vibe ? ` · ${vibe}` : ""}
+                {filterSummary ? ` · ${filterSummary}` : ""}
               </p>
               <div className="library-grid">
                 {shown.map((g) => (
