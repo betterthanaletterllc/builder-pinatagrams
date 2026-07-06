@@ -185,11 +185,19 @@ export function clearLibraryState(): void {
   } catch {}
 }
 
+// Session-scoped cache: re-entering the library ("Change graphic") must be
+// instant, not a ~1.6MB refetch — Vercel serves /public JSON with
+// must-revalidate, so the browser re-downloads on every mount otherwise.
+const jsonCache = new Map<string, unknown>();
+
 export async function loadJson<T>(url: string): Promise<T | null> {
+  if (jsonCache.has(url)) return jsonCache.get(url) as T;
   try {
     const r = await fetch(url);
     if (!r.ok) return null;
-    return (await r.json()) as T;
+    const v = (await r.json()) as T;
+    jsonCache.set(url, v);
+    return v;
   } catch {
     return null;
   }
