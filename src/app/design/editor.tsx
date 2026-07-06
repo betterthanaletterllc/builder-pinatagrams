@@ -13,6 +13,7 @@ import type { LogoZone } from "@/lib/hub";
 import {
   artboardPx,
   coverFit,
+  DEFAULT_ARTBOARD,
   isCurrentDesign,
   newDesign,
   templateSlotRects,
@@ -25,7 +26,7 @@ import {
   type TemplateId,
   type TextSlot,
 } from "@/lib/design-document";
-import { toPrintPngBlob } from "@/lib/print-png";
+import { toPrintBlob } from "@/lib/print-png";
 
 /**
  * Template editor (v2 — replaced the freeform canvas). The label divides
@@ -238,11 +239,21 @@ function TextSlotEl({
 }
 
 /** Mini wireframe of a template's boxes (picker cards + toolbar switcher). */
-function TmplMini({ cols }: { cols: number[] }) {
+function TmplMini({ id }: { id: TemplateId }) {
+  const { width: W, height: H } = artboardPx(DEFAULT_ARTBOARD);
+  const rects = templateSlotRects(id, DEFAULT_ARTBOARD);
   return (
     <span className="tmpl-mini" aria-hidden>
-      {cols.map((c, i) => (
-        <span key={i} style={{ flex: c }} />
+      {rects.map((r, i) => (
+        <span
+          key={i}
+          style={{
+            left: `${(r.x / W) * 100}%`,
+            top: `${(r.y / H) * 100}%`,
+            width: `${(r.w / W) * 100}%`,
+            height: `${(r.h / H) * 100}%`,
+          }}
+        />
       ))}
     </span>
   );
@@ -500,7 +511,7 @@ export default function Editor({
     setMenuFor(null);
     const preview = exportPng(480);
     if (!preview || !onSave) return;
-    // Upload the print-resolution PNG + design JSON straight to Blob — the
+    // Upload the print-resolution file + design JSON straight to Blob — the
     // art URL becomes the draft order's _frontGraphic. If the upload fails
     // (offline, Blob unconfigured) the flow continues; checkout falls back
     // to the PENDING placeholder.
@@ -508,36 +519,55 @@ export default function Editor({
     let designUrl: string | null = null;
     setSaving(true);
     try {
-      const full = exportPng(px.width);
-      if (full) {
+      const g = designRef.current;
+      if (g) {
+        // toCanvas skips a whole PNG encode/decode round-trip vs toDataURL;
+        // photo designs then ship as ~8×-smaller print-quality JPEG. Both
+        // are most of what made "Saving your design…" slow.
+        const full = g.toCanvas({
+          x: geo.gx,
+          y: geo.gy,
+          width: px.width * geo.scale,
+          height: px.height * geo.scale,
+          pixelRatio: px.width / (px.width * geo.scale),
+        });
+        const hasPhoto = doc.slots.some((s) => s?.kind === "photo");
+        const format = hasPhoto ? "image/jpeg" : "image/png";
+        // Exactly artboard-sized (2400×1170) with real 300-DPI metadata, so
+        // the file measures 8"×3.9" in print tools instead of 72-DPI-huge.
+        const printBlob = await toPrintBlob(
+          full,
+          px.width,
+          px.height,
+          doc.artboard.dpi,
+          format,
+        );
         const { upload } = await import("@vercel/blob/client");
         const id =
           typeof crypto !== "undefined" && crypto.randomUUID
             ? crypto.randomUUID()
             : `${doc.bodyStyleId}-${doc.slots.length}-${preview.length}`;
-        // Exactly artboard-sized (2400×1170) with real 300-DPI metadata, so
-        // the file measures 8"×3.9" in print tools instead of 72-DPI-huge.
-        const pngBlob = await toPrintPngBlob(
-          full,
-          px.width,
-          px.height,
-          doc.artboard.dpi,
-        );
-        const put = await upload(`builder-art/${id}/front.png`, pngBlob, {
-          access: "public",
-          handleUploadUrl: "/api/art/upload",
-          contentType: "image/png",
-        });
+        const [put, sidecar] = await Promise.all([
+          upload(
+            `builder-art/${id}/front.${hasPhoto ? "jpg" : "png"}`,
+            printBlob,
+            {
+              access: "public",
+              handleUploadUrl: "/api/art/upload",
+              contentType: format,
+            },
+          ),
+          upload(
+            `builder-art/${id}/design.json`,
+            new Blob([JSON.stringify(doc)], { type: "application/json" }),
+            {
+              access: "public",
+              handleUploadUrl: "/api/art/upload",
+              contentType: "application/json",
+            },
+          ),
+        ]);
         art = put.url;
-        const sidecar = await upload(
-          `builder-art/${id}/design.json`,
-          new Blob([JSON.stringify(doc)], { type: "application/json" }),
-          {
-            access: "public",
-            handleUploadUrl: "/api/art/upload",
-            contentType: "application/json",
-          },
-        );
         designUrl = sidecar.url;
       }
     } catch {
@@ -559,7 +589,7 @@ export default function Editor({
               className="tmpl-card"
               onClick={() => pickTemplate(t.id)}
             >
-              <TmplMini cols={t.cols} />
+              <TmplMini id={t.id} />
               <span className="tmpl-label">{t.label}</span>
             </button>
           ))}
@@ -602,7 +632,7 @@ export default function Editor({
               aria-label={t.label}
               onClick={() => switchTemplate(t.id)}
             >
-              <TmplMini cols={t.cols} />
+              <TmplMini id={t.id} />
             </button>
           ))}
         </div>
@@ -855,7 +885,18 @@ export default function Editor({
             title={filledCount === 0 ? "Fill a box first" : undefined}
             onClick={useThisDesign}
           >
-            {saving ? "Saving your design…" : "Use this design →"}
+            {saving ? (
+              <>
+                Saving your design
+                <span className="dots" aria-hidden>
+                  <span>.</span>
+                  <span>.</span>
+                  <span>.</span>
+                </span>
+              </>
+            ) : (
+              "Use this design →"
+            )}
           </button>
         )}
         <button className="btn mini" onClick={downloadPreview}>

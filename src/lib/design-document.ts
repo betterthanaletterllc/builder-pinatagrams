@@ -38,14 +38,20 @@ export type TemplateId =
   | "halves"
   | "third-left"
   | "third-right"
-  | "thirds";
+  | "thirds"
+  | "photo-plus-two"
+  | "banner"
+  | "quarters";
 
-export const TEMPLATES: { id: TemplateId; label: string; cols: number[] }[] = [
-  { id: "whole", label: "Whole label", cols: [1] },
-  { id: "halves", label: "Two halves", cols: [1, 1] },
-  { id: "third-left", label: "Small + big", cols: [1, 2] },
-  { id: "third-right", label: "Big + small", cols: [2, 1] },
-  { id: "thirds", label: "Three boxes", cols: [1, 1, 1] },
+export const TEMPLATES: { id: TemplateId; label: string }[] = [
+  { id: "whole", label: "Whole label" },
+  { id: "halves", label: "Two halves" },
+  { id: "third-left", label: "Small + big" },
+  { id: "third-right", label: "Big + small" },
+  { id: "thirds", label: "Three boxes" },
+  { id: "photo-plus-two", label: "Big + two stacked" },
+  { id: "banner", label: "Banner + two" },
+  { id: "quarters", label: "Four boxes" },
 ];
 
 // White gutter between boxes (artboard px ≈ 1.7 mm at 300 DPI) so photos
@@ -54,21 +60,72 @@ export const SLOT_GUTTER_PX = 20;
 
 export type SlotRect = { x: number; y: number; w: number; h: number };
 
-export function templateSlotRects(id: TemplateId, artboard: Artboard): SlotRect[] {
-  const { width, height } = artboardPx(artboard);
-  const cols = (TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0]).cols;
+/** Full-height columns with the given width ratios. */
+function colRects(cols: number[], W: number, H: number): SlotRect[] {
   const units = cols.reduce((s, c) => s + c, 0);
-  const unitW = (width - (cols.length - 1) * SLOT_GUTTER_PX) / units;
+  const unitW = (W - (cols.length - 1) * SLOT_GUTTER_PX) / units;
   const rects: SlotRect[] = [];
   let x = 0;
   for (const c of cols) {
-    rects.push({ x: Math.round(x), y: 0, w: Math.round(unitW * c), h: height });
+    rects.push({ x: Math.round(x), y: 0, w: Math.round(unitW * c), h: H });
     x += unitW * c + SLOT_GUTTER_PX;
   }
   // pin the last box to the artboard's right edge (rounding drift)
   const last = rects[rects.length - 1];
-  last.w = width - last.x;
+  last.w = W - last.x;
   return rects;
+}
+
+export function templateSlotRects(id: TemplateId, artboard: Artboard): SlotRect[] {
+  const { width: W, height: H } = artboardPx(artboard);
+  const G = SLOT_GUTTER_PX;
+  switch (id) {
+    case "halves":
+      return colRects([1, 1], W, H);
+    case "third-left":
+      return colRects([1, 2], W, H);
+    case "third-right":
+      return colRects([2, 1], W, H);
+    case "thirds":
+      return colRects([1, 1, 1], W, H);
+    // Big photo on the left, two stacked boxes on the right — photo plus a
+    // name up top and a message below.
+    case "photo-plus-two": {
+      const left = Math.round(((W - G) * 2) / 3);
+      const rx = left + G;
+      const topH = Math.round((H - G) / 2);
+      return [
+        { x: 0, y: 0, w: left, h: H },
+        { x: rx, y: 0, w: W - rx, h: topH },
+        { x: rx, y: topH + G, w: W - rx, h: H - topH - G },
+      ];
+    }
+    // Full-width strip up top (a "HAPPY BIRTHDAY" headline), two boxes under.
+    case "banner": {
+      const bh = Math.round(H * 0.34);
+      const by = bh + G;
+      const cw = Math.round((W - G) / 2);
+      return [
+        { x: 0, y: 0, w: W, h: bh },
+        { x: 0, y: by, w: cw, h: H - by },
+        { x: cw + G, y: by, w: W - cw - G, h: H - by },
+      ];
+    }
+    // 2×2 grid — four landscape boxes.
+    case "quarters": {
+      const cw = Math.round((W - G) / 2);
+      const rh = Math.round((H - G) / 2);
+      return [
+        { x: 0, y: 0, w: cw, h: rh },
+        { x: cw + G, y: 0, w: W - cw - G, h: rh },
+        { x: 0, y: rh + G, w: cw, h: H - rh - G },
+        { x: cw + G, y: rh + G, w: W - cw - G, h: H - rh - G },
+      ];
+    }
+    case "whole":
+    default:
+      return colRects([1], W, H);
+  }
 }
 
 /* --- slot contents ----------------------------------------------------------- */

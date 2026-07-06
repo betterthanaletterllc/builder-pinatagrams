@@ -497,6 +497,9 @@ export default function DesignFlow({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
           />
+          <p className="note msg-from-nudge">
+            💡 Don&apos;t forget to say who it&apos;s from!
+          </p>
           <button className="btn primary" onClick={() => goStep("Filling")}>
             Continue →
           </button>

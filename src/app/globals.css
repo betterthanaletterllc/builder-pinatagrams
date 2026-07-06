@@ -452,15 +452,16 @@ a.style-card:focus-visible {
   text-align: center;
 }
 
-/* mini wireframe: proportional boxes on the label's 2.05:1 aspect */
+/* mini wireframe: the template's real boxes on the label's 2.05:1 aspect */
 .tmpl-mini {
-  display: flex;
-  gap: 3px;
+  display: block;
+  position: relative;
   width: 100%;
   aspect-ratio: 2.05;
 }
 
 .tmpl-mini span {
+  position: absolute;
   background: #e6e9f8;
   border: 1.5px solid var(--accent);
   border-radius: 3px;
@@ -556,6 +557,38 @@ a.style-card:focus-visible {
 
 .slot-chips button:hover {
   border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+/* "Saving your design..." — dots pulse so it reads as alive, not stuck */
+.dots span {
+  display: inline-block;
+  animation: dot-pulse 1.2s infinite;
+}
+
+.dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dot-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.msg-from-nudge {
+  font-weight: 600;
   color: var(--accent-hover);
 }
 

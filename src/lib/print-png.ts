@@ -77,33 +77,65 @@ export function withDpi(png: Uint8Array, dpi: number): Uint8Array {
   return out;
 }
 
-/** Redraw a dataURL export at EXACTLY width×height px and stamp its DPI. */
-export async function toPrintPngBlob(
-  dataUrl: string,
+/**
+ * Set the JFIF density fields of a canvas-encoded JPEG to a real DPI.
+ * Canvas JPEGs open with the APP0 JFIF segment at a fixed offset:
+ * SOI(2) + FFE0 marker(2) + length(2) + "JFIF\0"(5) + version(2), then
+ * units(1) + Xdensity(2) + Ydensity(2). Anything else comes back untouched.
+ */
+export function withJpegDpi(jpg: Uint8Array, dpi: number): Uint8Array {
+  const isJfif =
+    jpg[0] === 0xff &&
+    jpg[1] === 0xd8 &&
+    jpg[2] === 0xff &&
+    jpg[3] === 0xe0 &&
+    jpg[6] === 0x4a && // J
+    jpg[7] === 0x46 && // F
+    jpg[8] === 0x49 && // I
+    jpg[9] === 0x46 && // F
+    jpg[10] === 0x00;
+  if (!isJfif) return jpg;
+  const out = jpg.slice();
+  out[13] = 1; // units: dots per inch
+  out[14] = (dpi >> 8) & 0xff;
+  out[15] = dpi & 0xff;
+  out[16] = (dpi >> 8) & 0xff;
+  out[17] = dpi & 0xff;
+  return out;
+}
+
+/**
+ * Encode a canvas at EXACTLY width×height px with real DPI metadata.
+ * format "image/jpeg" for photo designs (~8× smaller upload than PNG at
+ * print-indistinguishable q0.9), "image/png" for crisp text-only designs.
+ */
+export async function toPrintBlob(
+  src: HTMLCanvasElement,
   width: number,
   height: number,
   dpi: number,
+  format: "image/png" | "image/jpeg",
 ): Promise<Blob> {
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const i = new Image();
-    i.onload = () => resolve(i);
-    i.onerror = () => reject(new Error("export image failed to decode"));
-    i.src = dataUrl;
-  });
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("no 2d context");
-  ctx.drawImage(img, 0, 0, width, height);
+  // JPEG has no alpha — flatten onto white rather than black
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(src, 0, 0, width, height);
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("PNG encode failed"))),
-      "image/png",
+      (b) => (b ? resolve(b) : reject(new Error("encode failed"))),
+      format,
+      format === "image/jpeg" ? 0.9 : undefined,
     ),
   );
   const bytes = new Uint8Array(await blob.arrayBuffer());
+  const stamped =
+    format === "image/png" ? withDpi(bytes, dpi) : withJpegDpi(bytes, dpi);
   // cast: TS widens .buffer to ArrayBufferLike (SharedArrayBuffer) — ours
   // always comes from arrayBuffer(), a plain ArrayBuffer
-  return new Blob([withDpi(bytes, dpi) as BlobPart], { type: "image/png" });
+  return new Blob([stamped as BlobPart], { type: format });
 }

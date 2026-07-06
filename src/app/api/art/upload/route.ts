@@ -21,7 +21,9 @@ export async function POST(request: Request) {
           throw new Error("Uploads must live under builder-art/.");
         }
         return {
-          allowedContentTypes: ["image/png", "application/json"],
+          // jpeg: photo designs print-compress ~8× smaller than PNG, which
+          // is most of the "saving your design" wait
+          allowedContentTypes: ["image/png", "image/jpeg", "application/json"],
           maximumSizeInBytes: 12 * 1024 * 1024,
           addRandomSuffix: false,
         };
