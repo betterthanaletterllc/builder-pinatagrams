@@ -1,43 +1,48 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Group,
-  Image as KonvaImage,
-  Layer,
-  Line,
-  Rect,
-  Stage,
-  Text,
-  Transformer,
-} from "react-konva";
-import type Konva from "konva";
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { Group, Image as KonvaImage, Layer, Rect, Stage, Text } from "react-konva";
+import Konva from "konva";
 import type { LogoZone } from "@/lib/hub";
 import {
   artboardPx,
+  coverFit,
+  isCurrentDesign,
   newDesign,
-  newImageElement,
-  newTextElement,
+  templateSlotRects,
+  TEMPLATES,
   TEXT_SWATCHES,
   type DesignDocument,
-  type ImageElement,
+  type PhotoSlot,
+  type SlotContent,
+  type SlotRect,
+  type TemplateId,
+  type TextSlot,
 } from "@/lib/design-document";
 import { toPrintPngBlob } from "@/lib/print-png";
 
 /**
- * Canvas-first editor. The canvas is the page; a toolbar sits above it and a
- * context bar appears under it for whatever is selected. Two view modes:
- *  - flat: the artboard fills the width (default on phones — the print zone
- *    on the box photo is too small to edit by thumb)
+ * Template editor (v2 — replaced the freeform canvas). The label divides
+ * into a fixed layout of boxes; each box holds ONE photo (cover-filled,
+ * dragged along its overflow axis to frame) or ONE text block (centered,
+ * auto-fit). Constraints over freedom: every design fills the whole
+ * 8"×3.9" print area and looks intentional.
+ *
+ * Two view modes survive from v1:
+ *  - flat: the artboard fills the width (default on phones)
  *  - boxed: the artboard composited on the box photo at the hub's logoZone
  * The document stays in artboard pixels either way; export renders ONLY the
- * design group. On narrow screens text edits in a fixed bottom sheet (16px
- * input — no iOS focus-zoom); on wide screens it edits inline on the canvas.
+ * design group, cropped to the artboard region.
  */
 
 const MAX_STAGE_WIDTH = 760;
 const NARROW = 520;
-const SAFE_MARGIN_IN = 0.25;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 function useImg(src: string | null): {
@@ -70,7 +75,7 @@ function useImg(src: string | null): {
  * ride inside the design document all the way to /api/checkout, and Vercel
  * caps request bodies at ~4.5 MB — a phone photo embedded as base64 would
  * make the cart permanently un-checkoutable. 1600px JPEG keeps well clear
- * while still exceeding the ~740px the print zone needs from a photo layer.
+ * while still exceeding what the print zone needs from a photo layer.
  */
 async function downscaleToDataUrl(file: File): Promise<string> {
   const url = URL.createObjectURL(file);
@@ -101,53 +106,149 @@ async function downscaleToDataUrl(file: File): Promise<string> {
   }
 }
 
-function ImgEl({
-  el,
+/** Largest font size (px) whose wrapped height fits the box. */
+function fitFontSize(
+  text: string,
+  w: number,
+  h: number,
+  fontFamily: string,
+): number {
+  let size = Math.min(Math.round(h * 0.5), 260);
+  const probe = new Konva.Text({
+    text,
+    width: w,
+    fontFamily,
+    fontSize: size,
+    lineHeight: 1.15,
+  });
+  while (size > 30 && probe.height() > h) {
+    size = Math.floor(size * 0.9);
+    probe.fontSize(size);
+  }
+  probe.destroy();
+  return size;
+}
+
+const clamp = (v: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, v));
+
+/* --- slot renderers ----------------------------------------------------------- */
+
+function PhotoSlotEl({
+  slot,
+  rect,
+  gx,
+  gy,
+  scale,
   onSelect,
-  onChange,
-  refFn,
-  clampXY,
+  onOffset,
 }: {
-  el: ImageElement;
+  slot: PhotoSlot;
+  rect: SlotRect;
+  gx: number;
+  gy: number;
+  scale: number;
   onSelect: () => void;
-  onChange: (p: Partial<ImageElement>) => void;
-  refFn: (n: Konva.Node | null) => void;
-  clampXY: (x: number, y: number, w: number, h: number) => { x: number; y: number };
+  onOffset: (offset: number) => void;
 }) {
-  const { img } = useImg(el.src);
+  const { img } = useImg(slot.src);
+  const fit = coverFit(rect, slot.natW, slot.natH, slot.offset);
+  // Drag stays on the overflow axis: local x ∈ [rect.x − overX, rect.x],
+  // y likewise. dragBoundFunc works in ABSOLUTE stage coords, so convert
+  // through the design group's transform (gx/gy + scale).
+  const aMinX = gx + (rect.x - fit.overX) * scale;
+  const aMaxX = gx + rect.x * scale;
+  const aMinY = gy + (rect.y - fit.overY) * scale;
+  const aMaxY = gy + rect.y * scale;
   return (
-    <KonvaImage
-      ref={refFn}
-      image={img ?? undefined}
-      x={el.x}
-      y={el.y}
-      width={el.width}
-      height={el.height}
-      rotation={el.rotation}
-      scaleX={1}
-      scaleY={1}
-      draggable
-      onMouseDown={onSelect}
-      onTap={onSelect}
-      onDragEnd={(e) =>
-        onChange(clampXY(e.target.x(), e.target.y(), el.width, el.height))
-      }
-      onTransformEnd={(e) => {
-        const n = e.target;
-        // abs(): a flip gesture produces negative scale, which would
-        // collapse the element to the minimum size
-        onChange({
-          x: Math.round(n.x()),
-          y: Math.round(n.y()),
-          width: Math.max(20, Math.round(el.width * Math.abs(n.scaleX()))),
-          height: Math.max(20, Math.round(el.height * Math.abs(n.scaleY()))),
-          rotation: Math.round(n.rotation()),
-        });
-        n.scale({ x: 1, y: 1 });
-      }}
-    />
+    <Group clip={{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}>
+      <KonvaImage
+        image={img ?? undefined}
+        x={fit.x}
+        y={fit.y}
+        width={fit.width}
+        height={fit.height}
+        draggable={fit.axis !== "none"}
+        onMouseDown={onSelect}
+        onTap={onSelect}
+        onDragStart={onSelect}
+        dragBoundFunc={(pos) => ({
+          x: clamp(pos.x, aMinX, aMaxX),
+          y: clamp(pos.y, aMinY, aMaxY),
+        })}
+        onDragEnd={(e) => {
+          const n = e.target;
+          const next =
+            fit.axis === "x"
+              ? (rect.x - n.x()) / fit.overX
+              : fit.axis === "y"
+                ? (rect.y - n.y()) / fit.overY
+                : slot.offset;
+          onOffset(clamp(next, 0, 1));
+        }}
+      />
+    </Group>
   );
 }
+
+function TextSlotEl({
+  slot,
+  rect,
+  fontFamily,
+  onSelect,
+  onEdit,
+}: {
+  slot: TextSlot;
+  rect: SlotRect;
+  fontFamily: string;
+  onSelect: () => void;
+  onEdit: () => void;
+}) {
+  const pad = Math.round(Math.min(rect.w, rect.h) * 0.08);
+  const w = rect.w - pad * 2;
+  const h = rect.h - pad * 2;
+  const empty = slot.text.trim() === "";
+  const display = empty ? "Your text" : slot.text;
+  const fontSize = useMemo(
+    () => fitFontSize(display, w, h, fontFamily),
+    [display, w, h, fontFamily],
+  );
+  return (
+    <Group clip={{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}>
+      <Text
+        x={rect.x + pad}
+        y={rect.y + pad}
+        width={w}
+        height={h}
+        text={display}
+        fontSize={fontSize}
+        fontFamily={fontFamily}
+        fill={slot.fill}
+        opacity={empty ? 0.35 : 1}
+        align="center"
+        verticalAlign="middle"
+        lineHeight={1.15}
+        onMouseDown={onSelect}
+        onTap={onSelect}
+        onDblClick={onEdit}
+        onDblTap={onEdit}
+      />
+    </Group>
+  );
+}
+
+/** Mini wireframe of a template's boxes (picker cards + toolbar switcher). */
+function TmplMini({ cols }: { cols: number[] }) {
+  return (
+    <span className="tmpl-mini" aria-hidden>
+      {cols.map((c, i) => (
+        <span key={i} style={{ flex: c }} />
+      ))}
+    </span>
+  );
+}
+
+/* --- the editor ---------------------------------------------------------------- */
 
 export default function Editor({
   bodyStyleId,
@@ -167,22 +268,31 @@ export default function Editor({
   // Re-editing an existing design ("Edit graphic") — photos and text intact.
   initialDesign?: DesignDocument | null;
 }) {
+  // v1 freeform documents can't open here — they start fresh at the picker
+  // (the flow keeps their old flattened art unless they save a new design).
+  const editable =
+    initialDesign && isCurrentDesign(initialDesign) ? initialDesign : null;
   const [doc, setDoc] = useState<DesignDocument>(
-    () => initialDesign ?? newDesign(bodyStyleId),
+    () => editable ?? newDesign(bodyStyleId),
   );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Fresh designs start at the layout picker; edits skip straight in.
+  const [picked, setPicked] = useState(!!editable);
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState<number | null>(null);
+  const [menuFor, setMenuFor] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState<"flat" | "boxed">("boxed");
   const userToggledView = useRef(false);
   const designRef = useRef<Konva.Group>(null);
-  const trRef = useRef<Konva.Transformer>(null);
-  const nodeRefs = useRef<Map<string, Konva.Node>>(new Map());
   const fileRef = useRef<HTMLInputElement>(null);
+  const uploadTarget = useRef<number | null>(null);
 
   const { img: boxImg, failed: boxFailed } = useImg(boxImageUrl);
   const px = artboardPx(doc.artboard);
-  const safePx = SAFE_MARGIN_IN * doc.artboard.dpi;
+  const rects = useMemo(
+    () => templateSlotRects(doc.template, doc.artboard),
+    [doc.template, doc.artboard],
+  );
 
   // Responsive stage width; phones default to flat editing (the boxed print
   // zone is too small to work in by thumb).
@@ -201,9 +311,8 @@ export default function Editor({
     ro.observe(el);
     return () => ro.disconnect();
     // re-run when the loading gate lifts and the wrapper first renders
-  }, [boxImg, boxFailed]);
+  }, [boxImg, boxFailed, picked]);
 
-  const isNarrow = stageW < NARROW;
   const canBox = !!(boxImg && logoZone);
   const boxed = viewMode === "boxed" && canBox;
 
@@ -240,58 +349,72 @@ export default function Editor({
     return v || "sans-serif";
   }, []);
 
-  useEffect(() => {
-    const tr = trRef.current;
-    if (!tr) return;
-    const node =
-      selectedId && selectedId !== editingId
-        ? nodeRefs.current.get(selectedId)
-        : null;
-    tr.nodes(node ? [node] : []);
-    tr.getLayer()?.batchDraw();
-  }, [selectedId, editingId, doc.elements, geo]);
-
   // Wait for the box photo — no flat-artboard flash. If it FAILS, proceed in
-  // flat mode rather than gating forever.
+  // flat mode rather than gating forever. (All hooks live ABOVE this gate.)
   if (boxImageUrl && !boxImg && !boxFailed) {
     return <p className="note">Setting up your box…</p>;
   }
 
-  // Keep at least this many artboard px of an element inside the clip after
-  // a drag — fully outside means invisible AND unselectable ghost data.
-  const KEEP = 90;
-  const clampXY = (x: number, y: number, w: number, h: number) => ({
-    x: Math.round(Math.min(px.width - KEEP, Math.max(KEEP - w, x))),
-    y: Math.round(Math.min(px.height - KEEP, Math.max(KEEP - h, y))),
-  });
-
-  const patch = (id: string, p: Record<string, unknown>) =>
+  const setSlot = (i: number, content: SlotContent) =>
     setDoc((d) => ({
       ...d,
-      elements: d.elements.map((el) =>
-        el.id === id ? ({ ...el, ...p } as typeof el) : el,
-      ),
+      slots: d.slots.map((s, j) => (j === i ? content : s)),
     }));
 
-  // dir +1 = forward (later in array = drawn on top), -1 = back.
-  const moveLayer = (id: string, dir: 1 | -1) =>
-    setDoc((d) => {
-      const i = d.elements.findIndex((e) => e.id === id);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= d.elements.length) return d;
-      const els = [...d.elements];
-      [els[i], els[j]] = [els[j], els[i]];
-      return { ...d, elements: els };
-    });
+  const patchSlot = (i: number, p: Partial<PhotoSlot> & Partial<TextSlot>) =>
+    setDoc((d) => ({
+      ...d,
+      slots: d.slots.map((s, j) => {
+        if (j !== i || s === null) return s;
+        return { ...s, ...p } as SlotContent;
+      }),
+    }));
 
-  const addText = () => {
-    const el = newTextElement(doc.artboard);
-    setDoc((d) => ({ ...d, elements: [...d.elements, el] }));
-    setSelectedId(el.id);
-    setEditingId(el.id); // new text goes straight into typing mode
+  const clearSlot = (i: number) => {
+    setSlot(i, null);
+    if (selectedSlot === i) setSelectedSlot(null);
+    if (editingText === i) setEditingText(null);
+  };
+
+  const pickTemplate = (id: TemplateId) => {
+    setDoc(newDesign(bodyStyleId, id));
+    setPicked(true);
+    setSelectedSlot(null);
+    setEditingText(null);
+    setMenuFor(null);
+  };
+
+  const switchTemplate = (id: TemplateId) => {
+    if (id === doc.template) return;
+    const nextRects = templateSlotRects(id, doc.artboard);
+    const dropped = doc.slots.slice(nextRects.length).filter(Boolean).length;
+    if (
+      dropped > 0 &&
+      !confirm(
+        "This layout has fewer boxes — the extra content will be removed. Switch anyway?",
+      )
+    ) {
+      return;
+    }
+    setDoc((d) => ({
+      ...d,
+      template: id,
+      slots: nextRects.map((_, i) => d.slots[i] ?? null),
+    }));
+    setSelectedSlot(null);
+    setEditingText(null);
+    setMenuFor(null);
+  };
+
+  const requestPhoto = (i: number) => {
+    uploadTarget.current = i;
+    setMenuFor(null);
+    fileRef.current?.click();
   };
 
   const onUpload = async (file: File) => {
+    const i = uploadTarget.current;
+    if (i === null) return;
     if (file.size > MAX_UPLOAD_BYTES) {
       alert("Please pick an image under 8 MB.");
       return;
@@ -300,14 +423,14 @@ export default function Editor({
       const src = await downscaleToDataUrl(file);
       const probe = new window.Image();
       probe.onload = () => {
-        const el = newImageElement(
-          doc.artboard,
+        setSlot(i, {
+          kind: "photo",
           src,
-          probe.naturalWidth,
-          probe.naturalHeight,
-        );
-        setDoc((d) => ({ ...d, elements: [...d.elements, el] }));
-        setSelectedId(el.id);
+          natW: probe.naturalWidth,
+          natH: probe.naturalHeight,
+          offset: 0.5,
+        });
+        setSelectedSlot(i);
       };
       probe.onerror = () =>
         alert("That image couldn't be read — try a JPG or PNG.");
@@ -317,24 +440,29 @@ export default function Editor({
     }
   };
 
-  const removeEl = (id: string) => {
-    nodeRefs.current.delete(id);
-    setDoc((d) => ({ ...d, elements: d.elements.filter((e) => e.id !== id) }));
-    if (selectedId === id) setSelectedId(null);
-    if (editingId === id) setEditingId(null);
+  const addTextTo = (i: number) => {
+    setSlot(i, { kind: "text", text: "", fill: TEXT_SWATCHES[0] });
+    setMenuFor(null);
+    setSelectedSlot(i);
+    setEditingText(i); // straight into typing
+  };
+
+  const doneEditingText = () => {
+    if (editingText !== null) {
+      const s = doc.slots[editingText];
+      // an abandoned empty text box goes back to being an empty slot
+      if (s?.kind === "text" && s.text.trim() === "") clearSlot(editingText);
+    }
+    setEditingText(null);
   };
 
   // Synchronous on purpose: requestAnimationFrame never fires in background
   // tabs, and Konva's toDataURL doesn't need a paint.
   const exportPng = (targetWidthPx: number): string | null => {
-    trRef.current?.nodes([]);
     const g = designRef.current;
     if (!g) return null;
     // Crop to the ARTBOARD region (stage coords), never Konva's default
-    // content bounding box: an element hanging past the artboard edge grows
-    // that box (the clip doesn't shrink it), which ships transparent margins
-    // — the preview then letterboxes ("my image shrunk") and the print file
-    // stops being 8"×3.9".
+    // content bounding box — see the shrunk-image bug (2026-07-05).
     return g.toDataURL({
       x: geo.gx,
       y: geo.gy,
@@ -345,7 +473,7 @@ export default function Editor({
   };
 
   const downloadPreview = () => {
-    setSelectedId(null);
+    setSelectedSlot(null);
     const uri = exportPng(px.width);
     if (!uri) return;
     const a = document.createElement("a");
@@ -354,10 +482,22 @@ export default function Editor({
     a.click();
   };
 
+  const filledCount = doc.slots.filter(Boolean).length;
+
   const useThisDesign = async () => {
-    if (saving) return;
-    setSelectedId(null);
-    setEditingId(null);
+    if (saving || filledCount === 0) return;
+    const emptyCount = doc.slots.length - filledCount;
+    if (
+      emptyCount > 0 &&
+      !confirm(
+        `${emptyCount === 1 ? "One box is" : `${emptyCount} boxes are`} still empty and will print blank — continue anyway?`,
+      )
+    ) {
+      return;
+    }
+    setSelectedSlot(null);
+    setEditingText(null);
+    setMenuFor(null);
     const preview = exportPng(480);
     if (!preview || !onSave) return;
     // Upload the print-resolution PNG + design JSON straight to Blob — the
@@ -374,7 +514,7 @@ export default function Editor({
         const id =
           typeof crypto !== "undefined" && crypto.randomUUID
             ? crypto.randomUUID()
-            : `${doc.bodyStyleId}-${doc.elements.length}-${preview.length}`;
+            : `${doc.bodyStyleId}-${doc.slots.length}-${preview.length}`;
         // Exactly artboard-sized (2400×1170) with real 300-DPI metadata, so
         // the file measures 8"×3.9" in print tools instead of 72-DPI-huge.
         const pngBlob = await toPrintPngBlob(
@@ -407,26 +547,65 @@ export default function Editor({
     onSave(doc, preview, { art, designUrl });
   };
 
-  const deselect = () => setSelectedId(null);
-  const refFn = (id: string) => (n: Konva.Node | null) => {
-    if (n) nodeRefs.current.set(id, n);
-    else nodeRefs.current.delete(id);
-  };
+  /* --- layout picker (fresh designs) ------------------------------------- */
+  if (!picked) {
+    return (
+      <div className="editor-v4">
+        <p className="tmpl-heading">How should your label split?</p>
+        <div className="tmpl-grid">
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              className="tmpl-card"
+              onClick={() => pickTemplate(t.id)}
+            >
+              <TmplMini cols={t.cols} />
+              <span className="tmpl-label">{t.label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="note">
+          Each box holds a photo or some text — you can switch layouts later.
+        </p>
+      </div>
+    );
+  }
 
-  const selected = doc.elements.find((e) => e.id === selectedId) ?? null;
-  const editingEl = doc.elements.find(
-    (e) => e.id === editingId && e.kind === "text",
-  );
+  /* --- the editor ---------------------------------------------------------- */
+  const selected = selectedSlot !== null ? (doc.slots[selectedSlot] ?? null) : null;
+  const editingSlot =
+    editingText !== null && doc.slots[editingText]?.kind === "text"
+      ? (doc.slots[editingText] as TextSlot)
+      : null;
+
+  const slotCss = (r: SlotRect): CSSProperties => ({
+    left: geo.gx + r.x * geo.scale,
+    top: geo.gy + r.y * geo.scale,
+    width: r.w * geo.scale,
+    height: r.h * geo.scale,
+  });
+
+  const selectedFit =
+    selected?.kind === "photo" && selectedSlot !== null
+      ? coverFit(rects[selectedSlot], selected.natW, selected.natH, selected.offset)
+      : null;
 
   return (
     <div className="editor-v4">
       <div className="editor-toolbar">
-        <button className="btn" onClick={addText}>
-          + Text
-        </button>
-        <button className="btn" onClick={() => fileRef.current?.click()}>
-          + Photo
-        </button>
+        <div className="tmpl-switch" role="group" aria-label="Layout">
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              className={"tmpl-switch-btn" + (doc.template === t.id ? " on" : "")}
+              title={t.label}
+              aria-label={t.label}
+              onClick={() => switchTemplate(t.id)}
+            >
+              <TmplMini cols={t.cols} />
+            </button>
+          ))}
+        </div>
         <input
           ref={fileRef}
           type="file"
@@ -468,10 +647,10 @@ export default function Editor({
             width={stageW}
             height={geo.stageH}
             onMouseDown={(e) => {
-              if (e.target === e.target.getStage()) deselect();
+              if (e.target === e.target.getStage()) setSelectedSlot(null);
             }}
             onTouchStart={(e) => {
-              if (e.target === e.target.getStage()) deselect();
+              if (e.target === e.target.getStage()) setSelectedSlot(null);
             }}
           >
             {boxed && (
@@ -496,66 +675,39 @@ export default function Editor({
                   width={px.width}
                   height={px.height}
                   fill={doc.background}
-                  onMouseDown={deselect}
-                  onTap={deselect}
+                  onMouseDown={() => setSelectedSlot(null)}
+                  onTap={() => setSelectedSlot(null)}
                 />
-                {doc.elements.map((el) =>
-                  el.kind === "image" ? (
-                    <ImgEl
-                      key={el.id}
-                      el={el}
-                      refFn={refFn(el.id)}
-                      onSelect={() => setSelectedId(el.id)}
-                      onChange={(p) => patch(el.id, p)}
-                      clampXY={clampXY}
+                {rects.map((r, i) => {
+                  const c = doc.slots[i];
+                  if (!c) return null;
+                  return c.kind === "photo" ? (
+                    <PhotoSlotEl
+                      key={i}
+                      slot={c}
+                      rect={r}
+                      gx={geo.gx}
+                      gy={geo.gy}
+                      scale={geo.scale}
+                      onSelect={() => setSelectedSlot(i)}
+                      onOffset={(offset) => patchSlot(i, { offset })}
                     />
                   ) : (
-                    <Text
-                      key={el.id}
-                      ref={refFn(el.id)}
-                      // wide: inline overlay replaces the node while editing;
-                      // narrow: the node stays visible as the live preview of
-                      // what's typed in the bottom sheet
-                      visible={isNarrow || el.id !== editingId}
-                      text={el.text}
-                      x={el.x}
-                      y={el.y}
-                      rotation={el.rotation}
-                      fontSize={el.fontSizePx}
+                    <TextSlotEl
+                      key={i}
+                      slot={c}
+                      rect={r}
                       fontFamily={fontFamily}
-                      fill={el.fill}
-                      scaleX={1}
-                      scaleY={1}
-                      draggable
-                      onMouseDown={() => setSelectedId(el.id)}
-                      onTap={() => setSelectedId(el.id)}
-                      onDblClick={() => setEditingId(el.id)}
-                      onDblTap={() => setEditingId(el.id)}
-                      onDragEnd={(e) => {
-                        const n = e.target;
-                        patch(
-                          el.id,
-                          clampXY(n.x(), n.y(), n.width(), n.height()),
-                        );
-                      }}
-                      onTransformEnd={(e) => {
-                        const n = e.target;
-                        patch(el.id, {
-                          x: Math.round(n.x()),
-                          y: Math.round(n.y()),
-                          // abs(): flips produce negative scale
-                          fontSizePx: Math.max(
-                            24,
-                            Math.round(el.fontSizePx * Math.abs(n.scaleY())),
-                          ),
-                          rotation: Math.round(n.rotation()),
-                        });
-                        n.scale({ x: 1, y: 1 });
+                      onSelect={() => setSelectedSlot(i)}
+                      onEdit={() => {
+                        setSelectedSlot(i);
+                        setEditingText(i);
                       }}
                     />
-                  ),
-                )}
+                  );
+                })}
               </Group>
+              {/* artboard outline + selected-slot highlight (not exported) */}
               <Group
                 x={geo.gx}
                 y={geo.gy}
@@ -569,86 +721,98 @@ export default function Editor({
                   stroke="#627AE3"
                   strokeWidth={(boxed ? 2 : 1.5) / geo.scale}
                 />
-                <Line
-                  points={[
-                    safePx, safePx,
-                    px.width - safePx, safePx,
-                    px.width - safePx, px.height - safePx,
-                    safePx, px.height - safePx,
-                    safePx, safePx,
-                  ]}
-                  stroke="#B3B9CE"
-                  strokeWidth={1 / geo.scale}
-                  dash={[12, 12]}
-                />
+                {selectedSlot !== null && (
+                  <Rect
+                    x={rects[selectedSlot].x}
+                    y={rects[selectedSlot].y}
+                    width={rects[selectedSlot].w}
+                    height={rects[selectedSlot].h}
+                    stroke="#627AE3"
+                    strokeWidth={3 / geo.scale}
+                  />
+                )}
               </Group>
-              <Transformer
-                ref={trRef}
-                rotateEnabled
-                keepRatio
-                enabledAnchors={[
-                  "top-left",
-                  "top-right",
-                  "bottom-left",
-                  "bottom-right",
-                ]}
-                anchorSize={isNarrow ? 16 : 10}
-                anchorCornerRadius={isNarrow ? 8 : 2}
-                rotateAnchorOffset={isNarrow ? 34 : 24}
-                anchorStroke="#627AE3"
-                borderStroke="#627AE3"
-              />
             </Layer>
           </Stage>
 
-          {/* wide screens: edit text right on the canvas */}
-          {!isNarrow && editingEl && editingEl.kind === "text" && (
-            <textarea
-              className="inline-text-edit"
-              autoFocus
-              value={editingEl.text}
-              onChange={(e) => patch(editingEl.id, { text: e.target.value })}
-              onBlur={() => setEditingId(null)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) {
-                  e.preventDefault();
-                  setEditingId(null);
-                }
-              }}
-              style={{
-                left: geo.gx + editingEl.x * geo.scale,
-                top: geo.gy + editingEl.y * geo.scale,
-                fontSize: editingEl.fontSizePx * geo.scale,
-                fontFamily,
-                color: editingEl.fill,
-                width: Math.min(
-                  stageW - (geo.gx + editingEl.x * geo.scale),
-                  Math.max(
-                    140,
-                    editingEl.text.length * editingEl.fontSizePx * geo.scale * 0.62,
-                  ),
-                ),
-              }}
-            />
-          )}
+          {/* DOM overlays: ＋ on empty boxes, action menu, per-box controls */}
+          {rects.map((r, i) => {
+            const c = doc.slots[i];
+            if (c) return null;
+            return menuFor === i ? (
+              <div key={i} className="slot-menu" style={slotCss(r)}>
+                <button className="btn" onClick={() => requestPhoto(i)}>
+                  📷 A photo
+                </button>
+                <button className="btn" onClick={() => addTextTo(i)}>
+                  ✏️ Some text
+                </button>
+              </div>
+            ) : (
+              <button
+                key={i}
+                className="slot-add"
+                style={slotCss(r)}
+                onClick={() => setMenuFor(i)}
+              >
+                <span className="slot-plus">＋</span>
+                <span className="slot-hint">photo or text</span>
+              </button>
+            );
+          })}
+          {rects.map((r, i) => {
+            const c = doc.slots[i];
+            if (!c) return null;
+            return (
+              <div
+                key={`chips${i}`}
+                className="slot-chips"
+                style={{
+                  left: geo.gx + (r.x + r.w) * geo.scale - 6,
+                  top: geo.gy + r.y * geo.scale + 6,
+                }}
+              >
+                {c.kind === "photo" ? (
+                  <button title="Replace photo" onClick={() => requestPhoto(i)}>
+                    ↺
+                  </button>
+                ) : (
+                  <button
+                    title="Edit text"
+                    onClick={() => {
+                      setSelectedSlot(i);
+                      setEditingText(i);
+                    }}
+                  >
+                    ✏️
+                  </button>
+                )}
+                <button title="Remove" onClick={() => clearSlot(i)}>
+                  ✕
+                </button>
+              </div>
+            );
+          })}
         </div>
 
         <p className="note">
-          {selected
-            ? "Drag to move · corners resize · double-tap text to edit"
-            : boxed
-              ? "This is the printed area on your box — tap anything to edit it."
-              : "Your front graphic, edge to edge. Keep it inside the dashed safe line."}
+          {selectedFit && selectedFit.axis !== "none"
+            ? `Drag your photo ${selectedFit.axis === "x" ? "left or right" : "up or down"} to frame it.`
+            : selected?.kind === "text"
+              ? "Double-tap the text to edit it — it sizes itself to fit."
+              : boxed
+                ? "This is the printed area on your box — tap a ＋ to fill a box."
+                : "Your label, edge to edge — tap a ＋ to fill a box."}
         </p>
       </div>
 
-      {selected && (
+      {selected && selectedSlot !== null && (
         <div className="context-bar">
           {selected.kind === "text" && (
             <>
               <button
                 className="btn mini"
-                onClick={() => setEditingId(selected.id)}
+                onClick={() => setEditingText(selectedSlot)}
               >
                 Edit text
               </button>
@@ -656,35 +820,26 @@ export default function Editor({
                 <button
                   key={c}
                   className={
-                    "swatch" +
-                    (selected.kind === "text" && selected.fill === c
-                      ? " active"
-                      : "")
+                    "swatch" + (selected.fill === c ? " active" : "")
                   }
                   style={{ background: c }}
-                  onClick={() => patch(selected.id, { fill: c })}
+                  onClick={() => patchSlot(selectedSlot, { fill: c })}
                   title={c}
                 />
               ))}
             </>
           )}
-          <button
-            className="btn mini"
-            onClick={() => moveLayer(selected.id, 1)}
-            title="Bring forward"
-          >
-            ⬆ Front
-          </button>
-          <button
-            className="btn mini"
-            onClick={() => moveLayer(selected.id, -1)}
-            title="Send backward"
-          >
-            ⬇ Back
-          </button>
+          {selected.kind === "photo" && (
+            <button
+              className="btn mini"
+              onClick={() => requestPhoto(selectedSlot)}
+            >
+              ↺ Replace photo
+            </button>
+          )}
           <button
             className="btn danger"
-            onClick={() => removeEl(selected.id)}
+            onClick={() => clearSlot(selectedSlot)}
             title="Remove"
           >
             ✕
@@ -696,7 +851,8 @@ export default function Editor({
         {onSave && (
           <button
             className="btn primary block"
-            disabled={saving}
+            disabled={saving || filledCount === 0}
+            title={filledCount === 0 ? "Fill a box first" : undefined}
             onClick={useThisDesign}
           >
             {saving ? "Saving your design…" : "Use this design →"}
@@ -707,22 +863,24 @@ export default function Editor({
         </button>
       </div>
 
-      {/* narrow screens: text edits in a bottom sheet (16px input, no iOS zoom) */}
-      {isNarrow && editingEl && editingEl.kind === "text" && (
+      {/* text edits in a fixed bottom sheet (16px input, no iOS zoom); the
+          canvas text above is the live preview of what's typed */}
+      {editingSlot && editingText !== null && (
         <div className="edit-sheet">
           <textarea
             autoFocus
             rows={2}
-            value={editingEl.text}
-            onChange={(e) => patch(editingEl.id, { text: e.target.value })}
+            placeholder="Type your message…"
+            value={editingSlot.text}
+            onChange={(e) => patchSlot(editingText, { text: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                setEditingId(null);
+                doneEditingText();
               }
             }}
           />
-          <button className="btn primary" onClick={() => setEditingId(null)}>
+          <button className="btn primary" onClick={doneEditingText}>
             Done
           </button>
         </div>

@@ -20,7 +20,10 @@ import {
   type Filling,
   type GraphicChoice,
 } from "@/lib/flow";
-import type { DesignDocument } from "@/lib/design-document";
+import {
+  isCurrentDesign,
+  type DesignDocument,
+} from "@/lib/design-document";
 import {
   formatCents,
   HUB_URL,
@@ -418,8 +421,12 @@ export default function DesignFlow({
                   className="btn"
                   onClick={() => {
                     // keep `graphic` — the saved design must survive a
-                    // cancelled edit (browser Back) or a refresh
-                    setEditingDraft(graphic.design);
+                    // cancelled edit (browser Back) or a refresh. Old v1
+                    // freeform docs can't open in the template editor;
+                    // those edits start fresh at the layout picker.
+                    setEditingDraft(
+                      isCurrentDesign(graphic.design) ? graphic.design : null,
+                    );
                     goView("canvas");
                   }}
                 >
