@@ -592,6 +592,18 @@ a.style-card:focus-visible {
   color: var(--accent-hover);
 }
 
+/* confirm page: swap actions hug the box (where the style name used to be),
+   the primary Looks good sits below them */
+.confirm-swap {
+  justify-content: center;
+  margin: -6px 0 14px;
+}
+
+.confirm-swap .btn {
+  font-size: 13px;
+  padding: 7px 14px;
+}
+
 /* --- design editor -------------------------------------------------------- */
 
 .editor-grid {

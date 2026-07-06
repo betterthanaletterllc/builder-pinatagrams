@@ -461,51 +461,60 @@ export default function DesignFlow({
               </button>
             </div>
           ) : (
-            <div className="el-controls">
-              <button className="btn primary" onClick={() => goStep("Message")}>
-                Looks good →
-              </button>
-              {graphic.type === "custom" && (
+            <>
+              {/* swap actions sit snug under the box (where the style name
+                  used to read); the primary Looks good follows below */}
+              <div className="el-controls confirm-swap">
+                {graphic.type === "custom" && (
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      // keep `graphic` — the saved design must survive a
+                      // cancelled edit (browser Back) or a refresh. Old v1
+                      // freeform docs can't open in the template editor;
+                      // those edits start fresh at the layout picker.
+                      setEditingDraft(
+                        isCurrentDesign(graphic.design) ? graphic.design : null,
+                      );
+                      goView("canvas");
+                    }}
+                  >
+                    Edit graphic
+                  </button>
+                )}
                 <button
                   className="btn"
                   onClick={() => {
-                    // keep `graphic` — the saved design must survive a
-                    // cancelled edit (browser Back) or a refresh. Old v1
-                    // freeform docs can't open in the template editor;
-                    // those edits start fresh at the layout picker.
-                    setEditingDraft(
-                      isCurrentDesign(graphic.design) ? graphic.design : null,
-                    );
-                    goView("canvas");
-                  }}
-                >
-                  Edit graphic
-                </button>
-              )}
-              <button
-                className="btn"
-                onClick={() => {
-                  // Straight back into the library, which restores the exact
-                  // aisle/search/scroll they picked from. `graphic` stays set
-                  // so Back/refresh can't lose the current choice.
-                  setEditingDraft(null);
-                  goView("library");
-                }}
-              >
-                Change graphic
-              </button>
-              {graphic.type === "shopify" && (
-                <button
-                  className="btn"
-                  onClick={() => {
+                    // Straight back into the library, which restores the
+                    // exact aisle/search/scroll they picked from. `graphic`
+                    // stays set so Back/refresh can't lose the choice.
                     setEditingDraft(null);
-                    goView("canvas");
+                    goView("library");
                   }}
                 >
-                  Design your own
+                  Change graphic
                 </button>
-              )}
-            </div>
+                {graphic.type === "shopify" && (
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      setEditingDraft(null);
+                      goView("canvas");
+                    }}
+                  >
+                    Design your own
+                  </button>
+                )}
+              </div>
+              <div className="el-controls">
+                <button
+                  className="btn primary"
+                  onClick={() => goStep("Message")}
+                >
+                  Looks good →
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}
