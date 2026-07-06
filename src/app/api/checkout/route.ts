@@ -35,6 +35,55 @@ export const dynamic = "force-dynamic";
 const MAX_LINES = 20;
 const MAX_QTY = 25; // B2C sanity bound; bulk goes through quote/corporate
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/**
+ * The generic "Custom Built Piñatagram" product: one variant per body style,
+ * SKU CUSTOM-{BODY}. Paper derives the body style from that SKU exactly like
+ * legacy orders (spaces not hyphens — its parser splits on the LAST hyphen),
+ * Shopify reporting sees a real product, and the invoice shows its image.
+ * Lines fall back to plain custom line items if a style has no variant yet.
+ */
+const CUSTOM_PRODUCT_GID = "gid://shopify/Product/7741496623202";
+const SKU_SUFFIX_SPECIAL: Record<string, string> = {
+  "white-uni": "WHITE UNICORN",
+  "pink-uni": "PINK UNICORN",
+};
+const customSkuFor = (styleId: string) =>
+  `CUSTOM-${SKU_SUFFIX_SPECIAL[styleId] ?? styleId.toUpperCase().replace(/-/g, " ")}`;
+
+// Variant ids by SKU, cached for the life of the serverless instance
+// (10-minute TTL); an empty map just means every line takes the fallback.
+let variantCache: { at: number; bySku: Map<string, string> } | null = null;
+
+async function customVariantsBySku(
+  gqlUrl: string,
+  headers: Record<string, string>,
+): Promise<Map<string, string>> {
+  if (variantCache && Date.now() - variantCache.at < 10 * 60_000) {
+    return variantCache.bySku;
+  }
+  try {
+    const res = await fetch(gqlUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        query: `query($id: ID!) {
+          product(id: $id) { variants(first: 50) { nodes { id sku } } }
+        }`,
+        variables: { id: CUSTOM_PRODUCT_GID },
+      }),
+    });
+    const gql = await res.json();
+    const nodes: { id: string; sku: string | null }[] =
+      gql?.data?.product?.variants?.nodes ?? [];
+    const bySku = new Map<string, string>();
+    for (const n of nodes) if (n.sku) bySku.set(n.sku, n.id);
+    variantCache = { at: Date.now(), bySku };
+    return bySku;
+  } catch {
+    return new Map();
+  }
+}
 const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
 const BLOB_RE = /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//;
 const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
@@ -216,6 +265,44 @@ export async function POST(req: Request) {
     groups.set(key, [...(groups.get(key) ?? []), l]);
   }
 
+  const lineAttributes = (l: CleanLine) => [
+    // No leading underscore = SHOWS on the payment page under the line
+    // title — the customer sees their choices while paying. (The line title
+    // is the generic product's, so the graphic is named here.)
+    {
+      key: "Graphic",
+      value: l.design === "custom" ? "Your custom design" : l.title,
+    },
+    { key: "Body style", value: l.styleName },
+    { key: "Filling", value: l.filling },
+    ...(l.addonLabels.length
+      ? [{ key: "Add-ons", value: l.addonLabels.join(", ") }]
+      : []),
+    { key: "Arrives by", value: l.deliveryDate },
+    // Underscored = hidden machine rails Paper reads at fulfillment.
+    { key: "_bodyStyle", value: l.styleId },
+    { key: "_design", value: l.design },
+    { key: "_frontGraphic", value: l.frontGraphic },
+    ...(l.designJson ? [{ key: "_designJson", value: l.designJson }] : []),
+    { key: "_fillings", value: l.filling },
+    // Comma-separated labels — exactly how Paper splits _addons.
+    ...(l.addonLabels.length
+      ? [{ key: "_addons", value: l.addonLabels.join(", ") }]
+      : []),
+    { key: "_requestedDate", value: l.deliveryDate },
+    ...(l.message ? [{ key: "message", value: l.message }] : []),
+  ];
+
+  // Fallback shape (also the dry-run payload): a plain custom line item.
+  const customLine = (l: CleanLine) => ({
+    title:
+      l.title + (l.addonLabels.length ? ` + ${l.addonLabels.join(" + ")}` : ""),
+    originalUnitPrice: lineUnitPrice(l),
+    quantity: l.qty,
+    requiresShipping: true,
+    customAttributes: lineAttributes(l),
+  });
+
   const draftOrders = [...groups.entries()].map(([groupKey, groupLines]) => {
     const a = groupLines[0].address;
     const units = groupLines.reduce((s, l) => s + l.qty, 0);
@@ -224,6 +311,7 @@ export async function POST(req: Request) {
     return {
       groupKey,
       shipTo: formatAddress(a),
+      lines: groupLines,
       input: {
         ...(email ? { email } : {}),
         tags: ["builder"],
@@ -243,38 +331,7 @@ export async function POST(req: Request) {
           title: "FedEx 2-Day delivery",
           price: ((price.shipPerUnitCents * units) / 100).toFixed(2),
         },
-        lineItems: groupLines.map((l) => ({
-          title:
-            l.title +
-            (l.addonLabels.length ? ` + ${l.addonLabels.join(" + ")}` : ""),
-          originalUnitPrice: lineUnitPrice(l),
-          quantity: l.qty,
-          requiresShipping: true,
-          customAttributes: [
-            // No leading underscore = SHOWS on the payment page under the
-            // line title — the customer sees their choices while paying.
-            { key: "Body style", value: l.styleName },
-            { key: "Filling", value: l.filling },
-            ...(l.addonLabels.length
-              ? [{ key: "Add-ons", value: l.addonLabels.join(", ") }]
-              : []),
-            { key: "Arrives by", value: l.deliveryDate },
-            // Underscored = hidden machine rails Paper reads at fulfillment.
-            { key: "_bodyStyle", value: l.styleId },
-            { key: "_design", value: l.design },
-            { key: "_frontGraphic", value: l.frontGraphic },
-            ...(l.designJson
-              ? [{ key: "_designJson", value: l.designJson }]
-              : []),
-            { key: "_fillings", value: l.filling },
-            // Comma-separated labels — exactly how Paper splits _addons.
-            ...(l.addonLabels.length
-              ? [{ key: "_addons", value: l.addonLabels.join(", ") }]
-              : []),
-            { key: "_requestedDate", value: l.deliveryDate },
-            ...(l.message ? [{ key: "message", value: l.message }] : []),
-          ],
-        })),
+        lineItems: groupLines.map(customLine) as unknown[],
       },
     };
   });
@@ -323,6 +380,28 @@ export async function POST(req: Request) {
     "X-Shopify-Access-Token": access_token,
   };
   const gqlUrl = `https://${shop}.myshopify.com/admin/api/2025-01/graphql.json`;
+
+  // Attach each line to the generic Custom Built Piñatagram variant for its
+  // body style (real SKU → Paper parses the body like any legacy order; the
+  // product image shows on the invoice). priceOverride keeps the hub's
+  // price authoritative. Missing variant → the custom-line fallback stands.
+  const variantBySku = await customVariantsBySku(gqlUrl, gqlHeaders);
+  for (const order of draftOrders) {
+    order.input.lineItems = order.lines.map((l) => {
+      const variantId = variantBySku.get(customSkuFor(l.styleId));
+      return variantId
+        ? {
+            variantId,
+            quantity: l.qty,
+            priceOverride: {
+              amount: lineUnitPrice(l),
+              currencyCode: "USD",
+            },
+            customAttributes: lineAttributes(l),
+          }
+        : customLine(l);
+    });
+  }
 
   const created: {
     groupKey: string;
