@@ -185,6 +185,16 @@ export function clearLibraryState(): void {
   } catch {}
 }
 
+/**
+ * Shopify's CDN resizes on the fly — a width-limited variant is ~50× lighter
+ * than the print-resolution original. Non-CDN URLs (data URLs, Blob art)
+ * pass through untouched.
+ */
+export function cdnThumb(u: string | null, width: number): string | null {
+  if (!u || !u.includes("cdn.shopify.com")) return u;
+  return u + (u.includes("?") ? "&" : "?") + `width=${width}`;
+}
+
 // Session-scoped cache: re-entering the library ("Change graphic") must be
 // instant, not a ~1.6MB refetch — Vercel serves /public JSON with
 // must-revalidate, so the browser re-downloads on every mount otherwise.

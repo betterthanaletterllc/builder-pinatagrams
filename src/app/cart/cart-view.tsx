@@ -18,6 +18,7 @@ import {
   saveDraft,
   type CartLine,
 } from "@/lib/flow";
+import { cdnThumb } from "@/lib/library-data";
 
 const MAX_QTY = 25;
 
@@ -44,7 +45,7 @@ function CartBoxThumb({ line }: { line: CartLine }) {
   const art =
     line.graphic.type === "custom"
       ? line.graphic.preview
-      : (line.graphic.art ?? line.graphic.thumb ?? "");
+      : (cdnThumb(line.graphic.art ?? line.graphic.thumb, 360) ?? "");
   if (!line.boxImageUrl || !line.logoZone) {
     /* eslint-disable-next-line @next/next/no-img-element */
     return <img className="cart-thumb" src={art} alt="" />;

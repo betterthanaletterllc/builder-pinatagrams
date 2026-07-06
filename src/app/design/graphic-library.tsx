@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GraphicChoice } from "@/lib/flow";
 import {
+  cdnThumb,
   EXCLUDED_PREFIXES,
   FALLBACK_OCCASION,
   FAMILY_RECIPIENTS,
@@ -62,12 +63,8 @@ const AISLES: { id: Aisle; label: string; needsTags?: boolean }[] = [
   { id: "vibe", label: "✨ Vibe", needsTags: true },
 ];
 
-// Shopify's CDN resizes on the fly — a 360px thumb is ~10x lighter than the
-// print-resolution original, which is what makes shelf scrolling feel instant.
-function thumbUrl(u: string, width = 360): string {
-  if (!u.includes("cdn.shopify.com")) return u;
-  return u + (u.includes("?") ? "&" : "?") + `width=${width}`;
-}
+// CDN-resized 360px thumbs make shelf scrolling feel instant.
+const thumbUrl = (u: string): string => cdnThumb(u, 360) ?? u;
 
 function Card({
   g,
@@ -103,10 +100,8 @@ function Card({
 
 export default function GraphicLibrary({
   onPick,
-  onBack,
 }: {
   onPick: (g: GraphicChoice) => void;
-  onBack: () => void;
 }) {
   const [graphics, setGraphics] = useState<LibraryGraphic[] | null>(null);
   const [tags, setTags] = useState<TagIndex>({});
@@ -427,12 +422,6 @@ export default function GraphicLibrary({
 
   return (
     <div>
-      <p className="note">
-        <button className="btn mini" onClick={onBack}>
-          ← Back
-        </button>
-      </p>
-
       {failed && (
         <div className="notice warn">
           The graphic library didn&apos;t load — try again in a moment, or

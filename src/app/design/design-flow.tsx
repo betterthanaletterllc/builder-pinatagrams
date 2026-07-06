@@ -34,7 +34,7 @@ import {
   type LogoZone,
 } from "@/lib/hub";
 import { deliveryProblem, type DeliveryConfig } from "@/lib/delivery";
-import { clearLibraryState } from "@/lib/library-data";
+import { cdnThumb, clearLibraryState } from "@/lib/library-data";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
 import BoxPreview from "./box-preview";
@@ -287,10 +287,13 @@ export default function DesignFlow({
   const stepIndex = STEPS.indexOf(step);
   const reachable = maxStep(graphic, filling, date);
 
+  // Previews composite a CDN-resized variant (~60KB), never the print-res
+  // original (multi-MB) — that was a visible delay before the graphic
+  // appeared on the box. Checkout still sends the full-res URL to Paper.
   const artUrl = graphic
     ? graphic.type === "custom"
       ? graphic.preview
-      : (graphic.art ?? graphic.thumb)
+      : cdnThumb(graphic.art ?? graphic.thumb, 720)
     : null;
 
   // choosing no longer requires !graphic: entering the canvas to EDIT keeps
@@ -491,6 +494,17 @@ export default function DesignFlow({
               >
                 Change graphic
               </button>
+              {graphic.type === "shopify" && (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setEditingDraft(null);
+                    goView("canvas");
+                  }}
+                >
+                  Design your own
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -498,7 +512,6 @@ export default function DesignFlow({
 
       {choosing && graphicMode === "library" && (
         <GraphicLibrary
-          onBack={() => goView(null)}
           onPick={(g) => {
             setGraphic(g);
             goStep("Graphic");
@@ -761,7 +774,7 @@ export default function DesignFlow({
       )}
 
       {railVisible ? (
-        <div className="flow-grid">
+        <div className={"flow-grid" + (dockVisible ? " has-dock" : "")}>
           {steps}
           <aside
             className={
@@ -777,7 +790,7 @@ export default function DesignFlow({
               filling={filling}
               deliveryDate={null}
               mode={step === "Message" ? "open" : "closed"}
-              variant={step === "Message" ? "bare" : "full"}
+              variant="bare"
               interiorUrl={boxInterior?.interiorUrl}
               messageZone={boxInterior?.messageZone}
               pinataSrc={styleInfo.cutoutUrl ?? `/pinatas/${styleInfo.id}.png`}
