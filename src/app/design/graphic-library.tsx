@@ -33,6 +33,10 @@ import {
 type Manifest = { graphics: LibraryGraphic[] };
 type PopularFile = { ranking: PopularRanking };
 type TagFile = { tags: TagIndex };
+// Curated collection memberships (mirrors the storefront's collections) —
+// catches designs whose CONTENT is birthday but whose code isn't HBD
+// (e.g. FAF44 "Happy Birthday Dad" lives in the Birthday collection).
+type CollectionsFile = { birthday?: string[] };
 
 type Aisle =
   | "birthdays"
@@ -105,6 +109,7 @@ export default function GraphicLibrary({
   const [graphics, setGraphics] = useState<LibraryGraphic[] | null>(null);
   const [tags, setTags] = useState<TagIndex>({});
   const [popular, setPopular] = useState<PopularRanking>([]);
+  const [bdayExtra, setBdayExtra] = useState<Set<string>>(new Set());
   const [failed, setFailed] = useState(false);
 
   const [query, setQuery] = useState("");
@@ -116,7 +121,8 @@ export default function GraphicLibrary({
       loadJson<Manifest>("/graphics.json"),
       loadJson<TagFile>("/library-index.json"),
       loadJson<PopularFile>("/popular.json"),
-    ]).then(([manifest, tagFile, popularFile]) => {
+      loadJson<CollectionsFile>("/collections.json"),
+    ]).then(([manifest, tagFile, popularFile, collections]) => {
       if (!manifest) {
         setFailed(true);
         return;
@@ -128,6 +134,7 @@ export default function GraphicLibrary({
       );
       if (tagFile?.tags) setTags(tagFile.tags);
       if (popularFile?.ranking) setPopular(popularFile.ranking);
+      if (collections?.birthday) setBdayExtra(new Set(collections.birthday));
     });
   }, []);
 
@@ -172,7 +179,9 @@ export default function GraphicLibrary({
   const inAisle = useMemo(() => {
     return (g: LibraryGraphic): boolean => {
       if (!aisle) return true;
-      if (aisle === "birthdays") return occasionOf(g.design) === "Birthday";
+      if (aisle === "birthdays") {
+        return occasionOf(g.design) === "Birthday" || bdayExtra.has(g.design);
+      }
       if (!sub) return true; // aisle open, nothing picked yet
       const o = occasionOf(g.design);
       const r = recipientsOf(g);
@@ -200,7 +209,7 @@ export default function GraphicLibrary({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aisle, sub, tags]);
+  }, [aisle, sub, tags, bdayExtra]);
 
   const filtering =
     query.trim() !== "" || aisle === "birthdays" || (aisle !== null && sub !== null);
