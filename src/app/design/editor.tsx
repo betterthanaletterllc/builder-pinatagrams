@@ -266,7 +266,9 @@ export default function Editor({
   boxImageUrl,
   logoZone,
   onSave,
+  onAssets,
   initialDesign,
+  initialAssets,
 }: {
   bodyStyleId: string;
   boxImageUrl: string | null;
@@ -276,8 +278,18 @@ export default function Editor({
     preview: string,
     assets: { art: string | null; designUrl: string | null },
   ) => void;
+  // Fires when the BACKGROUND print upload finishes (the flow advances
+  // immediately on save; the print file catches up). docJson lets the
+  // receiver make sure the assets still match the current design.
+  onAssets?: (
+    assets: { art: string | null; designUrl: string | null },
+    docJson: string,
+  ) => void;
   // Re-editing an existing design ("Edit graphic") — photos and text intact.
   initialDesign?: DesignDocument | null;
+  // The assets already uploaded for initialDesign — an unchanged re-save
+  // reuses them instead of re-exporting and re-uploading.
+  initialAssets?: { art: string | null; designUrl: string | null } | null;
 }) {
   // v1 freeform documents can't open here — they start fresh at the picker
   // (the flow keeps their old flattened art unless they save a new design).
@@ -291,8 +303,8 @@ export default function Editor({
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [editingText, setEditingText] = useState<number | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState<"flat" | "boxed">("boxed");
+  const savedDocJson = useRef(editable ? JSON.stringify(editable) : null);
   const userToggledView = useRef(false);
   const designRef = useRef<Konva.Group>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -483,20 +495,10 @@ export default function Editor({
     });
   };
 
-  const downloadPreview = () => {
-    setSelectedSlot(null);
-    const uri = exportPng(px.width);
-    if (!uri) return;
-    const a = document.createElement("a");
-    a.href = uri;
-    a.download = `pinatagrams-${doc.bodyStyleId}-front.png`;
-    a.click();
-  };
-
   const filledCount = doc.slots.filter(Boolean).length;
 
-  const useThisDesign = async () => {
-    if (saving || filledCount === 0) return;
+  const useThisDesign = () => {
+    if (filledCount === 0) return;
     const emptyCount = doc.slots.length - filledCount;
     if (
       emptyCount > 0 &&
@@ -511,28 +513,39 @@ export default function Editor({
     setMenuFor(null);
     const preview = exportPng(480);
     if (!preview || !onSave) return;
-    // Upload the print-resolution file + design JSON straight to Blob — the
-    // art URL becomes the draft order's _frontGraphic. If the upload fails
-    // (offline, Blob unconfigured) the flow continues; checkout falls back
-    // to the PENDING placeholder.
-    let art: string | null = null;
-    let designUrl: string | null = null;
-    setSaving(true);
-    try {
-      const g = designRef.current;
-      if (g) {
-        // toCanvas skips a whole PNG encode/decode round-trip vs toDataURL;
-        // photo designs then ship as ~8×-smaller print-quality JPEG. Both
-        // are most of what made "Saving your design…" slow.
-        const full = g.toCanvas({
+    const docJson = JSON.stringify(doc);
+
+    // Nothing changed since the last save → the uploaded print file is
+    // still exactly right; reuse it instead of re-exporting/re-uploading.
+    if (docJson === savedDocJson.current && initialAssets?.art) {
+      onSave(doc, preview, {
+        art: initialAssets.art,
+        designUrl: initialAssets.designUrl ?? null,
+      });
+      return;
+    }
+
+    // Advance the flow IMMEDIATELY — the confirm screen only needs the
+    // small preview. The print-resolution export + Blob upload run in the
+    // background (closures outlive this component) and patch the flow via
+    // onAssets when done. Upload failure → checkout's PENDING fallback.
+    const g = designRef.current;
+    const full = g
+      ? g.toCanvas({
           x: geo.gx,
           y: geo.gy,
           width: px.width * geo.scale,
           height: px.height * geo.scale,
           pixelRatio: px.width / (px.width * geo.scale),
-        });
-        const hasPhoto = doc.slots.some((s) => s?.kind === "photo");
-        const format = hasPhoto ? "image/jpeg" : "image/png";
+        })
+      : null;
+    onSave(doc, preview, { art: null, designUrl: null });
+
+    if (!full) return;
+    const hasPhoto = doc.slots.some((s) => s?.kind === "photo");
+    const format = hasPhoto ? "image/jpeg" : "image/png";
+    void (async () => {
+      try {
         // Exactly artboard-sized (2400×1170) with real 300-DPI metadata, so
         // the file measures 8"×3.9" in print tools instead of 72-DPI-huge.
         const printBlob = await toPrintBlob(
@@ -559,7 +572,7 @@ export default function Editor({
           ),
           upload(
             `builder-art/${id}/design.json`,
-            new Blob([JSON.stringify(doc)], { type: "application/json" }),
+            new Blob([docJson], { type: "application/json" }),
             {
               access: "public",
               handleUploadUrl: "/api/art/upload",
@@ -567,14 +580,11 @@ export default function Editor({
             },
           ),
         ]);
-        art = put.url;
-        designUrl = sidecar.url;
+        onAssets?.({ art: put.url, designUrl: sidecar.url }, docJson);
+      } catch {
+        // stay on the PENDING fallback — the design itself is safe
       }
-    } catch {
-      // proceed without — the design itself is safe in the flow draft
-    }
-    setSaving(false);
-    onSave(doc, preview, { art, designUrl });
+    })();
   };
 
   /* --- layout picker (fresh designs) ------------------------------------- */
@@ -881,27 +891,13 @@ export default function Editor({
         {onSave && (
           <button
             className="btn primary block"
-            disabled={saving || filledCount === 0}
+            disabled={filledCount === 0}
             title={filledCount === 0 ? "Fill a box first" : undefined}
             onClick={useThisDesign}
           >
-            {saving ? (
-              <>
-                Saving your design
-                <span className="dots" aria-hidden>
-                  <span>.</span>
-                  <span>.</span>
-                  <span>.</span>
-                </span>
-              </>
-            ) : (
-              "Use this design →"
-            )}
+            Use this design →
           </button>
         )}
-        <button className="btn mini" onClick={downloadPreview}>
-          Download print-size PNG
-        </button>
       </div>
 
       {/* text edits in a fixed bottom sheet (16px input, no iOS zoom); the

@@ -579,6 +579,11 @@ export default function DesignFlow({
             boxImageUrl={styleInfo.boxImageUrl}
             logoZone={styleInfo.logoZone}
             initialDesign={editingDraft}
+            initialAssets={
+              editingDraft && graphic?.type === "custom"
+                ? { art: graphic.art ?? null, designUrl: graphic.designUrl ?? null }
+                : null
+            }
             onSave={(design, preview, assets) => {
               // stamp the CURRENT style — the body may have been swapped
               // while the canvas was open
@@ -591,6 +596,33 @@ export default function DesignFlow({
               });
               setEditingDraft(null);
               goStep("Graphic");
+            }}
+            onAssets={(assets, docJson) => {
+              // The background print upload finished — patch the flow's
+              // graphic (if it's still this design)…
+              setGraphic((prev) =>
+                prev?.type === "custom" &&
+                JSON.stringify({ ...JSON.parse(docJson), bodyStyleId: prev.design.bodyStyleId }) ===
+                  JSON.stringify(prev.design)
+                  ? { ...prev, art: assets.art, designUrl: assets.designUrl }
+                  : prev,
+              );
+              // …and any cart line that raced ahead of the upload.
+              const lines = loadCart();
+              let touched = false;
+              const next = lines.map((l) => {
+                if (l.graphic.type !== "custom" || l.graphic.art) return l;
+                touched = true;
+                return {
+                  ...l,
+                  graphic: {
+                    ...l.graphic,
+                    art: assets.art,
+                    designUrl: assets.designUrl,
+                  },
+                };
+              });
+              if (touched) saveCart(next);
             }}
           />
         </div>

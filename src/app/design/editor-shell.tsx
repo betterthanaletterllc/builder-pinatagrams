@@ -15,7 +15,9 @@ export default function EditorShell({
   boxImageUrl,
   logoZone,
   onSave,
+  onAssets,
   initialDesign,
+  initialAssets,
 }: {
   bodyStyleId: string;
   boxImageUrl: string | null;
@@ -25,7 +27,12 @@ export default function EditorShell({
     preview: string,
     assets: { art: string | null; designUrl: string | null },
   ) => void;
+  onAssets?: (
+    assets: { art: string | null; designUrl: string | null },
+    docJson: string,
+  ) => void;
   initialDesign?: DesignDocument | null;
+  initialAssets?: { art: string | null; designUrl: string | null } | null;
 }) {
   return (
     <Editor
@@ -33,7 +40,9 @@ export default function EditorShell({
       boxImageUrl={boxImageUrl}
       logoZone={logoZone}
       onSave={onSave}
+      onAssets={onAssets}
       initialDesign={initialDesign}
+      initialAssets={initialAssets}
     />
   );
 }
