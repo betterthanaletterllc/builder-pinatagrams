@@ -496,14 +496,14 @@ export default function DesignFlow({
               </button>
             </div>
           ) : (
-            <>
-              {/* swap actions sit snug under the box (where the style name
-                  used to read); the primary Looks good lives in the fixed
-                  CTA bar above the dock */}
-              <div className="el-controls confirm-swap">
-                {graphic.type === "custom" && (
+            // The confirm screen IS the choice screen, with the current
+            // pick previewed on the box above: same big cards as the first
+            // visit. "Looks good →" lives in the fixed CTA bar below.
+            <div className="choice-cards">
+              {graphic.type === "custom" ? (
+                <>
                   <button
-                    className="btn"
+                    className="choice-card"
                     onClick={() => {
                       // keep `graphic` — the saved design must survive a
                       // cancelled edit (browser Back) or a refresh. Old v1
@@ -515,34 +515,44 @@ export default function DesignFlow({
                       goView("canvas");
                     }}
                   >
-                    Edit graphic
+                    <span className="choice-title">Edit graphic</span>
                   </button>
-                )}
-                <button
-                  className="btn"
-                  onClick={() => {
-                    // Straight back into the library, which restores the
-                    // exact aisle/search/scroll they picked from. `graphic`
-                    // stays set so Back/refresh can't lose the choice.
-                    setEditingDraft(null);
-                    goView("library");
-                  }}
-                >
-                  Change graphic
-                </button>
-                {graphic.type === "shopify" && (
                   <button
-                    className="btn"
+                    className="choice-card"
+                    onClick={() => {
+                      setEditingDraft(null);
+                      goView("library");
+                    }}
+                  >
+                    <span className="choice-title">Pick a graphic</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="choice-card"
+                    onClick={() => {
+                      // Straight back into the library, restored to the
+                      // exact aisle/search/scroll they picked from.
+                      // `graphic` stays set until a new pick.
+                      setEditingDraft(null);
+                      goView("library");
+                    }}
+                  >
+                    <span className="choice-title">Change graphic</span>
+                  </button>
+                  <button
+                    className="choice-card"
                     onClick={() => {
                       setEditingDraft(null);
                       goView("canvas");
                     }}
                   >
-                    Design your own
+                    <span className="choice-title">Design your own</span>
                   </button>
-                )}
-              </div>
-            </>
+                </>
+              )}
+            </div>
           )}
         </div>
       )}

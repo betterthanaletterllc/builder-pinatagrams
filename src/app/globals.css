@@ -693,17 +693,7 @@ a.style-card:focus-visible {
   outline: none;
 }
 
-/* confirm page: swap actions hug the box (where the style name used to be),
-   the primary Looks good sits below them */
-.confirm-swap {
-  justify-content: center;
-  margin: -6px 0 14px;
-}
-
-.confirm-swap .btn {
-  font-size: 13px;
-  padding: 7px 14px;
-}
+/* (confirm page reuses .choice-cards — same tiles as the first visit) */
 
 /* --- design editor -------------------------------------------------------- */
 
@@ -1601,8 +1591,11 @@ a.style-card:focus-visible {
 /* box first, actions right below it — same rhythm as mobile everywhere */
 .flow-rail {
   order: -1;
-  max-width: 340px;
-  margin: 0 auto 16px;
+  /* compact enough that box + action cards + CTA bar fit one screenful —
+     oversized previews were pushing the choice cards under the fixed
+     stack. The vh term shrinks the box on short windows. */
+  max-width: min(300px, 32vh);
+  margin: 0 auto 10px;
   width: 100%;
 }
 
