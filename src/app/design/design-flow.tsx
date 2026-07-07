@@ -39,7 +39,7 @@ import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
 import BoxPreview from "./box-preview";
 import DateCalendar from "./date-calendar";
-import AddressSearch from "./address-search";
+import AddressLine1 from "./address-search";
 
 type StyleInfo = {
   id: string;
@@ -684,22 +684,31 @@ export default function DesignFlow({
             </div>
           )}
 
-          <AddressSearch
-            onPick={(a) => setAddress((prev) => ({ ...prev, ...a }))}
-          />
-
-          {ADDRESS_FIELDS.map(([key, label]) => (
-            <div className="field" key={key}>
-              <label htmlFor={`addr-${key}`}>{label}</label>
-              <input
-                id={`addr-${key}`}
-                value={address[key]}
-                onChange={(e) =>
-                  setAddress((a) => ({ ...a, [key]: e.target.value }))
+          {ADDRESS_FIELDS.map(([key, label]) =>
+            key === "address1" ? (
+              // Shopify-checkout style: the Address field itself suggests
+              // as you type; picking fills street/city/state/ZIP.
+              <AddressLine1
+                key={key}
+                value={address.address1}
+                onChange={(v) => setAddress((a) => ({ ...a, address1: v }))}
+                onPick={(picked) =>
+                  setAddress((prev) => ({ ...prev, ...picked }))
                 }
               />
-            </div>
-          ))}
+            ) : (
+              <div className="field" key={key}>
+                <label htmlFor={`addr-${key}`}>{label}</label>
+                <input
+                  id={`addr-${key}`}
+                  value={address[key]}
+                  onChange={(e) =>
+                    setAddress((a) => ({ ...a, [key]: e.target.value }))
+                  }
+                />
+              </div>
+            ),
+          )}
 
           {cartError && (
             <div className="notice warn">

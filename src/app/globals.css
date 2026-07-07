@@ -609,26 +609,15 @@ a.style-card:focus-visible {
   line-height: 1;
 }
 
-/* live address search: suggestions drop over the manual fields */
-.addr-search {
+/* Shopify-style address autocomplete: suggestions drop under the Address
+   field itself */
+.addr-line1 {
   position: relative;
-  margin-bottom: 14px;
-}
-
-.addr-search-input {
-  width: 100%;
-  padding: 11px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  font-size: 16px; /* no iOS focus-zoom */
-  font-family: inherit;
-  color: var(--ink);
-  background: #fff;
 }
 
 .addr-sugs {
   position: absolute;
-  top: 46px; /* right under the search input (the note sits below) */
+  top: calc(100% + 2px); /* right under the input */
   left: 0;
   right: 0;
   z-index: 30;
@@ -661,10 +650,6 @@ a.style-card:focus-visible {
 .addr-sug:focus-visible {
   background: #eef1fd;
   outline: none;
-}
-
-.addr-search-note {
-  margin-top: 6px;
 }
 
 /* confirm page: swap actions hug the box (where the style name used to be),

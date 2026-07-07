@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Live address search: type a few characters, pick the right address, the
- * form below fills itself. Backed by Photon (OpenStreetMap's geocoder) —
- * free, keyless, CORS-open; results filter to US and require a street +
- * city + state before they're offered. If the service is down or the
- * address isn't found, the manual fields below keep working untouched.
+ * Shopify-checkout-style address autocomplete: the Address field ITSELF
+ * suggests as you type — pick one and street/city/state/ZIP fill in.
+ * Backed by Photon (OpenStreetMap's geocoder) — free, keyless, CORS-open;
+ * results filter to US and need a street + city + state to be offered.
+ * Service down or address unknown → the field is just a normal input.
  * (Upgrade path: swap the fetch for Google Places behind the same UI.)
  */
 
@@ -49,19 +49,24 @@ type PhotonProps = {
   postcode?: string;
 };
 
-export default function AddressSearch({
+export default function AddressLine1({
+  value,
+  onChange,
   onPick,
 }: {
+  value: string;
+  onChange: (v: string) => void;
   onPick: (a: PickedAddress) => void;
 }) {
-  const [q, setQ] = useState("");
   const [sugs, setSugs] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  // After a pick, the field holds the chosen street — don't re-search it.
+  const picked = useRef<string | null>(null);
 
   useEffect(() => {
     window.clearTimeout(timer.current);
-    if (q.trim().length < 5) {
+    if (value.trim().length < 5 || value === picked.current) {
       setSugs([]);
       setOpen(false);
       return;
@@ -69,7 +74,7 @@ export default function AddressSearch({
     timer.current = window.setTimeout(async () => {
       try {
         const r = await fetch(
-          `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lang=en&layer=house&layer=street`,
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=6&lang=en&layer=house&layer=street`,
         );
         if (!r.ok) return;
         const j = await r.json();
@@ -91,22 +96,29 @@ export default function AddressSearch({
         setSugs(out);
         setOpen(out.length > 0);
       } catch {
-        // service hiccup — manual entry below is unaffected
+        // service hiccup — plain typing is unaffected
       }
     }, 300);
     return () => window.clearTimeout(timer.current);
-  }, [q]);
+  }, [value]);
 
   return (
-    <div className="addr-search">
+    <div className="field addr-line1">
+      <label htmlFor="addr-address1">Address</label>
       <input
-        type="search"
-        className="in addr-search-input"
-        placeholder="🔎 Find the address — start typing, then tap it"
-        value={q}
+        id="addr-address1"
+        value={value}
         autoComplete="off"
-        onChange={(e) => setQ(e.target.value)}
-        onFocus={() => sugs.length > 0 && setOpen(true)}
+        placeholder="Start typing — pick the address when it appears"
+        onChange={(e) => {
+          picked.current = null;
+          onChange(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        onFocus={() => sugs.length > 0 && value !== picked.current && setOpen(true)}
       />
       {open && (
         <div className="addr-sugs" role="listbox">
@@ -117,10 +129,13 @@ export default function AddressSearch({
               role="option"
               aria-selected={false}
               className="addr-sug"
-              onClick={() => {
+              // mousedown beats the input's blur, so the tap always lands
+              onMouseDown={(e) => {
+                e.preventDefault();
+                picked.current = s.address1;
                 onPick(s);
-                setQ(s.label);
                 setOpen(false);
+                setSugs([]);
               }}
             >
               {s.label}
@@ -128,9 +143,6 @@ export default function AddressSearch({
           ))}
         </div>
       )}
-      <p className="note addr-search-note">
-        …or type it in below. Don&apos;t forget the apt/suite if there is one.
-      </p>
     </div>
   );
 }
