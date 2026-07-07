@@ -47,7 +47,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
  * SKU CUSTOM-{BODY}. Paper derives the body style from that SKU exactly like
  * legacy orders (spaces not hyphens — its parser splits on the LAST hyphen),
  * Shopify reporting sees a real product, and the invoice shows its image.
- * Lines fall back to plain custom line items if a style has no variant yet.
+ * A style whose variant doesn't resolve refuses checkout loudly — a custom
+ * line item without a SKU would strand the order for Paper.
  */
 const CUSTOM_PRODUCT_GID = "gid://shopify/Product/7741496623202";
 const SKU_SUFFIX_SPECIAL: Record<string, string> = {
@@ -58,7 +59,7 @@ const customSkuFor = (styleId: string) =>
   `CUSTOM-${SKU_SUFFIX_SPECIAL[styleId] ?? styleId.toUpperCase().replace(/-/g, " ")}`;
 
 // Variant ids by SKU, cached for the life of the serverless instance
-// (10-minute TTL); an empty map just means every line takes the fallback.
+// (10-minute TTL); an empty map makes the fail-fast check below refuse.
 let variantCache: { at: number; bySku: Map<string, string> } | null = null;
 
 async function customVariantsBySku(
@@ -91,10 +92,10 @@ async function customVariantsBySku(
   }
 }
 // Add-on variant ids by SKU (e.g. DOUBLE-FILLING → the real Double Candy
-// product). An add-on whose SKU resolves to a live variant becomes its own
-// product line (sales reporting parity with the storefront); one that
-// doesn't folds into the piñata line's price instead — either way the
-// customer pays the hub's number. Cached per SKU for 10 minutes.
+// product). Every active add-on MUST resolve to a live variant — checkout
+// refuses orders whose add-on doesn't, rather than degrading into a second
+// order shape. A refusal is either transient (retry works) or a config
+// error to fix in Shopify admin. Cached per SKU for 10 minutes.
 const addonVariantCache = new Map<string, { at: number; id: string | null }>();
 
 async function addonVariantIds(
@@ -128,7 +129,8 @@ async function addonVariantIds(
       addonVariantCache.set(sku, { at: Date.now(), id: exact?.id ?? null });
       if (exact) out.set(sku, exact.id);
     } catch {
-      // Unresolved this request → the add-on folds; next request retries.
+      // Nothing cached on a fetch error → the caller refuses this order
+      // and the very next request retries the lookup.
     }
   }
   return out;
@@ -309,16 +311,18 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  // A piñata line's price = retail + whichever add-ons are FOLDED into it.
-  // Add-ons with a real Shopify variant become their own product lines
-  // instead (legacy-order shape: association stays on the piñata line's
-  // _addons attribute, money gets its own line for sales reporting); ones
-  // without fold here so a hub-only add-on still charges correctly.
-  const foldedUnitPrice = (l: CleanLine, fold: HubAddon[]) =>
-    (
-      (price.unitPriceCents + fold.reduce((s, a) => s + a.priceCents, 0)) /
-      100
-    ).toFixed(2);
+  // ONE order shape, exactly like legacy storefront orders: piñata lines at
+  // plain retail, each add-on as its own aggregated product line (money +
+  // sales reporting), while WHICH piñata gets it stays on that piñata
+  // line's _addons attribute (the packer's mapping).
+  const unitPrice = (price.unitPriceCents / 100).toFixed(2);
+  const addonTotals = (groupLines: CleanLine[]) => {
+    const units = new Map<string, { addon: HubAddon; qty: number }>();
+    for (const l of groupLines)
+      for (const a of l.addons)
+        units.set(a.id, { addon: a, qty: (units.get(a.id)?.qty ?? 0) + l.qty });
+    return [...units.values()];
+  };
 
   // One draft order per delivery address (ShipStation: one order = one label).
   const groups = new Map<string, CleanLine[]>();
@@ -357,14 +361,12 @@ export async function POST(req: Request) {
     ...(l.message ? [{ key: "message", value: l.message }] : []),
   ];
 
-  // Fallback shape (also the dry-run payload): a plain custom line item.
-  // `fold` = add-ons priced into this line (defaults to all of them); the
-  // title only advertises what the price actually includes.
-  const customLine = (l: CleanLine, fold: HubAddon[] = l.addons) => ({
-    title:
-      l.title +
-      (fold.length ? ` + ${fold.map((a) => a.label).join(" + ")}` : ""),
-    originalUnitPrice: foldedUnitPrice(l, fold),
+  // Dry-run payload only (no Shopify creds to resolve variants): plain
+  // custom line items mirroring the real structure — piñata at retail plus
+  // one line per add-on.
+  const customLine = (l: CleanLine) => ({
+    title: l.title,
+    originalUnitPrice: unitPrice,
     quantity: l.qty,
     requiresShipping: true,
     customAttributes: lineAttributes(l),
@@ -398,7 +400,15 @@ export async function POST(req: Request) {
           title: "FedEx 2-Day delivery",
           price: ((price.shipPerUnitCents * units) / 100).toFixed(2),
         },
-        lineItems: groupLines.map((l) => customLine(l)) as unknown[],
+        lineItems: [
+          ...groupLines.map((l) => customLine(l)),
+          ...addonTotals(groupLines).map(({ addon, qty }) => ({
+            title: addon.label,
+            originalUnitPrice: (addon.priceCents / 100).toFixed(2),
+            quantity: qty,
+            requiresShipping: true,
+          })),
+        ] as unknown[],
       },
     };
   });
@@ -451,7 +461,7 @@ export async function POST(req: Request) {
   // Attach each line to the generic Custom Built Piñatagram variant for its
   // body style (real SKU → Paper parses the body like any legacy order; the
   // product image shows on the invoice). priceOverride keeps the hub's
-  // price authoritative. Missing variant → the custom-line fallback stands.
+  // price authoritative.
   const variantBySku = await customVariantsBySku(gqlUrl, gqlHeaders);
   const addonSkus = [
     ...new Set(
@@ -461,43 +471,54 @@ export async function POST(req: Request) {
     ),
   ];
   const addonVariants = await addonVariantIds(gqlUrl, gqlHeaders, addonSkus);
-  const isRealAddon = (a: HubAddon) => !!(a.sku && addonVariants.has(a.sku));
+
+  // Fail-fast BEFORE creating anything: every piñata must attach to its
+  // CUSTOM-{BODY} variant and every add-on to its own product's variant.
+  // A miss is a config error (deleted variant, SKU typo) or an API flake —
+  // refuse loudly either way; a silent fallback shape would strand orders
+  // Paper can't parse (no SKU → no body style) and rot sales reporting.
+  for (const l of lines) {
+    if (!variantBySku.has(customSkuFor(l.styleId))) {
+      console.error(`checkout: no variant for ${customSkuFor(l.styleId)}`);
+      return NextResponse.json(
+        {
+          error: `Checkout is temporarily unavailable for the ${l.styleName} body — try again in a minute.`,
+        },
+        { status: 502 },
+      );
+    }
+    const dead = l.addons.find((a) => !a.sku || !addonVariants.has(a.sku));
+    if (dead) {
+      console.error(
+        `checkout: add-on "${dead.label}" (sku ${dead.sku ?? "none"}) has no Shopify variant`,
+      );
+      return NextResponse.json(
+        {
+          error: `"${dead.label}" can't be added right now — remove it from your piñata and try again.`,
+        },
+        { status: 502 },
+      );
+    }
+  }
+
   for (const order of draftOrders) {
-    // Add-ons with a real Shopify variant charge as their own product line
-    // per order — quantity = piñatas in this box carrying them (which piñata
-    // gets what stays on each line's _addons); the rest fold into price.
-    const addonUnits = new Map<string, number>();
-    const pinataLines = order.lines.map((l) => {
-      for (const a of l.addons)
-        if (isRealAddon(a))
-          addonUnits.set(a.id, (addonUnits.get(a.id) ?? 0) + l.qty);
-      const fold = l.addons.filter((a) => !isRealAddon(a));
-      const variantId = variantBySku.get(customSkuFor(l.styleId));
-      return variantId
-        ? {
-            variantId,
-            quantity: l.qty,
-            priceOverride: {
-              amount: foldedUnitPrice(l, fold),
-              currencyCode: "USD",
-            },
-            customAttributes: lineAttributes(l),
-          }
-        : customLine(l, fold);
-    });
-    const addonLines = [...addonUnits.entries()].map(([id, qty]) => {
-      const a = addonById.get(id)!;
-      return {
-        variantId: addonVariants.get(a.sku!)!,
+    order.input.lineItems = [
+      ...order.lines.map((l) => ({
+        variantId: variantBySku.get(customSkuFor(l.styleId))!,
+        quantity: l.qty,
+        priceOverride: { amount: unitPrice, currencyCode: "USD" },
+        customAttributes: lineAttributes(l),
+      })),
+      ...addonTotals(order.lines).map(({ addon, qty }) => ({
+        variantId: addonVariants.get(addon.sku!)!,
         quantity: qty,
         // Hub price stays authoritative even if the product's price drifts.
         priceOverride: {
-          amount: (a.priceCents / 100).toFixed(2),
+          amount: (addon.priceCents / 100).toFixed(2),
           currencyCode: "USD",
         },
-      };
-    });
-    order.input.lineItems = [...pinataLines, ...addonLines];
+      })),
+    ];
   }
 
   const created: {
