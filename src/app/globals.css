@@ -565,6 +565,48 @@ a.style-card:focus-visible {
   color: var(--accent-hover);
 }
 
+/* footer: legal links live on pinatagrams.com — one source of truth */
+.site-footer {
+  margin-top: 40px;
+  border-top: 1px solid var(--line);
+  background: var(--card);
+}
+
+/* the flow pages pin a CTA/dock stack to the viewport bottom — give the
+   footer clearance so its links are reachable there too */
+body:has(.bottom-stack) .site-footer {
+  padding-bottom: 170px;
+}
+
+.footer-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.footer-inner a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.footer-inner a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
 /* header cart badge */
 .cart-count {
   display: inline-flex;

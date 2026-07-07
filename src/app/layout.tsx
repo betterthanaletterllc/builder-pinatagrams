@@ -22,7 +22,15 @@ const arbotek = localFont({
 
 export const metadata: Metadata = {
   title: "Piñatagrams Builder",
-  description: "Design your own custom piñata.",
+  description:
+    "Build a custom Piñatagram — pick a body, design the graphic, add a gift message, and we'll fly it anywhere in the US.",
+  openGraph: {
+    title: "Piñatagrams Builder",
+    description:
+      "Design your own custom piñata gift — delivered in a box they'll never forget.",
+    siteName: "Piñatagrams",
+    images: [{ url: "/box-open.jpg" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -46,6 +54,29 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
         {children}
+        <footer className="site-footer">
+          <div className="footer-inner">
+            <span>
+              © {new Date().getFullYear()} Better Than A Letter LLC ·{" "}
+              <a href="https://www.pinatagrams.com">pinatagrams.com</a>
+            </span>
+            <nav className="footer-links" aria-label="Legal">
+              <a href="https://www.pinatagrams.com/policies/terms-of-service">
+                Terms of Service
+              </a>
+              <a href="https://www.pinatagrams.com/policies/privacy-policy">
+                Privacy
+              </a>
+              <a href="https://www.pinatagrams.com/policies/refund-policy">
+                Refunds
+              </a>
+              <a href="https://www.pinatagrams.com/policies/shipping-policy">
+                Shipping
+              </a>
+              <a href="mailto:nathan@pinatagrams.com">Contact</a>
+            </nav>
+          </div>
+        </footer>
       </body>
     </html>
   );
