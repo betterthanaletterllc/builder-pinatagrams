@@ -565,6 +565,26 @@ a.style-card:focus-visible {
   color: var(--accent-hover);
 }
 
+.legal-page {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 28px 18px 60px;
+}
+
+.legal-page h1 {
+  font-size: 26px;
+}
+
+.legal-page h2 {
+  font-size: 17px;
+  margin: 22px 0 6px;
+}
+
+.legal-page p {
+  margin: 8px 0;
+  line-height: 1.55;
+}
+
 /* footer: legal links live on pinatagrams.com — one source of truth */
 .site-footer {
   margin-top: 40px;

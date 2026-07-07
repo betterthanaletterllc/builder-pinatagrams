@@ -19,6 +19,7 @@ import {
   type CartLine,
 } from "@/lib/flow";
 import { cdnThumb } from "@/lib/library-data";
+import { trackBeginCheckout } from "@/lib/analytics";
 
 const MAX_QTY = 25;
 
@@ -151,6 +152,7 @@ export default function CartView() {
   const checkout = async () => {
     setSubmitting(true);
     setError(null);
+    trackBeginCheckout(totalCents);
     try {
       // No email squeeze: Shopify's payment page collects contact info.
       const res = await fetch("/api/checkout", {

@@ -11,6 +11,7 @@ import {
   deliveryProblemAtCheckout,
   resolveDeliveryConfig,
 } from "@/lib/delivery";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,6 +117,14 @@ function cleanAddress(a: unknown): DeliveryAddress | null {
 }
 
 export async function POST(req: Request) {
+  // Draft orders write into Shopify — keep bots from spamming them.
+  if (!rateLimit(`checkout:${clientIp(req)}`, 6, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many checkout attempts — give it a minute and try again." },
+      { status: 429 },
+    );
+  }
+
   let body: CheckoutBody;
   try {
     body = await req.json();

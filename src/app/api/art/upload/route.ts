@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,15 @@ export const runtime = "nodejs";
  * what rides on the draft order as _frontGraphic — exactly what Paper prints.
  */
 export async function POST(request: Request) {
+  // Each design save = 2 uploads; 30/min per IP is generous for humans and
+  // a wall for upload floods into the Blob store.
+  if (!rateLimit(`upload:${clientIp(request)}`, 30, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many uploads — give it a minute and try again." },
+      { status: 429 },
+    );
+  }
+
   const body = (await request.json()) as HandleUploadBody;
   try {
     const jsonResponse = await handleUpload({

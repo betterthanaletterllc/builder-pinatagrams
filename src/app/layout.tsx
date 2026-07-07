@@ -6,6 +6,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import logo from "../../public/pinatagrams-logo.png";
 import CartLink from "./cart-link";
+import Analytics from "./analytics";
 
 // Brand fonts per design-system/colors_and_type.css: Arbotek Ultra for
 // display/hero titles, Poppins for headings + body.
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className={`${poppins.variable} ${arbotek.variable}`}>
+        <Analytics />
         <header className="topbar">
           <div className="topbar-inner">
             <a href="/" className="brand-wrap">
@@ -64,6 +66,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <a href="https://www.pinatagrams.com/policies/terms-of-service">
                 Terms of Service
               </a>
+              <a href="/terms">Upload Terms</a>
               <a href="https://www.pinatagrams.com/policies/privacy-policy">
                 Privacy
               </a>

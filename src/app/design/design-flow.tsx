@@ -35,6 +35,7 @@ import {
 } from "@/lib/hub";
 import { deliveryProblem, type DeliveryConfig } from "@/lib/delivery";
 import { cdnThumb, clearLibraryState } from "@/lib/library-data";
+import { trackAddToCart } from "@/lib/analytics";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
 import BoxPreview from "./box-preview";
@@ -392,6 +393,7 @@ export default function DesignFlow({
     rememberAddress(address);
     clearDraft();
     clearLibraryState(); // the next piñata browses the library fresh
+    trackAddToCart(deliveredCents);
     // Show the packed screen, then fully disarm the flow so browser Back
     // can't resurrect a completed order and duplicate the cart line.
     setPackedFor({ name: address.name || styleInfo.name, art: artUrl });
