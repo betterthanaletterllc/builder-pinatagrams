@@ -103,13 +103,12 @@ export default function AddressLine1({
   }, [value]);
 
   return (
-    <div className="field addr-line1">
-      <label htmlFor="addr-address1">Address</label>
+    <div className="ffield addr-line1">
       <input
         id="addr-address1"
         value={value}
         autoComplete="off"
-        placeholder="Start typing — pick the address when it appears"
+        placeholder=" "
         onChange={(e) => {
           picked.current = null;
           onChange(e.target.value);
@@ -120,6 +119,7 @@ export default function AddressLine1({
         onBlur={() => window.setTimeout(() => setOpen(false), 150)}
         onFocus={() => sugs.length > 0 && value !== picked.current && setOpen(true)}
       />
+      <label htmlFor="addr-address1">Address</label>
       {open && (
         <div className="addr-sugs" role="listbox">
           {sugs.map((s) => (

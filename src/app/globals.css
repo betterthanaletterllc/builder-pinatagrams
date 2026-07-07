@@ -609,6 +609,47 @@ a.style-card:focus-visible {
   line-height: 1;
 }
 
+/* floating labels (Shopify-checkout style): the label lives INSIDE the
+   input and shrinks to the top when focused or filled — rows sit tighter */
+.ffield {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.ffield input {
+  width: 100%;
+  padding: 21px 13px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  font-size: 16px; /* no iOS focus-zoom */
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+.ffield input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ffield label {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 15px;
+  pointer-events: none;
+  transition: top 0.12s ease, font-size 0.12s ease, transform 0.12s ease;
+}
+
+.ffield input:focus + label,
+.ffield input:not(:placeholder-shown) + label {
+  top: 12px;
+  transform: none;
+  font-size: 11px;
+}
+
 /* Shopify-style address autocomplete: suggestions drop under the Address
    field itself */
 .addr-line1 {
@@ -883,15 +924,36 @@ a.style-card:focus-visible {
 
 /* --- build dock: the collapsed "your box so far" bar ------------------------ */
 
-.build-dock {
+/* fixed bottom stack: [primary CTA bar][build dock] — the step's main
+   button is ALWAYS visible, never hidden under the order summary */
+.bottom-stack {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 50;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -2px 12px rgba(24, 13, 56, 0.1);
+}
+
+.cta-bar {
+  display: flex;
+  justify-content: center;
   background: var(--card);
   border-top: 1px solid var(--line);
-  box-shadow: 0 -2px 12px rgba(24, 13, 56, 0.1);
+  padding: 10px 16px;
+}
+
+.cta-btn {
+  width: 100%;
+  max-width: 620px;
+  text-align: center;
+}
+
+.build-dock {
+  background: var(--card);
+  border-top: 1px solid var(--line);
   display: flex;
   justify-content: center;
   padding: 8px 16px;
@@ -993,7 +1055,8 @@ a.style-card:focus-visible {
 }
 
 .has-dock {
-  padding-bottom: 88px;
+  /* clearance for the fixed CTA bar + dock */
+  padding-bottom: 160px;
 }
 
 /* message step: box + text box + continue, one screen */

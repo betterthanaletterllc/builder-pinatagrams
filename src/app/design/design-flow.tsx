@@ -321,6 +321,40 @@ export default function DesignFlow({
   const selectedSavedKey = addressKey(address);
   const addressOk = addressComplete(address);
 
+  // The step's primary action lives in a FIXED bar just above the dock —
+  // always visible, never scrolled away, never hidden under the summary.
+  const primaryCta = (() => {
+    if (choosing || packedFor) return null;
+    switch (step) {
+      case "Graphic":
+        return graphic
+          ? { label: "Looks good →", onClick: () => goStep("Message") }
+          : null;
+      case "Message":
+        return { label: "Continue →", onClick: () => goStep("Filling") };
+      case "Filling":
+        return {
+          label: "Continue →",
+          onClick: () => goStep("Delivery"),
+          disabled: !filling,
+        };
+      case "Delivery":
+        return {
+          label: "Continue →",
+          onClick: () => goStep("Send to"),
+          disabled: !!dateProblem,
+        };
+      case "Send to":
+        return {
+          label: editLineId ? "Save changes →" : "Add to cart →",
+          onClick: addToCart,
+          disabled: !addressOk || !graphic || !filling || !!dateProblem,
+        };
+      default:
+        return null;
+    }
+  })();
+
   const STEP_HEADINGS: Record<Step, string> = {
     Graphic: "Step Two: The graphic",
     Message: "Step Three: Add a gift message",
@@ -464,7 +498,8 @@ export default function DesignFlow({
           ) : (
             <>
               {/* swap actions sit snug under the box (where the style name
-                  used to read); the primary Looks good follows below */}
+                  used to read); the primary Looks good lives in the fixed
+                  CTA bar above the dock */}
               <div className="el-controls confirm-swap">
                 {graphic.type === "custom" && (
                   <button
@@ -506,14 +541,6 @@ export default function DesignFlow({
                     Design your own
                   </button>
                 )}
-              </div>
-              <div className="el-controls">
-                <button
-                  className="btn primary"
-                  onClick={() => goStep("Message")}
-                >
-                  Looks good →
-                </button>
               </div>
             </>
           )}
@@ -572,9 +599,6 @@ export default function DesignFlow({
           <p className="note msg-from-nudge">
             💡 Don&apos;t forget to say who it&apos;s from!
           </p>
-          <button className="btn primary" onClick={() => goStep("Filling")}>
-            Continue →
-          </button>
         </div>
       )}
 
@@ -620,13 +644,6 @@ export default function DesignFlow({
               })}
             </div>
           )}
-          <button
-            className="btn primary"
-            disabled={!filling}
-            onClick={() => goStep("Delivery")}
-          >
-            Continue →
-          </button>
         </div>
       )}
 
@@ -642,13 +659,6 @@ export default function DesignFlow({
           ) : (
             <div className="notice info">Arriving by {date}.</div>
           )}
-          <button
-            className="btn primary"
-            disabled={!!dateProblem}
-            onClick={() => goStep("Send to")}
-          >
-            Continue →
-          </button>
         </div>
       )}
 
@@ -697,15 +707,18 @@ export default function DesignFlow({
                 }
               />
             ) : (
-              <div className="field" key={key}>
-                <label htmlFor={`addr-${key}`}>{label}</label>
+              // Shopify-checkout style: the label floats INSIDE the input
+              // (placeholder=" " keeps :placeholder-shown working).
+              <div className="ffield" key={key}>
                 <input
                   id={`addr-${key}`}
+                  placeholder=" "
                   value={address[key]}
                   onChange={(e) =>
                     setAddress((a) => ({ ...a, [key]: e.target.value }))
                   }
                 />
+                <label htmlFor={`addr-${key}`}>{label}</label>
               </div>
             ),
           )}
@@ -715,13 +728,6 @@ export default function DesignFlow({
               This design is too large to save — try fewer or smaller photos.
             </div>
           )}
-          <button
-            className="btn primary"
-            disabled={!addressOk || !graphic || !filling || !!dateProblem}
-            onClick={addToCart}
-          >
-            {editLineId ? "Save changes →" : "Add to cart →"}
-          </button>
           <p className="note">
             <Link href="/cart">View cart</Link>
           </p>
@@ -826,10 +832,22 @@ export default function DesignFlow({
         <div className={dockVisible ? "has-dock" : undefined}>{steps}</div>
       )}
 
-      {dockVisible &&
-        (dockOpen ? (
-          <div className="build-dock">
-            <div className="dock-inner">
+      {dockVisible && (
+        <div className="bottom-stack">
+          {primaryCta && (
+            <div className="cta-bar">
+              <button
+                className="btn primary cta-btn"
+                disabled={primaryCta.disabled}
+                onClick={primaryCta.onClick}
+              >
+                {primaryCta.label}
+              </button>
+            </div>
+          )}
+          {dockOpen ? (
+            <div className="build-dock">
+              <div className="dock-inner">
               <div className="dock-thumb box-composite">
                 {styleInfo.boxImageUrl ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
@@ -892,27 +910,29 @@ export default function DesignFlow({
               </button>
             </div>
           </div>
-        ) : (
-          <button
-            type="button"
-            className="build-dock dock-closed"
-            aria-label="Expand the order summary"
-            aria-expanded="false"
-            onClick={() => setDockOpen(true)}
-          >
-            <span className="dock-mini">
-              <strong>{styleInfo.name}</strong>
-              {deliveredCents !== null && (
-                <span className="dock-mini-price">
-                  {formatCents(deliveredCents)} delivered
+          ) : (
+            <button
+              type="button"
+              className="build-dock dock-closed"
+              aria-label="Expand the order summary"
+              aria-expanded="false"
+              onClick={() => setDockOpen(true)}
+            >
+              <span className="dock-mini">
+                <strong>{styleInfo.name}</strong>
+                {deliveredCents !== null && (
+                  <span className="dock-mini-price">
+                    {formatCents(deliveredCents)} delivered
+                  </span>
+                )}
+                <span className="dock-chev" aria-hidden>
+                  ⌃
                 </span>
-              )}
-              <span className="dock-chev" aria-hidden>
-                ⌃
               </span>
-            </span>
-          </button>
-        ))}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
