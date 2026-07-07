@@ -321,40 +321,6 @@ export default function DesignFlow({
   const selectedSavedKey = addressKey(address);
   const addressOk = addressComplete(address);
 
-  // The step's primary action lives in a FIXED bar just above the dock —
-  // always visible, never scrolled away, never hidden under the summary.
-  const primaryCta = (() => {
-    if (choosing || packedFor) return null;
-    switch (step) {
-      case "Graphic":
-        return graphic
-          ? { label: "Looks good →", onClick: () => goStep("Message") }
-          : null;
-      case "Message":
-        return { label: "Continue →", onClick: () => goStep("Filling") };
-      case "Filling":
-        return {
-          label: "Continue →",
-          onClick: () => goStep("Delivery"),
-          disabled: !filling,
-        };
-      case "Delivery":
-        return {
-          label: "Continue →",
-          onClick: () => goStep("Send to"),
-          disabled: !!dateProblem,
-        };
-      case "Send to":
-        return {
-          label: editLineId ? "Save changes →" : "Add to cart →",
-          onClick: addToCart,
-          disabled: !addressOk || !graphic || !filling || !!dateProblem,
-        };
-      default:
-        return null;
-    }
-  })();
-
   const STEP_HEADINGS: Record<Step, string> = {
     Graphic: "Step Two: The graphic",
     Message: "Step Three: Add a gift message",
@@ -444,6 +410,40 @@ export default function DesignFlow({
     u.searchParams.delete("edit");
     window.history.replaceState({}, "", u);
   };
+
+  // The step's primary action lives in a FIXED bar just above the dock —
+  // always visible, never scrolled away, never hidden under the summary.
+  const primaryCta = (() => {
+    if (choosing || packedFor) return null;
+    switch (step) {
+      case "Graphic":
+        return graphic
+          ? { label: "Looks good →", onClick: () => goStep("Message") }
+          : null;
+      case "Message":
+        return { label: "Continue →", onClick: () => goStep("Filling") };
+      case "Filling":
+        return {
+          label: "Continue →",
+          onClick: () => goStep("Delivery"),
+          disabled: !filling,
+        };
+      case "Delivery":
+        return {
+          label: "Continue →",
+          onClick: () => goStep("Send to"),
+          disabled: !!dateProblem,
+        };
+      case "Send to":
+        return {
+          label: editLineId ? "Save changes →" : "Add to cart →",
+          onClick: addToCart,
+          disabled: !addressOk || !graphic || !filling || !!dateProblem,
+        };
+      default:
+        return null;
+    }
+  })();
 
   /* --- packed! ------------------------------------------------------------- */
   if (packedFor) {
