@@ -81,15 +81,25 @@ export function loadCart(): CartLine[] {
   }
 }
 
+// Same-tab listeners (the header badge) hear this on every cart write;
+// cross-tab updates ride the native "storage" event.
+export const CART_EVENT = "pinatagrams-cart";
+
 export function saveCart(lines: CartLine[]): boolean {
   try {
     localStorage.setItem(CART_KEY, JSON.stringify(lines));
+    window.dispatchEvent(new Event(CART_EVENT));
     return true;
   } catch {
     // QuotaExceeded — custom designs embed uploaded photos as data URLs
     // until the hardened Blob upload lands. Caller shows the size warning.
     return false;
   }
+}
+
+/** Total piñatas in the cart (sum of line quantities). */
+export function cartCount(): number {
+  return loadCart().reduce((s, l) => s + l.qty, 0);
 }
 
 export function newLineId(): string {

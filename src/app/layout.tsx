@@ -5,6 +5,7 @@ import { Poppins } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import logo from "../../public/pinatagrams-logo.png";
+import CartLink from "./cart-link";
 
 // Brand fonts per design-system/colors_and_type.css: Arbotek Ultra for
 // display/hero titles, Poppins for headings + body.
@@ -41,9 +42,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <em>Builder</em>
               </span>
             </a>
-            <a href="/cart" className="cart-link">
-              Cart
-            </a>
+            <CartLink />
           </div>
         </header>
         {children}

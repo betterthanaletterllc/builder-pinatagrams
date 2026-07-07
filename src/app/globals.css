@@ -592,6 +592,81 @@ a.style-card:focus-visible {
   color: var(--accent-hover);
 }
 
+/* header cart badge */
+.cart-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* live address search: suggestions drop over the manual fields */
+.addr-search {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.addr-search-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  font-size: 16px; /* no iOS focus-zoom */
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+.addr-sugs {
+  position: absolute;
+  top: 46px; /* right under the search input (the note sits below) */
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.addr-sug {
+  display: block;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.addr-sug:last-child {
+  border-bottom: none;
+}
+
+.addr-sug:hover,
+.addr-sug:focus-visible {
+  background: #eef1fd;
+  outline: none;
+}
+
+.addr-search-note {
+  margin-top: 6px;
+}
+
 /* confirm page: swap actions hug the box (where the style name used to be),
    the primary Looks good sits below them */
 .confirm-swap {

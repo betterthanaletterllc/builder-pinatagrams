@@ -39,6 +39,7 @@ import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
 import BoxPreview from "./box-preview";
 import DateCalendar from "./date-calendar";
+import AddressSearch from "./address-search";
 
 type StyleInfo = {
   id: string;
@@ -682,6 +683,10 @@ export default function DesignFlow({
               </button>
             </div>
           )}
+
+          <AddressSearch
+            onPick={(a) => setAddress((prev) => ({ ...prev, ...a }))}
+          />
 
           {ADDRESS_FIELDS.map(([key, label]) => (
             <div className="field" key={key}>
