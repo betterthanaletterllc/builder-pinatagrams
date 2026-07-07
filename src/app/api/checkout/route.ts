@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { HUB_URL, type HubCatalog, type HubPrice } from "@/lib/hub";
+import {
+  HUB_URL,
+  type HubAddon,
+  type HubCatalog,
+  type HubPrice,
+} from "@/lib/hub";
 import {
   addressKey,
   FILLINGS,
@@ -85,6 +90,50 @@ async function customVariantsBySku(
     return new Map();
   }
 }
+// Add-on variant ids by SKU (e.g. DOUBLE-FILLING → the real Double Candy
+// product). An add-on whose SKU resolves to a live variant becomes its own
+// product line (sales reporting parity with the storefront); one that
+// doesn't folds into the piñata line's price instead — either way the
+// customer pays the hub's number. Cached per SKU for 10 minutes.
+const addonVariantCache = new Map<string, { at: number; id: string | null }>();
+
+async function addonVariantIds(
+  gqlUrl: string,
+  headers: Record<string, string>,
+  skus: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (const sku of skus) {
+    const hit = addonVariantCache.get(sku);
+    if (hit && Date.now() - hit.at < 10 * 60_000) {
+      if (hit.id) out.set(sku, hit.id);
+      continue;
+    }
+    try {
+      const res = await fetch(gqlUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          query: `query($q: String!) {
+            productVariants(first: 5, query: $q) { nodes { id sku } }
+          }`,
+          variables: { q: `sku:${JSON.stringify(sku)}` },
+        }),
+      });
+      const gql = await res.json();
+      const nodes: { id: string; sku: string | null }[] =
+        gql?.data?.productVariants?.nodes ?? [];
+      // The query is a search; only trust an exact SKU match.
+      const exact = nodes.find((n) => n.sku === sku);
+      addonVariantCache.set(sku, { at: Date.now(), id: exact?.id ?? null });
+      if (exact) out.set(sku, exact.id);
+    } catch {
+      // Unresolved this request → the add-on folds; next request retries.
+    }
+  }
+  return out;
+}
+
 const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
 const BLOB_RE = /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//;
 const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
@@ -169,8 +218,7 @@ export async function POST(req: Request) {
     frontGraphic: string;
     designJson: string;
     filling: string;
-    addonLabels: string[];
-    addonCents: number;
+    addons: HubAddon[];
     deliveryDate: string;
     message: string;
     address: DeliveryAddress;
@@ -235,8 +283,7 @@ export async function POST(req: Request) {
       frontGraphic,
       designJson,
       filling: l.filling,
-      addonLabels: addons.map((a) => a!.label),
-      addonCents: addons.reduce((s, a) => s + a!.priceCents, 0),
+      addons: addons as HubAddon[],
       deliveryDate: l.deliveryDate,
       message,
       address,
@@ -262,10 +309,16 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  // Add-ons ride on the line's unit price (no separate Shopify line item —
-  // one line = one piñata as fulfillment sees it).
-  const lineUnitPrice = (l: CleanLine) =>
-    ((price.unitPriceCents + l.addonCents) / 100).toFixed(2);
+  // A piñata line's price = retail + whichever add-ons are FOLDED into it.
+  // Add-ons with a real Shopify variant become their own product lines
+  // instead (legacy-order shape: association stays on the piñata line's
+  // _addons attribute, money gets its own line for sales reporting); ones
+  // without fold here so a hub-only add-on still charges correctly.
+  const foldedUnitPrice = (l: CleanLine, fold: HubAddon[]) =>
+    (
+      (price.unitPriceCents + fold.reduce((s, a) => s + a.priceCents, 0)) /
+      100
+    ).toFixed(2);
 
   // One draft order per delivery address (ShipStation: one order = one label).
   const groups = new Map<string, CleanLine[]>();
@@ -284,8 +337,8 @@ export async function POST(req: Request) {
     },
     { key: "Body style", value: l.styleName },
     { key: "Filling", value: l.filling },
-    ...(l.addonLabels.length
-      ? [{ key: "Add-ons", value: l.addonLabels.join(", ") }]
+    ...(l.addons.length
+      ? [{ key: "Add-ons", value: l.addons.map((a) => a.label).join(", ") }]
       : []),
     { key: "Arrives by", value: l.deliveryDate },
     // Underscored = hidden machine rails Paper reads at fulfillment.
@@ -294,19 +347,24 @@ export async function POST(req: Request) {
     { key: "_frontGraphic", value: l.frontGraphic },
     ...(l.designJson ? [{ key: "_designJson", value: l.designJson }] : []),
     { key: "_fillings", value: l.filling },
-    // Comma-separated labels — exactly how Paper splits _addons.
-    ...(l.addonLabels.length
-      ? [{ key: "_addons", value: l.addonLabels.join(", ") }]
+    // Comma-separated labels — exactly how Paper splits _addons. This stays
+    // on the piñata line even when the add-on charges as its own product
+    // line: it's the per-piñata mapping the packer works from.
+    ...(l.addons.length
+      ? [{ key: "_addons", value: l.addons.map((a) => a.label).join(", ") }]
       : []),
     { key: "_requestedDate", value: l.deliveryDate },
     ...(l.message ? [{ key: "message", value: l.message }] : []),
   ];
 
   // Fallback shape (also the dry-run payload): a plain custom line item.
-  const customLine = (l: CleanLine) => ({
+  // `fold` = add-ons priced into this line (defaults to all of them); the
+  // title only advertises what the price actually includes.
+  const customLine = (l: CleanLine, fold: HubAddon[] = l.addons) => ({
     title:
-      l.title + (l.addonLabels.length ? ` + ${l.addonLabels.join(" + ")}` : ""),
-    originalUnitPrice: lineUnitPrice(l),
+      l.title +
+      (fold.length ? ` + ${fold.map((a) => a.label).join(" + ")}` : ""),
+    originalUnitPrice: foldedUnitPrice(l, fold),
     quantity: l.qty,
     requiresShipping: true,
     customAttributes: lineAttributes(l),
@@ -340,7 +398,7 @@ export async function POST(req: Request) {
           title: "FedEx 2-Day delivery",
           price: ((price.shipPerUnitCents * units) / 100).toFixed(2),
         },
-        lineItems: groupLines.map(customLine) as unknown[],
+        lineItems: groupLines.map((l) => customLine(l)) as unknown[],
       },
     };
   });
@@ -395,21 +453,51 @@ export async function POST(req: Request) {
   // product image shows on the invoice). priceOverride keeps the hub's
   // price authoritative. Missing variant → the custom-line fallback stands.
   const variantBySku = await customVariantsBySku(gqlUrl, gqlHeaders);
+  const addonSkus = [
+    ...new Set(
+      lines.flatMap((l) =>
+        l.addons.map((a) => a.sku).filter((s): s is string => !!s),
+      ),
+    ),
+  ];
+  const addonVariants = await addonVariantIds(gqlUrl, gqlHeaders, addonSkus);
+  const isRealAddon = (a: HubAddon) => !!(a.sku && addonVariants.has(a.sku));
   for (const order of draftOrders) {
-    order.input.lineItems = order.lines.map((l) => {
+    // Add-ons with a real Shopify variant charge as their own product line
+    // per order — quantity = piñatas in this box carrying them (which piñata
+    // gets what stays on each line's _addons); the rest fold into price.
+    const addonUnits = new Map<string, number>();
+    const pinataLines = order.lines.map((l) => {
+      for (const a of l.addons)
+        if (isRealAddon(a))
+          addonUnits.set(a.id, (addonUnits.get(a.id) ?? 0) + l.qty);
+      const fold = l.addons.filter((a) => !isRealAddon(a));
       const variantId = variantBySku.get(customSkuFor(l.styleId));
       return variantId
         ? {
             variantId,
             quantity: l.qty,
             priceOverride: {
-              amount: lineUnitPrice(l),
+              amount: foldedUnitPrice(l, fold),
               currencyCode: "USD",
             },
             customAttributes: lineAttributes(l),
           }
-        : customLine(l);
+        : customLine(l, fold);
     });
+    const addonLines = [...addonUnits.entries()].map(([id, qty]) => {
+      const a = addonById.get(id)!;
+      return {
+        variantId: addonVariants.get(a.sku!)!,
+        quantity: qty,
+        // Hub price stays authoritative even if the product's price drifts.
+        priceOverride: {
+          amount: (a.priceCents / 100).toFixed(2),
+          currencyCode: "USD",
+        },
+      };
+    });
+    order.input.lineItems = [...pinataLines, ...addonLines];
   }
 
   const created: {
