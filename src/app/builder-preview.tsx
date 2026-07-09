@@ -1,19 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import type { HubBodyStyle } from "@/lib/hub";
+import { formatCents, type HubBodyStyle } from "@/lib/hub";
 
 /**
  * Step 1 of the flow: pick a body style. One tap goes straight into the
- * design flow — no intermediate panel. The running price lives in the
- * build dock once a style is picked; quantity/shipping live in the cart.
+ * design flow — no intermediate panel. Each card shows the hub's B2C
+ * sticker price (same for every body; add-ons ride on top); the running
+ * total lives in the build dock once a style is picked.
  */
 
 export default function BuilderPreview({
   bodyStyles,
+  priceCents,
 }: {
   bodyStyles: HubBodyStyle[];
+  priceCents?: number | null;
 }) {
+  const price =
+    priceCents != null ? (
+      <div className="style-price">{formatCents(priceCents)}</div>
+    ) : null;
   return (
     <div>
       <div className="style-grid">
@@ -29,6 +36,7 @@ export default function BuilderPreview({
                 <img src={s.imageUrl} alt={s.name} loading="lazy" />
               ) : null}
               <div className="style-name">{s.name}</div>
+              {price}
             </Link>
           ) : (
             <div key={s.id} className="style-card oos" aria-disabled>
@@ -37,6 +45,7 @@ export default function BuilderPreview({
                 <img src={s.imageUrl} alt={s.name} loading="lazy" />
               ) : null}
               <div className="style-name">{s.name}</div>
+              {price}
               <div className="oos-tag">out of stock</div>
             </div>
           ),

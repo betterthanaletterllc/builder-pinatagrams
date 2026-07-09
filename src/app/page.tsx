@@ -1,18 +1,46 @@
-import { getCatalog, HUB_URL } from "@/lib/hub";
+import { getCatalog, HUB_URL, priceUrl, type HubPrice } from "@/lib/hub";
 import BuilderPreview from "./builder-preview";
 
 // Always render against the live hub — no build-time snapshot yet, and the
 // build must succeed even when the hub is unreachable (see catch below).
 export const dynamic = "force-dynamic";
 
+// The B2C sticker price shown on every style card (all bodies price the
+// same; add-ons ride on top). Null on any hiccup — cards just omit it.
+async function b2cUnitCents(): Promise<number | null> {
+  try {
+    const res = await fetch(
+      priceUrl({
+        qty: 1,
+        fill: "filled",
+        bodyType: "standard",
+        graphicType: "custom",
+        mode: "individual",
+        carrier: "standard",
+      }),
+      { next: { revalidate: 300 } },
+    );
+    if (!res.ok) return null;
+    const p: HubPrice = await res.json();
+    return Number.isFinite(p.unitPriceCents) && p.unitPriceCents > 0
+      ? p.unitPriceCents
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function Home() {
   try {
-    const catalog = await getCatalog();
+    const [catalog, priceCents] = await Promise.all([
+      getCatalog(),
+      b2cUnitCents(),
+    ]);
     return (
       <main>
         <h1>Build a Piñatagram</h1>
         <p className="sub">Step One: Pick a body style</p>
-        <BuilderPreview bodyStyles={catalog.bodyStyles} />
+        <BuilderPreview bodyStyles={catalog.bodyStyles} priceCents={priceCents} />
       </main>
     );
   } catch {

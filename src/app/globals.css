@@ -183,6 +183,13 @@ a.style-card:focus-visible {
   color: var(--warn);
 }
 
+.style-card .style-price {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
 .panel {
   background: var(--card);
   border: 1px solid var(--line);
