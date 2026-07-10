@@ -7,7 +7,7 @@ import {
   addressKey,
   clearDraft,
   EMPTY_ADDRESS,
-  FILLINGS,
+  fillingAllowsAddon,
   formatAddress,
   loadAddresses,
   loadCart,
@@ -30,6 +30,7 @@ import {
   priceUrl,
   type HubAddon,
   type HubBodyStyle,
+  type HubFilling,
   type HubPrice,
   type LogoZone,
 } from "@/lib/hub";
@@ -80,11 +81,13 @@ export default function DesignFlow({
   style,
   boxInterior,
   addonOptions,
+  fillingOptions,
   deliveryCfg,
 }: {
   style: StyleInfo;
   boxInterior: { interiorUrl: string | null; messageZone: LogoZone | null } | null;
   addonOptions: HubAddon[];
+  fillingOptions: HubFilling[];
   deliveryCfg: DeliveryConfig;
 }) {
   // The style can be swapped in place (keeps the design/message/etc.).
@@ -98,6 +101,8 @@ export default function DesignFlow({
   const [message, setMessage] = useState("");
   const [filling, setFilling] = useState<Filling | null>(null);
   const [addons, setAddons] = useState<string[]>([]);
+  // Set when switching fillings dropped add-ons the new one doesn't allow.
+  const [addonNotice, setAddonNotice] = useState<string | null>(null);
   const [date, setDate] = useState("");
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
@@ -315,9 +320,32 @@ export default function DesignFlow({
     (s, id) => s + (addonOptions.find((a) => a.id === id)?.priceCents ?? 0),
     0,
   );
+  const fillingRec = filling
+    ? fillingOptions.find((f) => f.label === filling)
+    : undefined;
+  const fillingCents = fillingRec?.priceCents ?? 0;
   const deliveredCents = unitPrice
-    ? unitPrice.unitPriceCents + addonCents + unitPrice.shipPerUnitCents
+    ? unitPrice.unitPriceCents +
+      fillingCents +
+      addonCents +
+      unitPrice.shipPerUnitCents
     : null;
+
+  // Picking a filling drops add-ons it doesn't allow — visibly, never
+  // silently (the checkout enforces the same rule server-side).
+  const pickFilling = (f: HubFilling) => {
+    setFilling(f.label);
+    const dropped = addons.filter((id) => !fillingAllowsAddon(f, id));
+    if (dropped.length) {
+      setAddons(addons.filter((id) => fillingAllowsAddon(f, id)));
+      const names = dropped
+        .map((id) => addonOptions.find((a) => a.id === id)?.label ?? id)
+        .join(", ");
+      setAddonNotice(`${names} isn't available with ${f.label} — removed.`);
+    } else {
+      setAddonNotice(null);
+    }
+  };
 
   const selectedSavedKey = addressKey(address);
   const addressOk = addressComplete(address);
@@ -376,9 +404,14 @@ export default function DesignFlow({
       graphic,
       message: message.trim(),
       filling,
-      // Only keep ids the catalog still offers — a stale draft can't order
-      // an add-on that was deactivated while it sat in sessionStorage.
-      addons: addons.filter((id) => addonOptions.some((a) => a.id === id)),
+      // Only keep ids the catalog still offers AND the filling allows — a
+      // stale draft can't order a deactivated add-on, and a restored draft
+      // can't sneak one past the filling's rule (checkout re-checks both).
+      addons: addons.filter(
+        (id) =>
+          addonOptions.some((a) => a.id === id) &&
+          fillingAllowsAddon(fillingRec, id),
+      ),
       deliveryDate: date,
       address,
       qty: existing ? existing.qty : 1,
@@ -649,45 +682,78 @@ export default function DesignFlow({
       {step === "Filling" && (
         <div className="step-panel">
           <div className="filling-cards">
-            {FILLINGS.map((f) => (
+            {fillingOptions.map((f) => (
               <button
-                key={f}
-                className={"filling-card" + (filling === f ? " selected" : "")}
-                onClick={() => setFilling(f)}
+                key={f.id}
+                className={
+                  "filling-card" +
+                  (filling === f.label ? " selected" : "") +
+                  (f.imageUrl ? " has-photo" : "")
+                }
+                onClick={() => pickFilling(f)}
               >
-                {f}
+                {f.imageUrl && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={f.imageUrl} alt="" loading="lazy" />
+                )}
+                <span className="filling-name">{f.label}</span>
+                {f.blurb && <span className="filling-blurb">{f.blurb}</span>}
+                <span
+                  className={
+                    "filling-price" + (f.priceCents > 0 ? " plus" : "")
+                  }
+                >
+                  {f.priceCents > 0
+                    ? `+${formatCents(f.priceCents)}`
+                    : "Included"}
+                </span>
               </button>
             ))}
           </div>
-          {addonOptions.length > 0 && (
-            <div className="addon-list">
-              {addonOptions.map((a) => {
-                const on = addons.includes(a.id);
-                return (
-                  <label
-                    key={a.id}
-                    className={"addon-row" + (on ? " selected" : "")}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() =>
-                        setAddons(
-                          on
-                            ? addons.filter((id) => id !== a.id)
-                            : [...addons, a.id],
-                        )
+          {addonOptions.length > 0 &&
+            (fillingRec?.addons === "none" ? (
+              <p className="note">
+                Add-ons aren&apos;t available with {fillingRec.label} — it
+                fills the whole box.
+              </p>
+            ) : (
+              <div className="addon-list">
+                {addonOptions.map((a) => {
+                  const allowed = fillingAllowsAddon(fillingRec, a.id);
+                  const on = addons.includes(a.id) && allowed;
+                  return (
+                    <label
+                      key={a.id}
+                      className={
+                        "addon-row" +
+                        (on ? " selected" : "") +
+                        (allowed ? "" : " blocked")
                       }
-                    />
-                    <span className="addon-label">{a.label}</span>
-                    <span className="addon-price">
-                      +{formatCents(a.priceCents)}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        disabled={!allowed}
+                        onChange={() =>
+                          setAddons(
+                            on
+                              ? addons.filter((id) => id !== a.id)
+                              : [...addons, a.id],
+                          )
+                        }
+                      />
+                      <span className="addon-label">{a.label}</span>
+                      <span className="addon-price">
+                        {allowed
+                          ? `+${formatCents(a.priceCents)}`
+                          : `not available with ${filling ?? "this filling"}`}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ))}
+          {addonNotice && <div className="notice info">{addonNotice}</div>}
         </div>
       )}
 

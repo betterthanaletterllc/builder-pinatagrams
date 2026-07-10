@@ -33,6 +33,18 @@ export type HubAddon = {
   sku: string | null;
 };
 
+// What goes INSIDE — hub-controlled (photo, blurb, price delta, add-on
+// rules). label doubles as the _fillings token Paper reads; `addons` says
+// which add-ons this filling permits ("none" = it fills the whole box).
+export type HubFilling = {
+  id: string;
+  label: string;
+  blurb: string;
+  priceCents: number; // 0 = included in the piñata price
+  imageUrl: string | null;
+  addons: "all" | "none" | string[];
+};
+
 export type HubCatalog = {
   bodyStyles: HubBodyStyle[];
   // Global box-interior config (gift-message step); absent on older deploys.
@@ -42,6 +54,9 @@ export type HubCatalog = {
   };
   // Active add-ons from the hub's Pricing page; absent on older deploys.
   addons?: HubAddon[];
+  // Active fillings from the hub's Pricing page; absent or empty → the
+  // builder's compiled list applies (resolveFillings in lib/flow).
+  fillings?: HubFilling[];
   // Delivery calendars (admin /delivery); parse with resolveDeliveryConfig —
   // absent or partial blocks fall back to the compiled defaults.
   delivery?: unknown;

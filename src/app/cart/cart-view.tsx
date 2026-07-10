@@ -8,12 +8,14 @@ import {
   HUB_URL,
   priceUrl,
   type HubAddon,
+  type HubFilling,
   type HubPrice,
 } from "@/lib/hub";
 import {
   addressComplete,
   addressKey,
   loadCart,
+  resolveFillings,
   saveCart,
   saveDraft,
   type CartLine,
@@ -78,6 +80,9 @@ export default function CartView() {
   const [lines, setLines] = useState<CartLine[] | null>(null);
   const [unitPrice, setUnitPrice] = useState<HubPrice | null>(null);
   const [addonCatalog, setAddonCatalog] = useState<HubAddon[]>([]);
+  const [fillingCatalog, setFillingCatalog] = useState<HubFilling[]>(
+    resolveFillings(undefined),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,22 +102,28 @@ export default function CartView() {
       .then((r) => (r.ok ? r.json() : null))
       .then(setUnitPrice)
       .catch(() => {});
-    // Add-on labels + prices come from the live catalog (display only —
-    // checkout re-resolves them server-side).
+    // Add-on/filling labels + prices come from the live catalog (display
+    // only — checkout re-resolves everything server-side).
     fetch(`${HUB_URL}/api/public/catalog`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((c) => setAddonCatalog(c?.addons ?? []))
+      .then((c) => {
+        setAddonCatalog(c?.addons ?? []);
+        setFillingCatalog(resolveFillings(c?.fillings));
+      })
       .catch(() => {});
   }, []);
 
   const addonById = new Map(addonCatalog.map((a) => [a.id, a]));
-  // Per-unit add-on cost for one line; unknown ids price at 0 here and get
-  // rejected server-side if they somehow reach checkout.
+  const fillingByLabel = new Map(fillingCatalog.map((f) => [f.label, f]));
+  // Per-unit add-on/filling cost for one line; unknown ids price at 0 here
+  // and get rejected server-side if they somehow reach checkout.
   const lineAddonCents = (l: CartLine) =>
     (l.addons ?? []).reduce(
       (s, id) => s + (addonById.get(id)?.priceCents ?? 0),
       0,
     );
+  const lineFillingCents = (l: CartLine) =>
+    fillingByLabel.get(l.filling)?.priceCents ?? 0;
 
   const update = (next: CartLine[]) => {
     setLines(next);
@@ -135,13 +146,13 @@ export default function CartView() {
   const totalUnits = lines.reduce((s, l) => s + l.qty, 0);
   const unitCents = unitPrice?.unitPriceCents ?? null;
   const shipCents = unitPrice?.shipPerUnitCents ?? null;
-  const addonTotalCents = lines.reduce(
-    (s, l) => s + lineAddonCents(l) * l.qty,
+  const extrasTotalCents = lines.reduce(
+    (s, l) => s + (lineAddonCents(l) + lineFillingCents(l)) * l.qty,
     0,
   );
   const totalCents =
     unitCents !== null && shipCents !== null
-      ? (unitCents + shipCents) * totalUnits + addonTotalCents
+      ? (unitCents + shipCents) * totalUnits + extrasTotalCents
       : null;
 
   const missingAddress = lines.filter((l) => !addressComplete(l.address));
@@ -362,10 +373,10 @@ export default function CartView() {
                 </span>
                 <span>{formatCents(unitCents * totalUnits)}</span>
               </div>
-              {addonTotalCents > 0 && (
+              {extrasTotalCents > 0 && (
                 <div className="row">
-                  <span>Add-ons</span>
-                  <span>{formatCents(addonTotalCents)}</span>
+                  <span>Add-ons &amp; extras</span>
+                  <span>{formatCents(extrasTotalCents)}</span>
                 </div>
               )}
               <div className="row">

@@ -1,5 +1,5 @@
 import type { DesignDocument } from "./design-document";
-import type { LogoZone } from "./hub";
+import type { HubFilling, LogoZone } from "./hub";
 
 /**
  * The B2C order flow: body style → graphic (pick or design) → message →
@@ -8,7 +8,8 @@ import type { LogoZone } from "./hub";
  */
 
 // What goes IN the piñata. Paper receives the label via the `_fillings`
-// line-item property. Pricing v1: every filling prices as "filled".
+// line-item property. The hub's Fillings editor is the source of truth;
+// this compiled list is only the fallback when the hub block is absent.
 export const FILLINGS = [
   "Candy",
   "School Fun Pack",
@@ -16,7 +17,32 @@ export const FILLINGS = [
   "Cat Treats",
   "Realsy Dates",
 ] as const;
-export type Filling = (typeof FILLINGS)[number];
+export type Filling = string;
+
+/** Hub fillings when present, else the compiled list as plain records. */
+export function resolveFillings(
+  fillings: HubFilling[] | undefined,
+): HubFilling[] {
+  if (Array.isArray(fillings) && fillings.length > 0) return fillings;
+  return FILLINGS.map((label) => ({
+    id: label.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    label,
+    blurb: "",
+    priceCents: 0,
+    imageUrl: null,
+    addons: "all" as const,
+  }));
+}
+
+/** The filling's add-on rule ("none" = it fills the whole box). */
+export function fillingAllowsAddon(
+  f: HubFilling | undefined,
+  addonId: string,
+): boolean {
+  if (!f || f.addons === "all") return true;
+  if (f.addons === "none") return false;
+  return f.addons.includes(addonId);
+}
 
 export type GraphicChoice =
   | {

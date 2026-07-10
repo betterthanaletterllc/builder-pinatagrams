@@ -7,8 +7,9 @@ import {
 } from "@/lib/hub";
 import {
   addressKey,
-  FILLINGS,
+  fillingAllowsAddon,
   formatAddress,
+  resolveFillings,
   type CartLine,
   type DeliveryAddress,
 } from "@/lib/flow";
@@ -210,6 +211,10 @@ export async function POST(req: Request) {
   // Add-ons re-resolve from the live catalog: the client sends ids only,
   // labels + prices come from the hub at order time.
   const addonById = new Map((catalog.addons ?? []).map((a) => [a.id, a]));
+  // Fillings too: label → record (price delta + allowed-add-ons rule).
+  const fillingByLabel = new Map(
+    resolveFillings(catalog.fillings).map((f) => [f.label, f]),
+  );
 
   type CleanLine = {
     title: string;
@@ -220,6 +225,7 @@ export async function POST(req: Request) {
     frontGraphic: string;
     designJson: string;
     filling: string;
+    fillingCents: number;
     addons: HubAddon[];
     deliveryDate: string;
     message: string;
@@ -235,13 +241,21 @@ export async function POST(req: Request) {
       return bad(`${label}: the ${style.name} body is out of stock right now — swap its style and try again.`);
     if (!Number.isInteger(l.qty) || l.qty < 1 || l.qty > MAX_QTY)
       return bad(`${label}: quantity must be between 1 and ${MAX_QTY}.`);
-    if (!(FILLINGS as readonly string[]).includes(l.filling))
+    const fillingRec = fillingByLabel.get(String(l.filling ?? ""));
+    if (!fillingRec)
       return bad(`${label}: pick a filling.`);
     const addonIds = Array.isArray(l.addons) ? [...new Set(l.addons)] : [];
     const addons = addonIds.map((id) => addonById.get(String(id)));
     if (addons.some((a) => !a))
       return bad(
         `${label}: one of its add-ons is no longer available — edit the piñata and re-pick.`,
+      );
+    // The filling's rule, enforced server-side: a stale client can't sneak
+    // an add-on into a filling that doesn't allow it (e.g. Realsy Dates).
+    const blocked = addons.find((a) => !fillingAllowsAddon(fillingRec, a!.id));
+    if (blocked)
+      return bad(
+        `${label}: ${blocked!.label} isn't available with ${fillingRec.label} — edit the piñata and try again.`,
       );
     const dateIssue = deliveryProblemAtCheckout(
       String(l.deliveryDate ?? ""),
@@ -284,7 +298,8 @@ export async function POST(req: Request) {
       design,
       frontGraphic,
       designJson,
-      filling: l.filling,
+      filling: fillingRec.label,
+      fillingCents: fillingRec.priceCents,
       addons: addons as HubAddon[],
       deliveryDate: l.deliveryDate,
       message,
@@ -312,10 +327,12 @@ export async function POST(req: Request) {
     );
   }
   // ONE order shape, exactly like legacy storefront orders: piñata lines at
-  // plain retail, each add-on as its own aggregated product line (money +
-  // sales reporting), while WHICH piñata gets it stays on that piñata
-  // line's _addons attribute (the packer's mapping).
-  const unitPrice = (price.unitPriceCents / 100).toFixed(2);
+  // retail (+ the filling's price delta — a filling is what the piñata IS,
+  // so it prices into the line), each add-on as its own aggregated product
+  // line (money + sales reporting), while WHICH piñata gets it stays on
+  // that piñata line's _addons attribute (the packer's mapping).
+  const lineUnit = (l: CleanLine) =>
+    ((price.unitPriceCents + l.fillingCents) / 100).toFixed(2);
   const addonTotals = (groupLines: CleanLine[]) => {
     const units = new Map<string, { addon: HubAddon; qty: number }>();
     for (const l of groupLines)
@@ -366,7 +383,7 @@ export async function POST(req: Request) {
   // one line per add-on.
   const customLine = (l: CleanLine) => ({
     title: l.title,
-    originalUnitPrice: unitPrice,
+    originalUnitPrice: lineUnit(l),
     quantity: l.qty,
     requiresShipping: true,
     customAttributes: lineAttributes(l),
@@ -506,7 +523,7 @@ export async function POST(req: Request) {
       ...order.lines.map((l) => ({
         variantId: variantBySku.get(customSkuFor(l.styleId))!,
         quantity: l.qty,
-        priceOverride: { amount: unitPrice, currencyCode: "USD" },
+        priceOverride: { amount: lineUnit(l), currencyCode: "USD" },
         customAttributes: lineAttributes(l),
       })),
       ...addonTotals(order.lines).map(({ addon, qty }) => ({

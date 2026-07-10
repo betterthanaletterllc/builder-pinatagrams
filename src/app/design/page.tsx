@@ -3,8 +3,10 @@ import {
   getCatalog,
   type HubAddon,
   type HubBodyStyle,
+  type HubFilling,
   type LogoZone,
 } from "@/lib/hub";
+import { resolveFillings } from "@/lib/flow";
 import { resolveDeliveryConfig, type DeliveryConfig } from "@/lib/delivery";
 import DesignFlow from "./design-flow";
 
@@ -21,6 +23,7 @@ export default async function DesignPage({
   let box: { interiorUrl: string | null; messageZone: LogoZone | null } | null =
     null;
   let addons: HubAddon[] = [];
+  let fillings: HubFilling[] = resolveFillings(undefined);
   let deliveryCfg: DeliveryConfig = resolveDeliveryConfig(undefined);
   let hubDown = false;
   try {
@@ -28,6 +31,7 @@ export default async function DesignPage({
     match = catalog.bodyStyles.find((s) => s.id === style && s.inStock) ?? null;
     box = catalog.box ?? null;
     addons = catalog.addons ?? [];
+    fillings = resolveFillings(catalog.fillings);
     deliveryCfg = resolveDeliveryConfig(catalog.delivery);
   } catch {
     // Hub unreachable — the flow still works; the style is re-validated
@@ -62,6 +66,7 @@ export default async function DesignPage({
         }}
         boxInterior={box}
         addonOptions={addons}
+        fillingOptions={fillings}
         deliveryCfg={deliveryCfg}
       />
     </main>

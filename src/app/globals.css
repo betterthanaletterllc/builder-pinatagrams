@@ -1280,6 +1280,49 @@ body:has(.bottom-stack) .site-footer {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+/* Hub-fed filling cards: photo + blurb + price chip stack vertically. */
+.filling-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 180px;
+  text-align: center;
+}
+
+.filling-card img {
+  width: 120px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.filling-card .filling-blurb {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.filling-card .filling-price {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--good);
+}
+
+.filling-card .filling-price.plus {
+  color: var(--accent);
+}
+
+.addon-row.blocked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.addon-row.blocked:hover {
+  border-color: var(--line);
+}
+
 /* Add-ons (e.g. Double Candy) under the filling cards */
 .addon-list {
   display: flex;
