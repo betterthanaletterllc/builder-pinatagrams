@@ -138,7 +138,11 @@ async function addonVariantIds(
 }
 
 const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
-const BLOB_RE = /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//;
+// The builder's OWN Blob store, exact host — a tampered client can't point
+// _frontGraphic at some other Vercel customer's blob, and Paper allowlists
+// this same hostname (full equality) before snapshotting art at ingest.
+const BLOB_RE =
+  /^https:\/\/yrfds6n4iwscziqm\.public\.blob\.vercel-storage\.com\//;
 const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
 
 type CheckoutBody = { lines: CartLine[]; email?: string };
@@ -279,10 +283,15 @@ export async function POST(req: Request) {
       title = `${str(l.graphic.title, 120) || design} — ${style.name}`;
     } else if (l.graphic?.type === "custom") {
       design = "custom";
-      // The flattened print PNG the editor uploaded to Blob; Paper prints
-      // from this URL. Placeholder only if the upload failed.
+      // The flattened print file the editor uploaded to Blob; Paper prints
+      // from this URL. No placeholder path: an order with unprintable art
+      // is refused HERE, not discovered at print time.
       const art = str(l.graphic.art, 500);
-      frontGraphic = BLOB_RE.test(art) ? art : "PENDING_RENDER_UPLOAD";
+      if (!BLOB_RE.test(art))
+        return bad(
+          `${label}: your design hasn't finished saving — give it a few seconds and try again (or open the design and press Looks good once more).`,
+        );
+      frontGraphic = art;
       const sidecar = str(l.graphic.designUrl, 500);
       designJson = BLOB_RE.test(sidecar) ? sidecar : "";
       title = `Custom Piñatagram — ${style.name}`;
