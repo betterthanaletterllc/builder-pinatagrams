@@ -44,6 +44,15 @@ export function fillingAllowsAddon(
   return f.addons.includes(addonId);
 }
 
+// The uploaded-print-file trio the editor hands back on save/upload. One
+// shared type — editor, shell, and flow must move in lockstep or a missed
+// copy silently drops the hash and checkout refuses the line.
+export type DesignAssets = {
+  art: string | null;
+  designUrl: string | null;
+  artSha256: string | null;
+};
+
 export type GraphicChoice =
   | {
       // an existing front graphic from the Shopify catalog
@@ -60,9 +69,15 @@ export type GraphicChoice =
       preview: string; // small dataURL for cart/library thumbnails
       // Blob-hosted flattened print PNG + design JSON sidecar, uploaded when
       // the customer finishes designing. art becomes the draft order's
-      // _frontGraphic (the file Paper prints).
+      // _frontGraphic (the file Paper prints). artSha256 is the lowercase hex
+      // sha256 of the exact uploaded print bytes — Paper verifies the blob
+      // against it before snapshotting, so checkout refuses blob art without
+      // it. Optional in the type only because carts saved before the field
+      // existed must still parse; those lines re-save (re-upload + hash) via
+      // the editor before they can check out.
       art?: string | null;
       designUrl?: string | null;
+      artSha256?: string | null;
     };
 
 // Where ONE piñata ships. Addresses attach per line (a cart can send to

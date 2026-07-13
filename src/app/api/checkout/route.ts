@@ -144,6 +144,11 @@ const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
 const BLOB_RE =
   /^https:\/\/yrfds6n4iwscziqm\.public\.blob\.vercel-storage\.com\//;
 const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
+// Lowercase hex sha256 of the uploaded print bytes, computed by the editor
+// at save time. Required for blob-hosted art: Paper re-hashes the blob it
+// downloads and refuses a mismatch, so the bytes staged in the transient
+// store can't change between save and snapshot.
+const SHA256_RE = /^[a-f0-9]{64}$/;
 
 type CheckoutBody = { lines: CartLine[]; email?: string };
 
@@ -227,6 +232,7 @@ export async function POST(req: Request) {
     styleName: string;
     design: string;
     frontGraphic: string;
+    frontGraphicSha256: string;
     designJson: string;
     filling: string;
     fillingCents: number;
@@ -272,6 +278,7 @@ export async function POST(req: Request) {
 
     let design: string;
     let frontGraphic: string;
+    let frontGraphicSha256 = "";
     let designJson = "";
     let title: string;
     if (l.graphic?.type === "shopify") {
@@ -292,6 +299,15 @@ export async function POST(req: Request) {
           `${label}: your design hasn't finished saving — give it a few seconds and try again (or open the design and press Looks good once more).`,
         );
       frontGraphic = art;
+      // Blob art without its save-time hash can't be integrity-checked by
+      // Paper, so it can't be sold. Only carts saved before the hash
+      // existed hit this; a re-save re-uploads and stamps it.
+      const sha = str(l.graphic.artSha256, 64).toLowerCase();
+      if (!SHA256_RE.test(sha))
+        return bad(
+          `${label}: this design was saved before a recent update — open it, press Looks good once more, and try again.`,
+        );
+      frontGraphicSha256 = sha;
       const sidecar = str(l.graphic.designUrl, 500);
       designJson = BLOB_RE.test(sidecar) ? sidecar : "";
       title = `Custom Piñatagram — ${style.name}`;
@@ -306,6 +322,7 @@ export async function POST(req: Request) {
       styleName: style.name,
       design,
       frontGraphic,
+      frontGraphicSha256,
       designJson,
       filling: fillingRec.label,
       fillingCents: fillingRec.priceCents,
@@ -375,6 +392,11 @@ export async function POST(req: Request) {
     { key: "_bodyStyle", value: l.styleId },
     { key: "_design", value: l.design },
     { key: "_frontGraphic", value: l.frontGraphic },
+    // Only blob-hosted custom art carries a hash; library picks are
+    // first-party cdn.shopify.com files Paper snapshots without one.
+    ...(l.frontGraphicSha256
+      ? [{ key: "_frontGraphicSha256", value: l.frontGraphicSha256 }]
+      : []),
     ...(l.designJson ? [{ key: "_designJson", value: l.designJson }] : []),
     { key: "_fillings", value: l.filling },
     // Comma-separated labels — exactly how Paper splits _addons. This stays

@@ -616,7 +616,11 @@ export default function DesignFlow({
             initialDesign={editingDraft}
             initialAssets={
               editingDraft && graphic?.type === "custom"
-                ? { art: graphic.art ?? null, designUrl: graphic.designUrl ?? null }
+                ? {
+                    art: graphic.art ?? null,
+                    designUrl: graphic.designUrl ?? null,
+                    artSha256: graphic.artSha256 ?? null,
+                  }
                 : null
             }
             onSave={(design, preview, assets) => {
@@ -628,6 +632,7 @@ export default function DesignFlow({
                 preview,
                 art: assets.art,
                 designUrl: assets.designUrl,
+                artSha256: assets.artSha256,
               });
               setEditingDraft(null);
               goStep("Graphic");
@@ -639,10 +644,17 @@ export default function DesignFlow({
                 prev?.type === "custom" &&
                 JSON.stringify({ ...JSON.parse(docJson), bodyStyleId: prev.design.bodyStyleId }) ===
                   JSON.stringify(prev.design)
-                  ? { ...prev, art: assets.art, designUrl: assets.designUrl }
+                  ? {
+                      ...prev,
+                      art: assets.art,
+                      designUrl: assets.designUrl,
+                      artSha256: assets.artSha256,
+                    }
                   : prev,
               );
-              // …and any cart line that raced ahead of the upload.
+              // …and any cart line that raced ahead of the upload. art and
+              // artSha256 travel in the same patch — a line with one but not
+              // the other can never check out.
               const lines = loadCart();
               let touched = false;
               const next = lines.map((l) => {
@@ -654,6 +666,7 @@ export default function DesignFlow({
                     ...l.graphic,
                     art: assets.art,
                     designUrl: assets.designUrl,
+                    artSha256: assets.artSha256,
                   },
                 };
               });

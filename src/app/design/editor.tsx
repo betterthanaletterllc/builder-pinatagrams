@@ -10,6 +10,7 @@ import {
 import { Group, Image as KonvaImage, Layer, Rect, Stage, Text } from "react-konva";
 import Konva from "konva";
 import type { LogoZone } from "@/lib/hub";
+import type { DesignAssets } from "@/lib/flow";
 import {
   artboardPx,
   coverFit,
@@ -276,20 +277,18 @@ export default function Editor({
   onSave?: (
     design: DesignDocument,
     preview: string,
-    assets: { art: string | null; designUrl: string | null },
+    assets: DesignAssets,
   ) => void;
   // Fires when the BACKGROUND print upload finishes (the flow advances
   // immediately on save; the print file catches up). docJson lets the
   // receiver make sure the assets still match the current design.
-  onAssets?: (
-    assets: { art: string | null; designUrl: string | null },
-    docJson: string,
-  ) => void;
+  onAssets?: (assets: DesignAssets, docJson: string) => void;
   // Re-editing an existing design ("Edit graphic") — photos and text intact.
   initialDesign?: DesignDocument | null;
   // The assets already uploaded for initialDesign — an unchanged re-save
-  // reuses them instead of re-exporting and re-uploading.
-  initialAssets?: { art: string | null; designUrl: string | null } | null;
+  // reuses them instead of re-exporting and re-uploading. Partial: designs
+  // saved before the sha256 stamp have no hash and must NOT reuse.
+  initialAssets?: Partial<DesignAssets> | null;
 }) {
   // v1 freeform documents can't open here — they start fresh at the picker
   // (the flow keeps their old flattened art unless they save a new design).
@@ -517,10 +516,18 @@ export default function Editor({
 
     // Nothing changed since the last save → the uploaded print file is
     // still exactly right; reuse it instead of re-exporting/re-uploading.
-    if (docJson === savedDocJson.current && initialAssets?.art) {
+    // The reuse also requires the stored hash: designs saved before the
+    // sha256 stamp existed must fall through to a fresh export + upload —
+    // that re-save is how a pre-stamp cart line becomes checkoutable.
+    if (
+      docJson === savedDocJson.current &&
+      initialAssets?.art &&
+      initialAssets?.artSha256
+    ) {
       onSave(doc, preview, {
         art: initialAssets.art,
         designUrl: initialAssets.designUrl ?? null,
+        artSha256: initialAssets.artSha256,
       });
       return;
     }
@@ -539,7 +546,7 @@ export default function Editor({
           pixelRatio: px.width / (px.width * geo.scale),
         })
       : null;
-    onSave(doc, preview, { art: null, designUrl: null });
+    onSave(doc, preview, { art: null, designUrl: null, artSha256: null });
 
     if (!full) return;
     const hasPhoto = doc.slots.some((s) => s?.kind === "photo");
@@ -555,6 +562,17 @@ export default function Editor({
           doc.artboard.dpi,
           format,
         );
+        // Hash the exact bytes being uploaded (post-DPI-stamp) — Paper
+        // re-hashes what it downloads from the blob and refuses a mismatch.
+        // A digest failure lands in the catch below: art stays null and
+        // checkout refuses the line, same as an upload failure.
+        const digest = await crypto.subtle.digest(
+          "SHA-256",
+          await printBlob.arrayBuffer(),
+        );
+        const artSha256 = Array.from(new Uint8Array(digest))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
         const { upload } = await import("@vercel/blob/client");
         const id =
           typeof crypto !== "undefined" && crypto.randomUUID
@@ -580,9 +598,13 @@ export default function Editor({
             },
           ),
         ]);
-        onAssets?.({ art: put.url, designUrl: sidecar.url }, docJson);
+        onAssets?.(
+          { art: put.url, designUrl: sidecar.url, artSha256 },
+          docJson,
+        );
       } catch {
-        // stay on the PENDING fallback — the design itself is safe
+        // art stays null — checkout refuses the line until a re-save
+        // succeeds; the design itself is safe in the document
       }
     })();
   };
