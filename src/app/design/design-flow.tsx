@@ -652,13 +652,26 @@ export default function DesignFlow({
                     }
                   : prev,
               );
-              // …and any cart line that raced ahead of the upload. art and
-              // artSha256 travel in the same patch — a line with one but not
-              // the other can never check out.
+              // …and any cart line holding THIS design that raced ahead of
+              // the upload (or predates hashes: art set, hash missing).
+              // Identity = the design document itself, same comparison as
+              // the setGraphic patch above — patching by "art-less" alone
+              // would stamp SOME OTHER design's art + its validly-matching
+              // hash onto an unrelated line, and Paper would print the
+              // wrong piñata with a passing integrity check.
               const lines = loadCart();
               let touched = false;
               const next = lines.map((l) => {
-                if (l.graphic.type !== "custom" || l.graphic.art) return l;
+                if (l.graphic.type !== "custom") return l;
+                if (l.graphic.art && l.graphic.artSha256) return l;
+                const doc = l.graphic.design;
+                if (
+                  JSON.stringify({
+                    ...JSON.parse(docJson),
+                    bodyStyleId: doc.bodyStyleId,
+                  }) !== JSON.stringify(doc)
+                )
+                  return l;
                 touched = true;
                 return {
                   ...l,

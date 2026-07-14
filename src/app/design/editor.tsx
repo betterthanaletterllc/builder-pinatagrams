@@ -45,7 +45,10 @@ import { toPrintBlob } from "@/lib/print-png";
 
 const MAX_STAGE_WIDTH = 760;
 const NARROW = 520;
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+// Decode-sanity bound only — real camera files never get near this. Photo
+// SIZE is never a reason to refuse an upload; ingestPhoto compresses
+// whatever it's given down to a bounded data URL.
+const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
 
 function useImg(src: string | null): {
   img: HTMLImageElement | null;
@@ -73,13 +76,79 @@ function useImg(src: string | null): {
 }
 
 /**
- * Downscale + recompress an upload before it becomes a data URL. Raw photos
- * ride inside the design document all the way to /api/checkout, and Vercel
- * caps request bodies at ~4.5 MB — a phone photo embedded as base64 would
- * make the cart permanently un-checkoutable. 1600px JPEG keeps well clear
- * while still exceeding what the print zone needs from a photo layer.
+ * Ingest an upload into a bounded data URL. Photos ride inside the design
+ * document through sessionStorage (draft) and localStorage (cart), both
+ * ~5 MB quotas — so every photo must come out SMALL, and ingest must never
+ * fail on size (compress harder instead of refusing).
+ *
+ * Dimensions: downscale so the image still COVERS the full 2400×1170
+ * artboard (8"×3.9" @300dpi) — full print resolution even if the photo
+ * later moves to a whole-label slot. Never upscale; a hard long-edge
+ * bound also tames panoramas the cover rule wouldn't shrink.
+ *
+ * Encoding: JPEG unless the image ACTUALLY contains transparent pixels
+ * (scanned, not guessed from the container — phone PNGs are usually just
+ * photos, and a lossless 2400px photo is megabytes). Then a byte ladder:
+ * quality rungs at each size, then dimensions, until under the per-photo
+ * cap. The floor rung always returns — an upload can degrade, never fail.
  */
-async function downscaleToDataUrl(file: File): Promise<string> {
+const INGEST_COVER_W = 2400;
+const INGEST_COVER_H = 1170;
+// Photos ride the design doc into sessionStorage (draft) and localStorage
+// (cart), which charge ~2 bytes per UTF-16 char and bottom out around
+// 2.6M chars (Safari's 5 MB). Caps are therefore in dataURL CHARS:
+// 4 capped JPEG photos + preview + JSON ≈ 2.4M chars — inside the
+// tightest real quota. Real-alpha images (usually flat logos that
+// compress far below this anyway) get a little more room.
+const INGEST_CAP_CHARS = 550_000;
+const INGEST_CAP_CHARS_PNG = 900_000;
+// Absolute long-edge bound: shrinks panoramas/scroll-captures the cover
+// rule alone wouldn't touch, and keeps every canvas far inside iOS
+// Safari's canvas-area limit (a silent-failure zone).
+const INGEST_LONG_EDGE = 3200;
+
+function encodeCanvas(
+  img: HTMLImageElement,
+  w: number,
+  h: number,
+  type: string,
+  quality?: number,
+): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(w));
+  canvas.height = Math.max(1, Math.round(h));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no-2d-context");
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const out = canvas.toDataURL(type, quality);
+  // Over-limit canvases fail SILENTLY as "data:," — surface, don't store.
+  if (out.length < 100) throw new Error("undecodable");
+  return out;
+}
+
+/** True only if the decoded image has actually-transparent pixels. */
+function hasRealAlpha(img: HTMLImageElement): boolean {
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 32;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return false;
+  ctx.drawImage(img, 0, 0, 32, 32);
+  try {
+    const data = ctx.getImageData(0, 0, 32, 32).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] < 250) return true;
+    }
+  } catch {
+    // tainted canvas can't happen for local files; play safe anyway
+    return true;
+  }
+  return false;
+}
+
+async function ingestPhoto(
+  file: File,
+): Promise<{ src: string; w: number; h: number }> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -88,21 +157,60 @@ async function downscaleToDataUrl(file: File): Promise<string> {
       i.onerror = () => reject(new Error("undecodable"));
       i.src = url;
     });
-    const MAX = 1600;
-    const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
-    const w = Math.max(1, Math.round(img.naturalWidth * scale));
-    const h = Math.max(1, Math.round(img.naturalHeight * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("no-2d-context");
-    ctx.drawImage(img, 0, 0, w, h);
-    // JPEG unless the image likely has transparency (png keeps alpha).
-    const wantsAlpha = file.type === "image/png" || file.type === "image/webp";
-    return wantsAlpha
-      ? canvas.toDataURL("image/png")
-      : canvas.toDataURL("image/jpeg", 0.85);
+    // Smallest size that still covers the full artboard at print res,
+    // bounded by the absolute long edge (never upscale).
+    const natW = img.naturalWidth;
+    const natH = img.naturalHeight;
+    const cover = Math.max(INGEST_COVER_W / natW, INGEST_COVER_H / natH);
+    const scale = Math.min(
+      Math.min(1, cover),
+      INGEST_LONG_EDGE / Math.max(natW, natH),
+    );
+    let w = Math.max(1, Math.round(natW * scale));
+    let h = Math.max(1, Math.round(natH * scale));
+    // Shrink toward (never past) a long-edge floor.
+    const shrink = (floor: number) => {
+      const f = Math.max(0.85, floor / Math.max(w, h));
+      w = Math.max(1, Math.round(w * f));
+      h = Math.max(1, Math.round(h * f));
+    };
+
+    const alpha =
+      (file.type === "image/png" || file.type === "image/webp") &&
+      hasRealAlpha(img);
+
+    if (alpha) {
+      // Real transparency: PNG, stepping dimensions (quality isn't a PNG
+      // knob). Flat logos land far under the cap at full size.
+      let out = encodeCanvas(img, w, h, "image/png");
+      while (out.length > INGEST_CAP_CHARS_PNG && Math.max(w, h) > 1000) {
+        shrink(1000);
+        out = encodeCanvas(img, w, h, "image/png");
+      }
+      if (out.length > INGEST_CAP_CHARS_PNG) {
+        // Photographic content with alpha (e.g. iOS subject cutouts):
+        // lossy WebP keeps the transparency at JPEG-ish sizes. Safari
+        // can't ENCODE WebP and silently falls back to PNG — detect by
+        // prefix; if so the oversized PNG stands (rare; eats storage
+        // headroom but never fails the upload).
+        const webp = encodeCanvas(img, w, h, "image/webp", 0.75);
+        if (webp.startsWith("data:image/webp")) out = webp;
+      }
+      return { src: out, w, h };
+    }
+
+    // JPEG: quality rungs at each size, then shrink and try again. The
+    // floor rung accepts whatever it yields — ingest NEVER fails on size.
+    // Terminates: dimensions decrease geometrically to the floor.
+    for (;;) {
+      for (const q of [0.8, 0.7, 0.62]) {
+        const out = encodeCanvas(img, w, h, "image/jpeg", q);
+        if (out.length <= INGEST_CAP_CHARS) return { src: out, w, h };
+      }
+      if (Math.max(w, h) <= 1280) break;
+      shrink(1280);
+    }
+    return { src: encodeCanvas(img, w, h, "image/jpeg", 0.55), w, h };
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -438,25 +546,23 @@ export default function Editor({
     const i = uploadTarget.current;
     if (i === null) return;
     if (file.size > MAX_UPLOAD_BYTES) {
-      alert("Please pick an image under 8 MB.");
+      alert(
+        "That file is unusually huge — export it as a normal JPG or PNG and try again.",
+      );
       return;
     }
     try {
-      const src = await downscaleToDataUrl(file);
-      const probe = new window.Image();
-      probe.onload = () => {
-        setSlot(i, {
-          kind: "photo",
-          src,
-          natW: probe.naturalWidth,
-          natH: probe.naturalHeight,
-          offset: 0.5,
-        });
-        setSelectedSlot(i);
-      };
-      probe.onerror = () =>
-        alert("That image couldn't be read — try a JPG or PNG.");
-      probe.src = src;
+      // ingestPhoto never fails on size — it compresses to fit. Its output
+      // dims ARE the encoded image's dims (no second decode needed).
+      const photo = await ingestPhoto(file);
+      setSlot(i, {
+        kind: "photo",
+        src: photo.src,
+        natW: photo.w,
+        natH: photo.h,
+        offset: 0.5,
+      });
+      setSelectedSlot(i);
     } catch {
       alert("That image couldn't be read — try a JPG or PNG.");
     }

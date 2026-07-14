@@ -164,12 +164,36 @@ export default function CartView() {
     setSubmitting(true);
     setError(null);
     trackBeginCheckout(totalCents);
+    // Re-read storage NOW: a background art upload may have patched the
+    // cart since this page mounted, and the "give it a few seconds and try
+    // again" retry only works if the retry actually sees the patch.
+    const current = loadCart();
+    setLines(current);
     try {
+      // The server prices from ids and prints from the uploaded Blob URLs
+      // (art/designUrl/artSha256) — it never reads the embedded design
+      // document or the preview data URL. Null ONLY those two on the POST
+      // (photo-heavy customs would otherwise blow Vercel's ~4.5 MB body
+      // cap); spread keeps every other field — checkout hard-requires
+      // artSha256 for blob art, and an allowlist here would silently drop
+      // the next field someone adds.
+      const payloadLines = current.map((l) =>
+        l.graphic.type === "custom"
+          ? {
+              ...l,
+              graphic: {
+                ...l.graphic,
+                design: null,
+                preview: "",
+              } as unknown as CartLine["graphic"],
+            }
+          : l,
+      );
       // No email squeeze: Shopify's payment page collects contact info.
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines }),
+        body: JSON.stringify({ lines: payloadLines }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -182,7 +206,7 @@ export default function CartView() {
         if (createdSoFar && createdSoFar.length > 0) {
           const orderedKeys = new Set(createdSoFar.map((o) => o.groupKey));
           update(
-            lines.filter(
+            current.filter(
               (l) => !addressComplete(l.address) || !orderedKeys.has(addressKey(l.address)),
             ),
           );
