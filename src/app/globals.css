@@ -250,6 +250,47 @@ a.style-card:focus-visible {
   margin-top: 8px;
 }
 
+.price-lines .discount-row {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.discount-field {
+  margin-top: 12px;
+}
+
+.discount-field .in {
+  text-transform: uppercase;
+}
+
+.discount-applied {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--good);
+  border-radius: 8px;
+  background: rgba(85, 168, 113, 0.08);
+  font-size: 14px;
+  color: var(--good);
+}
+
+.discount-msg {
+  margin-top: 6px;
+  color: var(--warn);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .note {
   font-size: 12px;
   color: var(--muted);

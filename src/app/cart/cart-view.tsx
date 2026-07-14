@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  discountCents,
   formatCents,
   HUB_URL,
   priceUrl,
+  resolveDiscount,
   type HubAddon,
+  type HubDiscount,
   type HubFilling,
   type HubPrice,
 } from "@/lib/hub";
@@ -24,6 +27,7 @@ import { cdnThumb } from "@/lib/library-data";
 import { trackBeginCheckout } from "@/lib/analytics";
 
 const MAX_QTY = 25;
+const DISCOUNT_KEY = "pinatagrams-builder-discount";
 
 type CheckoutResult =
   | {
@@ -86,9 +90,27 @@ export default function CartView() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [codeInput, setCodeInput] = useState("");
+  const [discount, setDiscount] = useState<HubDiscount | null>(null);
+  const [discountMsg, setDiscountMsg] = useState<string | null>(null);
+  const [checkingCode, setCheckingCode] = useState(false);
 
   useEffect(() => {
     setLines(loadCart());
+    // Restore a previously applied code (survives a cart refresh). If it no
+    // longer resolves (deleted/deactivated since), self-heal: clear the
+    // field + storage so a dead code can't sit there looking applied.
+    const savedCode = localStorage.getItem(DISCOUNT_KEY);
+    if (savedCode) {
+      setCodeInput(savedCode);
+      resolveDiscount(savedCode).then((d) => {
+        if (d) setDiscount(d);
+        else {
+          setCodeInput("");
+          localStorage.removeItem(DISCOUNT_KEY);
+        }
+      });
+    }
     fetch(
       priceUrl({
         qty: 1,
@@ -130,6 +152,35 @@ export default function CartView() {
     saveCart(next);
   };
 
+  const applyCode = async () => {
+    const code = codeInput.trim().toUpperCase();
+    if (!code) {
+      setDiscount(null);
+      setDiscountMsg(null);
+      localStorage.removeItem(DISCOUNT_KEY);
+      return;
+    }
+    setCheckingCode(true);
+    setDiscountMsg(null);
+    const d = await resolveDiscount(code);
+    setCheckingCode(false);
+    if (!d) {
+      setDiscount(null);
+      setDiscountMsg("That code isn’t valid.");
+      localStorage.removeItem(DISCOUNT_KEY);
+      return;
+    }
+    setDiscount(d);
+    localStorage.setItem(DISCOUNT_KEY, d.code);
+  };
+
+  const clearCode = () => {
+    setCodeInput("");
+    setDiscount(null);
+    setDiscountMsg(null);
+    localStorage.removeItem(DISCOUNT_KEY);
+  };
+
   if (lines === null) return <p className="note">Loading…</p>;
 
   if (lines.length === 0 && !result) {
@@ -150,9 +201,22 @@ export default function CartView() {
     (s, l) => s + (lineAddonCents(l) + lineFillingCents(l)) * l.qty,
     0,
   );
+  // Merchandise only (piñatas + fillings + add-ons) — a discount applies
+  // here, never to shipping. Matches the invoice exactly for single
+  // destinations and fixed codes; a multi-destination percent may differ a
+  // cent (Shopify rounds per draft). The invoice is always the real total.
+  const merchandiseCents =
+    unitCents !== null ? unitCents * totalUnits + extrasTotalCents : null;
+  const discountAmountCents =
+    merchandiseCents !== null ? discountCents(discount, merchandiseCents) : 0;
+  // A code that no longer qualifies (subtotal fell below its minimum).
+  const belowMin =
+    !!discount &&
+    merchandiseCents !== null &&
+    merchandiseCents < discount.minSubtotalCents;
   const totalCents =
-    unitCents !== null && shipCents !== null
-      ? (unitCents + shipCents) * totalUnits + extrasTotalCents
+    unitCents !== null && shipCents !== null && merchandiseCents !== null
+      ? merchandiseCents + shipCents * totalUnits - discountAmountCents
       : null;
 
   const missingAddress = lines.filter((l) => !addressComplete(l.address));
@@ -190,10 +254,15 @@ export default function CartView() {
           : l,
       );
       // No email squeeze: Shopify's payment page collects contact info.
+      // Send the CODE only (never a claimed amount); checkout re-resolves
+      // and applies it to each draft, and the invoice shows the real total.
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines: payloadLines }),
+        body: JSON.stringify({
+          lines: payloadLines,
+          ...(discount && !belowMin ? { discountCode: discount.code } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -211,6 +280,17 @@ export default function CartView() {
             ),
           );
           setResult({ dryRun: false, orders: createdSoFar });
+          // A FIXED code's total was split across ALL destinations; part of
+          // it is already baked into the created order(s). Re-applying it to
+          // the surviving lines would over-discount (the code's "$X total"
+          // becomes "$X again"), so drop it on the retry. Percent codes are
+          // per-order by nature and stay.
+          if (discount?.type === "fixed") {
+            clearCode();
+            setDiscountMsg(
+              `${discount.code} was applied to the order(s) already created.`,
+            );
+          }
         }
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
@@ -403,6 +483,12 @@ export default function CartView() {
                   <span>{formatCents(extrasTotalCents)}</span>
                 </div>
               )}
+              {discount && !belowMin && discountAmountCents > 0 && (
+                <div className="row discount-row">
+                  <span>{discount.code}</span>
+                  <span>−{formatCents(discountAmountCents)}</span>
+                </div>
+              )}
               <div className="row">
                 <span>Shipping</span>
                 <span>{formatCents(shipCents * totalUnits)}</span>
@@ -415,6 +501,50 @@ export default function CartView() {
           ) : (
             <p className="note">Getting prices…</p>
           )}
+        </div>
+
+        <div className="discount-field">
+          {discount && !belowMin ? (
+            <div className="discount-applied">
+              <span>
+                ✓ <strong>{discount.code}</strong> applied
+              </span>
+              <button className="btn mini ghost" onClick={clearCode}>
+                Remove
+              </button>
+            </div>
+          ) : (
+            <div className="row" style={{ gap: 8 }}>
+              <input
+                className="in"
+                placeholder="Discount code"
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && applyCode()}
+                style={{ textTransform: "uppercase" }}
+                aria-label="Discount code"
+              />
+              <button
+                className="btn ghost"
+                onClick={applyCode}
+                disabled={checkingCode || !codeInput.trim()}
+              >
+                {checkingCode ? "…" : "Apply"}
+              </button>
+            </div>
+          )}
+          {belowMin && discount && (
+            <p className="note discount-msg">
+              {discount.code} needs a{" "}
+              {formatCents(discount.minSubtotalCents)} minimum — add more to
+              use it, or{" "}
+              <button className="link-btn" onClick={clearCode}>
+                remove it
+              </button>
+              .
+            </p>
+          )}
+          {discountMsg && <p className="note discount-msg">{discountMsg}</p>}
         </div>
 
         {missingAddress.length > 0 && (

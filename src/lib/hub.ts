@@ -45,6 +45,60 @@ export type HubFilling = {
   addons: "all" | "none" | string[];
 };
 
+// A resolved discount code (from the hub via the builder's /api/discount).
+// The builder only ever handles the CODE + this resolved rule — the amount
+// is recomputed server-side at checkout, never trusted from the client.
+export type HubDiscount = {
+  code: string;
+  type: "percent" | "fixed";
+  value: number; // percent 1–100, or CENTS for fixed
+  minSubtotalCents: number; // 0 = no minimum
+};
+
+/**
+ * Resolve a discount code against the hub (through the builder's own
+ * rate-limited /api/discount proxy — same origin, no CORS). Returns null
+ * for unknown/inactive codes; never throws (a lookup blip = no discount).
+ * Client-only (uses a relative URL).
+ */
+export async function resolveDiscount(
+  code: string,
+): Promise<HubDiscount | null> {
+  const clean = code.trim().toUpperCase();
+  if (!clean) return null;
+  try {
+    const res = await fetch("/api/discount", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: clean }),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return (j?.discount as HubDiscount | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Cents saved by a discount on a merchandise subtotal (0 if it doesn't
+ *  qualify). Powers the cart preview. Exact for single-destination orders
+ *  and for fixed codes (the server's per-draft fixed shares sum to this);
+ *  a percent code split across MULTIPLE destinations can differ by a cent
+ *  or two, since Shopify rounds the percentage on each draft independently.
+ *  Either way the customer confirms the real total on each Shopify invoice
+ *  before paying — this is a preview, the invoice is the truth. */
+export function discountCents(
+  d: HubDiscount | null,
+  subtotalCents: number,
+): number {
+  if (!d || subtotalCents < d.minSubtotalCents) return 0;
+  const off =
+    d.type === "percent"
+      ? Math.round((subtotalCents * d.value) / 100)
+      : d.value;
+  return Math.min(off, subtotalCents);
+}
+
 export type HubCatalog = {
   bodyStyles: HubBodyStyle[];
   // Global box-interior config (gift-message step); absent on older deploys.
