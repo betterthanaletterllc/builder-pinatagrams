@@ -296,7 +296,7 @@ export async function POST(req: Request) {
       const art = str(l.graphic.art, 500);
       if (!BLOB_RE.test(art))
         return bad(
-          `${label}: your design hasn't finished saving — give it a few seconds and try again (or open the design and press Looks good once more).`,
+          `${label}: your design hasn't finished saving — give it a few seconds and try again (or edit the piñata, open Edit graphic, and press "Use this design" to re-save).`,
         );
       frontGraphic = art;
       // Blob art without its save-time hash can't be integrity-checked by
@@ -305,7 +305,9 @@ export async function POST(req: Request) {
       const sha = str(l.graphic.artSha256, 64).toLowerCase();
       if (!SHA256_RE.test(sha))
         return bad(
-          `${label}: this design was saved before a recent update — open it, press Looks good once more, and try again.`,
+          // "Use this design" is the only action that re-exports + re-hashes;
+          // "Looks good" merely navigates. Point at the button that heals.
+          `${label}: this design was saved before a recent update — edit the piñata, open Edit graphic, press "Use this design", then try again.`,
         );
       frontGraphicSha256 = sha;
       const sidecar = str(l.graphic.designUrl, 500);
