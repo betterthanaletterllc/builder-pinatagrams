@@ -401,7 +401,9 @@ export async function POST(req: Request) {
     ...(l.addons.length
       ? [{ key: "Add-ons", value: l.addons.map((a) => a.label).join(", ") }]
       : []),
-    { key: "Arrives on", value: l.deliveryDate },
+    // No visible "Arrives on" row — the shipping line carries delivery now,
+    // so the invoice doesn't repeat a per-item date box. Paper still gets
+    // the exact date from the hidden _requestedDate below.
     // Underscored = hidden machine rails Paper reads at fulfillment.
     { key: "_bodyStyle", value: l.styleId },
     { key: "_design", value: l.design },
