@@ -401,7 +401,7 @@ export async function POST(req: Request) {
     ...(l.addons.length
       ? [{ key: "Add-ons", value: l.addons.map((a) => a.label).join(", ") }]
       : []),
-    { key: "Arrives by", value: l.deliveryDate },
+    { key: "Arrives on", value: l.deliveryDate },
     // Underscored = hidden machine rails Paper reads at fulfillment.
     { key: "_bodyStyle", value: l.styleId },
     { key: "_design", value: l.design },
@@ -464,7 +464,7 @@ export async function POST(req: Request) {
           phone: a.phone || null,
         },
         shippingLine: {
-          title: "FedEx 2-Day delivery",
+          title: "Delivered on your selected dates",
           price: ((price.shipPerUnitCents * units) / 100).toFixed(2),
         },
         lineItems: [

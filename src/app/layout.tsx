@@ -55,9 +55,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 className="brand-logo"
                 priority
               />
-              <span className="brand">
-                <em>Builder</em>
-              </span>
             </a>
             <CartLink />
           </div>

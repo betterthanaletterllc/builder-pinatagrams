@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import {
   addressComplete,
   addressKey,
@@ -113,10 +112,6 @@ export default function DesignFlow({
   const [cartAddress, setCartAddress] = useState<DeliveryAddress | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
   const [editLineId, setEditLineId] = useState<string | null>(null);
-  const [packedFor, setPackedFor] = useState<{
-    name: string;
-    art: string | null;
-  } | null>(null);
   const [cartError, setCartError] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [switcherStyles, setSwitcherStyles] = useState<HubBodyStyle[] | null>(null);
@@ -261,7 +256,6 @@ export default function DesignFlow({
           ? view
           : null,
       );
-      setPackedFor(null);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -305,7 +299,7 @@ export default function DesignFlow({
       .querySelector(".chip.active")
       ?.scrollIntoView({ inline: "center", block: "nearest" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, graphicMode, packedFor]);
+  }, [step, graphicMode]);
 
   // Persist the draft on every meaningful change (only once hydrated —
   // never on the initial commit, which still holds empty state).
@@ -351,10 +345,10 @@ export default function DesignFlow({
   const choosing = step === "Graphic" && graphicMode !== null;
   const docked =
     step === "Filling" || step === "Delivery" || step === "Send to";
-  const railVisible = !choosing && !docked && !packedFor;
+  const railVisible = !choosing && !docked;
   // The dock shows on EVERY step (not just the docked ones) — inside the
   // library/canvas it would fight the editor's own bottom UI, so not there.
-  const dockVisible = !choosing && !packedFor;
+  const dockVisible = !choosing;
 
   const selectedAddonLabels = addons
     .map((id) => addonOptions.find((a) => a.id === id)?.label)
@@ -400,7 +394,7 @@ export default function DesignFlow({
     Delivery: "Step Five: Pick the delivery day",
     "Send to": "Step Six: Who's it going to?",
   };
-  const showHeading = !choosing && !packedFor;
+  const showHeading = !choosing;
 
   /* --- style switcher ------------------------------------------------------ */
   const openSwitcher = async () => {
@@ -474,29 +468,15 @@ export default function DesignFlow({
     clearDraft();
     clearLibraryState(); // the next piñata browses the library fresh
     trackAddToCart(deliveredCents);
-    // Show the packed screen, then fully disarm the flow so browser Back
-    // can't resurrect a completed order and duplicate the cart line.
-    setPackedFor({ name: shipTo.name || styleInfo.name, art: artUrl });
-    setGraphic(null);
-    setEditingDraft(null);
-    setMessage("");
-    setFilling(null);
-    setAddons([]);
-    setDate("");
-    setAddress(EMPTY_ADDRESS);
-    setEditLineId(null);
-    setStepState("Graphic");
-    const u = new URL(window.location.href);
-    u.searchParams.set("step", "graphic");
-    u.searchParams.delete("view");
-    u.searchParams.delete("edit");
-    window.history.replaceState({}, "", u);
+    // Straight to the cart — no success interstitial. A full navigation also
+    // disarms the flow so browser Back can't resurrect a completed line.
+    window.location.assign("/cart");
   };
 
   // The step's primary action lives in a FIXED bar just above the dock —
   // always visible, never scrolled away, never hidden under the summary.
   const primaryCta = (() => {
-    if (choosing || packedFor) return null;
+    if (choosing) return null;
     switch (step) {
       case "Graphic":
         return graphic
@@ -515,7 +495,7 @@ export default function DesignFlow({
         // the cart. First piñata (no address yet) → continue to Send-to.
         return hasCartAddress
           ? {
-              label: editLineId ? "Save changes →" : "Add to cart →",
+              label: "Add to cart →",
               onClick: addToCart,
               disabled: !!dateProblem || !graphic || !filling,
             }
@@ -535,35 +515,6 @@ export default function DesignFlow({
     }
   })();
 
-  /* --- packed! ------------------------------------------------------------- */
-  if (packedFor) {
-    return (
-      <div className="flow-root">
-        <div className="packed">
-          <BoxPreview
-            styleName={styleInfo.name}
-            boxImageUrl={styleInfo.boxImageUrl}
-            logoZone={styleInfo.logoZone}
-            artUrl={packedFor.art}
-            message=""
-            filling={null}
-            deliveryDate={null}
-            mode="closed"
-            variant="bare"
-          />
-          <h1 className="step-h1">{packedFor.name}&apos;s box is packed! 🎉</h1>
-          <div className="el-controls packed-actions">
-            <Link className="btn primary" href="/">
-              Send another piñata
-            </Link>
-            <Link className="btn" href="/cart">
-              Checkout →
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const steps = (
     <div>
@@ -848,7 +799,7 @@ export default function DesignFlow({
           ) : dateProblem ? (
             <div className="notice warn">{dateProblem}</div>
           ) : (
-            <div className="notice info">Arriving by {date}.</div>
+            <div className="notice info">Arrives on {date}.</div>
           )}
         </div>
       )}
@@ -919,9 +870,6 @@ export default function DesignFlow({
               This design is too large to save — try fewer or smaller photos.
             </div>
           )}
-          <p className="note">
-            <Link href="/cart">View cart</Link>
-          </p>
         </div>
       )}
     </div>
@@ -1087,7 +1035,7 @@ export default function DesignFlow({
               {deliveredCents !== null && (
                 <div className="dock-price">
                   <strong>{formatCents(deliveredCents)}</strong>
-                  <span>delivered</span>
+                  <span>shipping included</span>
                 </div>
               )}
               <button
@@ -1113,7 +1061,7 @@ export default function DesignFlow({
                 <strong>{styleInfo.name}</strong>
                 {deliveredCents !== null && (
                   <span className="dock-mini-price">
-                    {formatCents(deliveredCents)} delivered
+                    {formatCents(deliveredCents)} · shipping included
                   </span>
                 )}
                 <span className="dock-chev" aria-hidden>

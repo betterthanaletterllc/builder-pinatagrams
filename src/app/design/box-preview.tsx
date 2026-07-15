@@ -152,7 +152,7 @@ export default function BoxPreview({
                     height: `${logoZone.h * 100}%`,
                   }}
                 >
-                  your graphic goes here
+                  Graphic here
                 </div>
               )}
             </div>

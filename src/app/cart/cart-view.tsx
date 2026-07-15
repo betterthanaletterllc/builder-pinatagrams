@@ -377,7 +377,12 @@ export default function CartView() {
                       address: l.address,
                       editLineId: l.id,
                     });
-                    router.push(`/design?style=${l.styleId}&edit=${l.id}`);
+                    // Land on the last step (address is inherited, so the
+                    // Send-to step is skipped) — ready to re-save, with the
+                    // chips to jump back to graphic/message/etc.
+                    router.push(
+                      `/design?style=${l.styleId}&edit=${l.id}&step=delivery`,
+                    );
                   }}
                 >
                   Edit

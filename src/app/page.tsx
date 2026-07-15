@@ -38,8 +38,7 @@ export default async function Home() {
     ]);
     return (
       <main>
-        <h1>Build a Piñatagram</h1>
-        <p className="sub">Step One: Pick a body style</p>
+        <h1 className="step-h1">Step One: Pick a body style</h1>
         <BuilderPreview bodyStyles={catalog.bodyStyles} priceCents={priceCents} />
       </main>
     );
