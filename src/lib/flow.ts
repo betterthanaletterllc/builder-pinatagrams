@@ -80,8 +80,10 @@ export type GraphicChoice =
       artSha256?: string | null;
     };
 
-// Where ONE piñata ships. Addresses attach per line (a cart can send to
-// several people); the payer's email is collected once at checkout.
+// Where the order ships. Stored per line for the checkout's grouping, but
+// the whole cart is ONE destination — loadCart() collapses any divergent
+// addresses to a single one (see there). The payer's contact info is
+// collected on Shopify's payment page.
 export type DeliveryAddress = {
   name: string;
   address1: string;
@@ -116,7 +118,20 @@ const CART_KEY = "pinatagrams-builder-cart";
 export function loadCart(): CartLine[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(CART_KEY) ?? "[]");
+    const lines: CartLine[] = JSON.parse(localStorage.getItem(CART_KEY) ?? "[]");
+    if (!Array.isArray(lines) || lines.length < 2) return lines;
+    // Single-address invariant: the whole cart ships to ONE address (one
+    // order → one invoice). A cart left over from the old multi-address flow
+    // could hold divergent addresses; collapse them to the first complete
+    // one so the flow, cart UI, and checkout all agree on one destination.
+    // (No-op for carts already single-address.) Not persisted here — the
+    // next saveCart writes it back; every read re-collapses idempotently.
+    const one =
+      lines.find((l) => addressComplete(l.address))?.address ?? lines[0].address;
+    const key = addressKey(one);
+    return lines.some((l) => addressKey(l.address) !== key)
+      ? lines.map((l) => (addressKey(l.address) === key ? l : { ...l, address: one }))
+      : lines;
   } catch {
     return [];
   }

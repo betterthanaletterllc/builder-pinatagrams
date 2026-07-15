@@ -17,17 +17,32 @@ import {
 import {
   addressComplete,
   addressKey,
+  EMPTY_ADDRESS,
   loadCart,
+  rememberAddress,
   resolveFillings,
   saveCart,
   saveDraft,
   type CartLine,
+  type DeliveryAddress,
 } from "@/lib/flow";
 import { cdnThumb } from "@/lib/library-data";
 import { trackBeginCheckout } from "@/lib/analytics";
 
 const MAX_QTY = 25;
 const DISCOUNT_KEY = "pinatagrams-builder-discount";
+
+// The whole cart ships to ONE address (one order, one invoice). Editing it
+// here rewrites every line.
+const ADDRESS_FIELDS: [keyof DeliveryAddress, string][] = [
+  ["name", "Recipient name"],
+  ["address1", "Address"],
+  ["address2", "Apt / suite (optional)"],
+  ["city", "City"],
+  ["province", "State"],
+  ["zip", "ZIP"],
+  ["phone", "Phone (optional)"],
+];
 
 type CheckoutResult =
   | {
@@ -94,6 +109,8 @@ export default function CartView() {
   const [discount, setDiscount] = useState<HubDiscount | null>(null);
   const [discountMsg, setDiscountMsg] = useState<string | null>(null);
   const [checkingCode, setCheckingCode] = useState(false);
+  // Non-null while editing the single ship-to address.
+  const [editingAddr, setEditingAddr] = useState<DeliveryAddress | null>(null);
 
   useEffect(() => {
     setLines(loadCart());
@@ -150,6 +167,17 @@ export default function CartView() {
   const update = (next: CartLine[]) => {
     setLines(next);
     saveCart(next);
+  };
+
+  // The one ship-to address (all lines share it). Editing rewrites every
+  // line so the whole cart stays one destination → one draft → one invoice.
+  const shipTo =
+    (lines ?? []).find((l) => addressComplete(l.address))?.address ?? null;
+  const saveAddr = () => {
+    if (!editingAddr || !addressComplete(editingAddr) || !lines) return;
+    update(lines.map((l) => ({ ...l, address: editingAddr })));
+    rememberAddress(editingAddr);
+    setEditingAddr(null);
   };
 
   const applyCode = async () => {
@@ -220,9 +248,6 @@ export default function CartView() {
       : null;
 
   const missingAddress = lines.filter((l) => !addressComplete(l.address));
-  const destinations = new Set(
-    lines.filter((l) => addressComplete(l.address)).map((l) => addressKey(l.address)),
-  ).size;
 
   const checkout = async () => {
     setSubmitting(true);
@@ -334,16 +359,6 @@ export default function CartView() {
                 · arrives {l.deliveryDate}
                 {l.message ? " · with gift message" : ""}
               </p>
-              {addressComplete(l.address) ? (
-                <p className="note">
-                  → {l.address.name}, {l.address.city}, {l.address.province}
-                </p>
-              ) : (
-                <p className="note" style={{ color: "var(--warn)" }}>
-                  Missing delivery address — remove this piñata and add it
-                  again.
-                </p>
-              )}
               <div className="el-controls">
                 <button
                   className="btn mini"
@@ -461,12 +476,67 @@ export default function CartView() {
       <aside className="panel">
         <h2>Checkout</h2>
 
-        {destinations > 1 && (
-          <div className="notice info">
-            Shipping to {destinations} different addresses — each becomes its
-            own order and invoice.
+        <div className="ship-to">
+          <div className="ship-to-head">
+            <strong>Ship to</strong>
+            {!editingAddr && (
+              <button
+                className="link-btn"
+                onClick={() => setEditingAddr(shipTo ?? EMPTY_ADDRESS)}
+              >
+                {shipTo ? "Edit" : "Add address"}
+              </button>
+            )}
           </div>
-        )}
+          {editingAddr ? (
+            <div className="addr-edit">
+              {ADDRESS_FIELDS.map(([key, label]) => (
+                <label key={key} className="ffield">
+                  <input
+                    className="in"
+                    placeholder={label}
+                    value={editingAddr[key]}
+                    onChange={(e) =>
+                      setEditingAddr({ ...editingAddr, [key]: e.target.value })
+                    }
+                  />
+                </label>
+              ))}
+              <div className="row" style={{ gap: 8 }}>
+                <button
+                  className="btn sm"
+                  onClick={saveAddr}
+                  disabled={!addressComplete(editingAddr)}
+                >
+                  Save address
+                </button>
+                <button
+                  className="btn ghost sm"
+                  onClick={() => setEditingAddr(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : shipTo ? (
+            <p className="note ship-to-addr">
+              {shipTo.name}
+              <br />
+              {shipTo.address1}
+              {shipTo.address2 ? `, ${shipTo.address2}` : ""}
+              <br />
+              {shipTo.city}, {shipTo.province} {shipTo.zip}
+            </p>
+          ) : (
+            <p className="note" style={{ color: "var(--warn)" }}>
+              No delivery address yet — add one to check out.
+            </p>
+          )}
+          <p className="note ship-to-hint">
+            One address per checkout. Sending to someone else? Place this
+            order, then start another.
+          </p>
+        </div>
 
         <div className="price-lines">
           {unitCents !== null && shipCents !== null ? (

@@ -291,6 +291,35 @@ a.style-card:focus-visible {
   cursor: pointer;
 }
 
+.ship-to {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.ship-to-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ship-to-addr {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.ship-to-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.addr-edit {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .note {
   font-size: 12px;
   color: var(--muted);

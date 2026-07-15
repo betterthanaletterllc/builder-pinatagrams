@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   addressComplete,
   addressKey,
+  CART_EVENT,
   clearDraft,
   EMPTY_ADDRESS,
   fillingAllowsAddon,
@@ -105,6 +106,11 @@ export default function DesignFlow({
   const [addonNotice, setAddonNotice] = useState<string | null>(null);
   const [date, setDate] = useState("");
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
+  // The ONE ship-to address for the whole cart (all piñatas go to it). Set
+  // by the first piñata; every piñata after inherits it, so the address
+  // step is skipped for them (and reappears once the cart is emptied).
+  // Kept in sync with the cart via CART_EVENT / storage.
+  const [cartAddress, setCartAddress] = useState<DeliveryAddress | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
   const [editLineId, setEditLineId] = useState<string | null>(null);
   const [packedFor, setPackedFor] = useState<{
@@ -126,15 +132,41 @@ export default function DesignFlow({
     [date, deliveryCfg],
   );
 
+  // Keep the cart's established address fresh (mount + any cart write, this
+  // tab or another). All cart lines share one address, so lines[0] is it.
+  useEffect(() => {
+    const refresh = () => {
+      // loadCart() already collapses the cart to one address; pick the first
+      // complete one (matches the cart page) so both surfaces agree.
+      const lines = loadCart();
+      setCartAddress(
+        lines.find((l) => addressComplete(l.address))?.address ??
+          lines[0]?.address ??
+          null,
+      );
+    };
+    refresh();
+    window.addEventListener(CART_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(CART_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  // Once an address is established, the "Send to" step is skipped and
+  // Delivery is the terminal step. Editing an existing line inherits it too.
+  const hasCartAddress = cartAddress !== null && addressComplete(cartAddress);
+
   /* --- step gating: the furthest step the current state supports ---------- */
   const maxStep = useCallback(
     (g: GraphicChoice | null, f: Filling | null, d: string): number => {
       if (!g) return 0; // Graphic
       if (!f) return 2; // through Filling
       if (deliveryProblem(d, deliveryCfg)) return 3; // through Delivery
-      return 4; // everything
+      // Address already known → Delivery is the last step; else Send-to.
+      return hasCartAddress ? 3 : 4;
     },
-    [deliveryCfg],
+    [deliveryCfg, hasCartAddress],
   );
 
   /* --- history-backed navigation ------------------------------------------ */
@@ -294,6 +326,17 @@ export default function DesignFlow({
   const stepIndex = STEPS.indexOf(step);
   const reachable = maxStep(graphic, filling, date);
 
+  // Clamp down if the current step is no longer reachable — e.g. the cart's
+  // address just loaded (hasCartAddress → true), so "Send to" collapses into
+  // Delivery. Runs after the initial async cart read settles.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (stepIndex > reachable) {
+      setStepState(STEPS[reachable]);
+      writeUrl(STEPS[reachable], null, false);
+    }
+  }, [hydrated, stepIndex, reachable, writeUrl]);
+
   // Previews composite a CDN-resized variant (~60KB), never the print-res
   // original (multi-MB) — that was a visible delay before the graphic
   // appeared on the box. Checkout still sends the full-res URL to Paper.
@@ -388,7 +431,10 @@ export default function DesignFlow({
 
   /* --- cart ---------------------------------------------------------------- */
   const addToCart = () => {
-    if (!graphic || !filling || dateProblem || !addressOk) return;
+    // Every piñata ships to the ONE cart address: an established one is
+    // inherited (the address step was skipped), else the one just entered.
+    const shipTo = hasCartAddress ? cartAddress! : address;
+    if (!graphic || !filling || dateProblem || !addressComplete(shipTo)) return;
     const lines = loadCart();
     // "Save changes" to a line that no longer exists (removed in another tab)
     // must APPEND, not silently vanish.
@@ -413,7 +459,7 @@ export default function DesignFlow({
           fillingAllowsAddon(fillingRec, id),
       ),
       deliveryDate: date,
-      address,
+      address: shipTo,
       qty: existing ? existing.qty : 1,
     };
     const next = existing
@@ -423,13 +469,14 @@ export default function DesignFlow({
       setCartError(true);
       return;
     }
-    rememberAddress(address);
+    rememberAddress(shipTo);
+    setCartAddress(shipTo);
     clearDraft();
     clearLibraryState(); // the next piñata browses the library fresh
     trackAddToCart(deliveredCents);
     // Show the packed screen, then fully disarm the flow so browser Back
     // can't resurrect a completed order and duplicate the cart line.
-    setPackedFor({ name: address.name || styleInfo.name, art: artUrl });
+    setPackedFor({ name: shipTo.name || styleInfo.name, art: artUrl });
     setGraphic(null);
     setEditingDraft(null);
     setMessage("");
@@ -464,11 +511,19 @@ export default function DesignFlow({
           disabled: !filling,
         };
       case "Delivery":
-        return {
-          label: "Continue →",
-          onClick: () => goStep("Send to"),
-          disabled: !!dateProblem,
-        };
+        // Address already known → Delivery is the last step, add straight to
+        // the cart. First piñata (no address yet) → continue to Send-to.
+        return hasCartAddress
+          ? {
+              label: editLineId ? "Save changes →" : "Add to cart →",
+              onClick: addToCart,
+              disabled: !!dateProblem || !graphic || !filling,
+            }
+          : {
+              label: "Continue →",
+              onClick: () => goStep("Send to"),
+              disabled: !!dateProblem,
+            };
       case "Send to":
         return {
           label: editLineId ? "Save changes →" : "Add to cart →",
@@ -801,8 +856,8 @@ export default function DesignFlow({
       {step === "Send to" && (
         <div className="step-panel">
           <p className="note">
-            Each piñata ships to its own person — add another to the cart to
-            send somewhere else.
+            Where should this order go? Everything in your cart ships here —
+            one address per checkout (you can edit it in the cart).
           </p>
 
           {savedAddresses.length > 0 && (
@@ -878,7 +933,7 @@ export default function DesignFlow({
         <button className="chip done" onClick={openSwitcher}>
           ✓ {styleInfo.name} ▾
         </button>
-        {STEPS.map((s, i) => {
+        {STEPS.filter((s) => s !== "Send to" || !hasCartAddress).map((s, i) => {
           const unreachable = i > Math.max(stepIndex, reachable);
           return (
             <button
