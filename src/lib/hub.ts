@@ -45,13 +45,15 @@ export type HubFilling = {
   addons: "all" | "none" | string[];
 };
 
-// A resolved discount code (from the hub via the builder's /api/discount).
-// The builder only ever handles the CODE + this resolved rule — the amount
-// is recomputed server-side at checkout, never trusted from the client.
+// A resolved discount code for the cart's PREVIEW. The real discount is a
+// native Shopify code the builder applies to the draft (Shopify enforces
+// value / min / usage / once-per-customer / expiry) — this rule is only to
+// show an estimated reduced total; the invoice is the source of truth.
 export type HubDiscount = {
   code: string;
-  type: "percent" | "fixed";
-  value: number; // percent 1–100, or CENTS for fixed
+  kind: "order" | "shipping"; // shipping = free shipping
+  type: "percent" | "fixed"; // order only
+  value: number; // percent 1–100, or CENTS for fixed (order only)
   minSubtotalCents: number; // 0 = no minimum
 };
 
@@ -80,23 +82,23 @@ export async function resolveDiscount(
   }
 }
 
-/** Cents saved by a discount on a merchandise subtotal (0 if it doesn't
- *  qualify). Powers the cart preview. Exact for single-destination orders
- *  and for fixed codes (the server's per-draft fixed shares sum to this);
- *  a percent code split across MULTIPLE destinations can differ by a cent
- *  or two, since Shopify rounds the percentage on each draft independently.
- *  Either way the customer confirms the real total on each Shopify invoice
- *  before paying — this is a preview, the invoice is the truth. */
-export function discountCents(
+/** PREVIEW estimate of the cents a code saves (0 if the min isn't met).
+ *  Shipping codes zero out the shipping; order codes take %/$ off the
+ *  merchandise. The real discount is the native Shopify code applied to the
+ *  draft — Shopify computes the invoice total, so this only drives the
+ *  cart's estimate and the customer confirms the true total before paying. */
+export function discountAmountCents(
   d: HubDiscount | null,
-  subtotalCents: number,
+  merchandiseCents: number,
+  shippingCents: number,
 ): number {
-  if (!d || subtotalCents < d.minSubtotalCents) return 0;
+  if (!d || merchandiseCents < d.minSubtotalCents) return 0;
+  if (d.kind === "shipping") return shippingCents; // free shipping
   const off =
     d.type === "percent"
-      ? Math.round((subtotalCents * d.value) / 100)
+      ? Math.round((merchandiseCents * d.value) / 100)
       : d.value;
-  return Math.min(off, subtotalCents);
+  return Math.min(off, merchandiseCents);
 }
 
 export type HubCatalog = {

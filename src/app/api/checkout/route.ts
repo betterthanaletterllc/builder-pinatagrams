@@ -368,11 +368,6 @@ export async function POST(req: Request) {
         units.set(a.id, { addon: a, qty: (units.get(a.id)?.qty ?? 0) + l.qty });
     return [...units.values()];
   };
-  // Merchandise subtotal (piñata lines + add-on lines, before shipping) —
-  // what a discount applies to.
-  const groupSubtotalCents = (gl: CleanLine[]) =>
-    gl.reduce((s, l) => s + (price.unitPriceCents + l.fillingCents) * l.qty, 0) +
-    addonTotals(gl).reduce((s, { addon, qty }) => s + addon.priceCents * qty, 0);
 
   // One draft order per delivery address (ShipStation: one order = one label).
   const groups = new Map<string, CleanLine[]>();
@@ -381,79 +376,17 @@ export async function POST(req: Request) {
     groups.set(key, [...(groups.get(key) ?? []), l]);
   }
 
-  // Resolve an optional discount code AUTHORITATIVELY — the client sends
-  // only the code string; the amount is recomputed here from the hub rule.
-  // A discount is a bonus: a lookup blip or a non-qualifying code never
-  // blocks checkout (the customer always sees the true total on the Shopify
-  // invoice before paying), it just isn't applied.
+  // Optional discount code: pass the raw code to Shopify as a NATIVE code on
+  // the draft (DraftOrderInput.discountCodes). Shopify enforces the whole
+  // rule — value, minimum, usage limit, once-per-customer, expiry, free
+  // shipping — and SKIPS the code if it's not eligible, so a bad/expired/
+  // exhausted code never blocks checkout; the customer just sees the true
+  // total on the invoice. We only send it (never an amount), so it can't be
+  // tampered into a discount the merchant didn't configure.
   const discountCode = str(body?.discountCode, 32).toUpperCase();
-  let discount:
-    | { code: string; type: "percent" | "fixed"; value: number; minSubtotalCents: number }
-    | null = null;
-  if (discountCode) {
-    try {
-      const dRes = await fetch(
-        `${HUB_URL}/api/public/discount?code=${encodeURIComponent(discountCode)}`,
-        { cache: "no-store" },
-      );
-      if (dRes.ok) {
-        const j = await dRes.json();
-        if (j?.discount) discount = j.discount;
-      }
-    } catch {
-      /* discount is a bonus — never block checkout on its lookup */
-    }
-  }
-  const grandSubtotalCents = [...groups.values()].reduce(
-    (s, gl) => s + groupSubtotalCents(gl),
-    0,
-  );
-  const discountApplies =
-    !!discount && grandSubtotalCents >= discount.minSubtotalCents;
-
-  // Fixed-amount codes are split across destinations proportional to each
-  // draft's subtotal (remainder on the last), so a $5 code = $5 total, not
-  // $5 per address. Percent codes apply the same % to every draft.
-  const fixedShareByKey = new Map<string, number>();
-  if (discountApplies && discount!.type === "fixed") {
-    const totalOff = Math.min(discount!.value, grandSubtotalCents);
-    const entries = [...groups.entries()];
-    let allocated = 0;
-    entries.forEach(([key, gl], i) => {
-      const sub = groupSubtotalCents(gl);
-      const share =
-        i === entries.length - 1
-          ? Math.max(0, totalOff - allocated)
-          : grandSubtotalCents > 0
-            ? Math.round((totalOff * sub) / grandSubtotalCents)
-            : 0;
-      const clamped = Math.min(share, sub);
-      allocated += clamped;
-      fixedShareByKey.set(key, clamped);
-    });
-  }
-
-  // Shopify draft appliedDiscount: PERCENTAGE value = the percent;
-  // FIXED_AMOUNT value = dollars off THIS draft.
-  const appliedDiscountFor = (groupKey: string) => {
-    if (!discountApplies) return undefined;
-    if (discount!.type === "percent") {
-      return {
-        title: discount!.code,
-        description: `${discount!.code} — ${discount!.value}% off`,
-        value: discount!.value,
-        valueType: "PERCENTAGE",
-      };
-    }
-    const cents = fixedShareByKey.get(groupKey) ?? 0;
-    if (cents <= 0) return undefined;
-    return {
-      title: discount!.code,
-      description: discount!.code,
-      value: Number((cents / 100).toFixed(2)),
-      valueType: "FIXED_AMOUNT",
-    };
-  };
+  const discountCodes = /^[A-Z0-9]{2,32}$/.test(discountCode)
+    ? [discountCode]
+    : [];
 
   const lineAttributes = (l: CleanLine) => [
     // No leading underscore = SHOWS on the payment page under the line
@@ -512,8 +445,10 @@ export async function POST(req: Request) {
       lines: groupLines,
       input: {
         ...(email ? { email } : {}),
-        ...(appliedDiscountFor(groupKey)
-          ? { appliedDiscount: appliedDiscountFor(groupKey) }
+        // Native code (Shopify enforces the rule). allowDiscountCodesInCheckout
+        // false = the customer can't stack extra codes on the hosted invoice.
+        ...(discountCodes.length
+          ? { discountCodes, allowDiscountCodesInCheckout: false }
           : {}),
         tags: ["builder"],
         note: "builder.pinatagrams.com",

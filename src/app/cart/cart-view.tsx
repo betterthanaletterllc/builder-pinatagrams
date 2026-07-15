@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  discountCents,
+  discountAmountCents,
   formatCents,
   HUB_URL,
   priceUrl,
@@ -229,22 +229,25 @@ export default function CartView() {
     (s, l) => s + (lineAddonCents(l) + lineFillingCents(l)) * l.qty,
     0,
   );
-  // Merchandise only (piñatas + fillings + add-ons) — a discount applies
-  // here, never to shipping. Matches the invoice exactly for single
-  // destinations and fixed codes; a multi-destination percent may differ a
-  // cent (Shopify rounds per draft). The invoice is always the real total.
+  // Merchandise (piñatas + fillings + add-ons) and shipping, for the PREVIEW
+  // estimate only — the real discount is the native Shopify code applied to
+  // the draft, so the Shopify invoice is the true total. An order code takes
+  // %/$ off merchandise; a shipping code zeroes shipping.
   const merchandiseCents =
     unitCents !== null ? unitCents * totalUnits + extrasTotalCents : null;
-  const discountAmountCents =
-    merchandiseCents !== null ? discountCents(discount, merchandiseCents) : 0;
+  const shipTotalCents = shipCents !== null ? shipCents * totalUnits : null;
+  const discountOffCents =
+    merchandiseCents !== null && shipTotalCents !== null
+      ? discountAmountCents(discount, merchandiseCents, shipTotalCents)
+      : 0;
   // A code that no longer qualifies (subtotal fell below its minimum).
   const belowMin =
     !!discount &&
     merchandiseCents !== null &&
     merchandiseCents < discount.minSubtotalCents;
   const totalCents =
-    unitCents !== null && shipCents !== null && merchandiseCents !== null
-      ? merchandiseCents + shipCents * totalUnits - discountAmountCents
+    merchandiseCents !== null && shipTotalCents !== null
+      ? merchandiseCents + shipTotalCents - discountOffCents
       : null;
 
   const missingAddress = lines.filter((l) => !addressComplete(l.address));
@@ -553,10 +556,13 @@ export default function CartView() {
                   <span>{formatCents(extrasTotalCents)}</span>
                 </div>
               )}
-              {discount && !belowMin && discountAmountCents > 0 && (
+              {discount && !belowMin && discountOffCents > 0 && (
                 <div className="row discount-row">
-                  <span>{discount.code}</span>
-                  <span>−{formatCents(discountAmountCents)}</span>
+                  <span>
+                    {discount.code}
+                    {discount.kind === "shipping" ? " (free shipping)" : ""}
+                  </span>
+                  <span>−{formatCents(discountOffCents)}</span>
                 </div>
               )}
               <div className="row">
