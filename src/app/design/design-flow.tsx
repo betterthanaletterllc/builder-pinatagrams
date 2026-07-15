@@ -713,77 +713,82 @@ export default function DesignFlow({
 
       {step === "Filling" && (
         <div className="step-panel">
-          <div className="filling-cards">
+          <div className="filling-bars">
             {fillingOptions.map((f) => (
               <button
                 key={f.id}
                 className={
-                  "filling-card" +
-                  (filling === f.label ? " selected" : "") +
-                  (f.imageUrl ? " has-photo" : "")
+                  "filling-bar" + (filling === f.label ? " selected" : "")
                 }
                 onClick={() => pickFilling(f)}
               >
-                {f.imageUrl && (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={f.imageUrl} alt="" loading="lazy" />
-                )}
-                <span className="filling-name">{f.label}</span>
-                {f.blurb && <span className="filling-blurb">{f.blurb}</span>}
-                <span
-                  className={
-                    "filling-price" + (f.priceCents > 0 ? " plus" : "")
-                  }
-                >
-                  {f.priceCents > 0
-                    ? `+${formatCents(f.priceCents)}`
-                    : "Included"}
+                <span className="filling-media">
+                  <span className="filling-name">{f.label}</span>
+                  {f.imageUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={f.imageUrl} alt="" loading="lazy" />
+                  )}
+                </span>
+                <span className="filling-body">
+                  {f.blurb && <span className="filling-blurb">{f.blurb}</span>}
+                  <span
+                    className={
+                      "filling-price" + (f.priceCents > 0 ? " plus" : "")
+                    }
+                  >
+                    {f.priceCents > 0
+                      ? `+${formatCents(f.priceCents)}`
+                      : "Included"}
+                  </span>
                 </span>
               </button>
             ))}
           </div>
           {addonOptions.length > 0 &&
             (fillingRec?.addons === "none" ? (
-              <p className="note">
+              <p className="note addon-note">
                 Add-ons aren&apos;t available with {fillingRec.label} — it
                 fills the whole box.
               </p>
             ) : (
-              <div className="addon-list">
-                {addonOptions.map((a) => {
-                  const allowed = fillingAllowsAddon(fillingRec, a.id);
-                  const on = addons.includes(a.id) && allowed;
-                  return (
-                    <label
-                      key={a.id}
-                      className={
-                        "addon-row" +
-                        (on ? " selected" : "") +
-                        (allowed ? "" : " blocked")
-                      }
-                    >
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        disabled={!allowed}
-                        onChange={() =>
-                          setAddons(
-                            on
-                              ? addons.filter((id) => id !== a.id)
-                              : [...addons, a.id],
-                          )
+              <section className="addon-section">
+                <h3 className="addon-head">Add extras</h3>
+                <div className="addon-list">
+                  {addonOptions.map((a) => {
+                    const allowed = fillingAllowsAddon(fillingRec, a.id);
+                    const on = addons.includes(a.id) && allowed;
+                    return (
+                      <label
+                        key={a.id}
+                        className={
+                          "addon-row" +
+                          (on ? " selected" : "") +
+                          (allowed ? "" : " blocked")
                         }
-                      />
-                      <span className="addon-label">{a.label}</span>
-                      <span className="addon-price">
-                        {allowed
-                          ? `+${formatCents(a.priceCents)}`
-                          : `not available with ${filling ?? "this filling"}`}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          disabled={!allowed}
+                          onChange={() =>
+                            setAddons(
+                              on
+                                ? addons.filter((id) => id !== a.id)
+                                : [...addons, a.id],
+                            )
+                          }
+                        />
+                        <span className="addon-label">{a.label}</span>
+                        <span className="addon-price">
+                          {allowed
+                            ? `+${formatCents(a.priceCents)}`
+                            : `not available with ${filling ?? "this filling"}`}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
             ))}
           {addonNotice && <div className="notice info">{addonNotice}</div>}
         </div>

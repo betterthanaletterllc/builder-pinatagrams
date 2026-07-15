@@ -1332,105 +1332,141 @@ body:has(.bottom-stack) .site-footer {
   color: var(--ink);
 }
 
-.filling-cards {
+/* Filling picker — full-width horizontal bars: title above the photo on the
+   left, description + price filling the right. */
+.filling-bars {
   display: flex;
+  flex-direction: column;
   gap: 10px;
-  flex-wrap: wrap;
   margin-top: 10px;
+  max-width: 560px;
 }
 
-.filling-card {
+.filling-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   border: 2px solid var(--line);
   background: var(--card);
-  border-radius: 10px;
-  padding: 14px 18px;
-  font-size: 15px;
-  font-weight: 600;
+  border-radius: 12px;
+  padding: 12px 16px;
   font-family: inherit;
   color: var(--ink);
   cursor: pointer;
+  text-align: left;
+  width: 100%;
 }
 
-.filling-card:hover {
+.filling-bar:hover {
   border-color: var(--accent);
 }
 
-.filling-card.selected {
+.filling-bar.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent);
 }
 
-/* Hub-fed filling cards: photo + blurb + price chip stack vertically. */
-.filling-card {
+.filling-media {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  max-width: 180px;
-  text-align: center;
+  gap: 6px;
+  flex: none;
+  width: 130px;
 }
 
-.filling-card img {
-  width: 120px;
-  height: 84px;
+.filling-media .filling-name {
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.filling-media img {
+  width: 130px;
+  height: 88px;
   object-fit: cover;
   border-radius: 8px;
 }
 
-.filling-card .filling-blurb {
-  font-size: 11.5px;
-  font-weight: 400;
-  color: var(--muted);
-  line-height: 1.35;
+.filling-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
 
-.filling-card .filling-price {
-  font-size: 12px;
-  font-weight: 600;
+.filling-body .filling-blurb {
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.filling-body .filling-price {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--good);
 }
 
-.filling-card .filling-price.plus {
+.filling-body .filling-price.plus {
   color: var(--accent);
 }
 
-.addon-row.blocked {
-  opacity: 0.55;
-  cursor: not-allowed;
+.addon-note {
+  max-width: 560px;
+  margin-top: 16px;
 }
 
-.addon-row.blocked:hover {
-  border-color: var(--line);
+/* Add-ons (e.g. Double Candy) sit in their own tinted panel below the
+   fillings so they read as separate "extras", not another filling. */
+.addon-section {
+  margin-top: 20px;
+  max-width: 560px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #f7f8fe;
+  padding: 4px 16px 10px;
 }
 
-/* Add-ons (e.g. Double Candy) under the filling cards */
+.addon-head {
+  margin: 10px 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
 .addon-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 14px;
-  max-width: 380px;
 }
 
 .addon-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  border: 2px solid var(--line);
-  background: var(--card);
-  border-radius: 10px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 12px 2px;
   font-size: 15px;
   cursor: pointer;
+  border-bottom: 1px solid var(--line);
 }
 
-.addon-row:hover {
-  border-color: var(--accent);
+.addon-row:last-child {
+  border-bottom: none;
 }
 
-.addon-row.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent);
+.addon-row:hover:not(.blocked) .addon-label {
+  color: var(--accent-hover);
+}
+
+.addon-row.selected .addon-label {
+  color: var(--accent-hover);
+}
+
+.addon-row.blocked {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .addon-row input {
@@ -1449,6 +1485,16 @@ body:has(.bottom-stack) .site-footer {
   font-weight: 700;
   color: var(--accent);
   white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .filling-media,
+  .filling-media img {
+    width: 104px;
+  }
+  .filling-media img {
+    height: 72px;
+  }
 }
 
 .date-input {
