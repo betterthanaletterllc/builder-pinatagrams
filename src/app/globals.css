@@ -1509,8 +1509,7 @@ body:has(.bottom-stack) .site-footer {
 .facet-scroll {
   display: flex;
   gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  flex-wrap: wrap;
   flex: 1;
   min-width: 0;
 }
@@ -1544,14 +1543,14 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .shelf {
-  margin-bottom: 22px;
+  margin-bottom: 14px;
 }
 
 .shelf-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .shelf-head h3 {
@@ -1607,6 +1606,28 @@ body:has(.bottom-stack) .site-footer {
   aspect-ratio: 2.05 / 1;
   object-fit: contain;
   display: block;
+}
+
+/* "See all N →" — a card-shaped tile that closes each category grid, sitting
+   where the next graphic would be so the row stays visually complete. */
+.library-card.see-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 2.05 / 1;
+  background: #eef1fd;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  color: var(--accent-hover);
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.25;
+}
+
+.library-card.see-all:hover,
+.library-card.see-all:focus-visible {
+  background: #e3e8fc;
 }
 
 .price-from {

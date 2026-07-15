@@ -53,6 +53,10 @@ type Aisle =
 // "All …" sub-chip sentinel (the union of the aisle's sub-filters).
 const ALL = "__all__";
 
+// Per-category teaser size: this many graphics + a "See all" tile fills ~2
+// rows of the wrapping grid before the shopper commits to a category.
+const PREVIEW = 11;
+
 const AISLES: { id: Aisle; label: string; needsTags?: boolean }[] = [
   { id: "birthdays", label: "🎂 Birthdays" },
   { id: "occasions", label: "🎉 Occasions" },
@@ -354,6 +358,7 @@ export default function GraphicLibrary({
     const out: {
       title: string;
       items: LibraryGraphic[];
+      total: number;
       seeAll?: string;
     }[] = [];
 
@@ -362,11 +367,11 @@ export default function GraphicLibrary({
       (h) => h.days <= 45 && (occasionCounts.get(h.label) ?? 0) > 0,
     );
     if (next) {
+      const items = graphics.filter((g) => occasionOf(g.design) === next.label);
       out.push({
         title: `${next.label} is coming`,
-        items: graphics
-          .filter((g) => occasionOf(g.design) === next.label)
-          .slice(0, 12),
+        items,
+        total: items.length,
         seeAll: next.label,
       });
     }
@@ -374,9 +379,9 @@ export default function GraphicLibrary({
     if (popular.length > 0) {
       const items = popular
         .map((p) => byDesign.get(p.design))
-        .filter((g): g is LibraryGraphic => !!g)
-        .slice(0, 12);
-      if (items.length) out.push({ title: "Popular right now", items });
+        .filter((g): g is LibraryGraphic => !!g);
+      if (items.length)
+        out.push({ title: "Popular right now", items, total: items.length });
     }
 
     const month = new Date().getMonth() + 1;
@@ -384,13 +389,13 @@ export default function GraphicLibrary({
       (tags[g.design]?.m ?? []).includes(month),
     );
     if (seasonal.length)
-      out.push({ title: "This season", items: seasonal.slice(0, 12) });
+      out.push({ title: "This season", items: seasonal, total: seasonal.length });
 
     for (const o of SHELF_OCCASIONS) {
       if (o === next?.label) continue; // already pinned up top
       const items = graphics.filter((g) => occasionOf(g.design) === o);
       if (items.length)
-        out.push({ title: o, items: items.slice(0, 12), seeAll: o });
+        out.push({ title: o, items, total: items.length, seeAll: o });
     }
     return out;
   }, [graphics, tags, popular, byDesign, filtering, occasionCounts]);
@@ -404,11 +409,10 @@ export default function GraphicLibrary({
     }
     return subChips
       .filter(([key]) => key !== ALL)
-      .map(([key, label]) => ({
-        key,
-        title: label,
-        items: graphics.filter((g) => subMatches(g, aisle, key)).slice(0, 12),
-      }))
+      .map(([key, label]) => {
+        const items = graphics.filter((g) => subMatches(g, aisle, key));
+        return { key, title: label, items, total: items.length };
+      })
       .filter((s) => s.items.length > 0);
   }, [graphics, aisle, sub, query, subChips, subMatches]);
 
@@ -437,7 +441,16 @@ export default function GraphicLibrary({
             className="library-search"
             placeholder="Search — birthday, thank you, dog, Halloween…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setQuery(v);
+              // Typing searches the WHOLE library — drop any active
+              // aisle/sub so results aren't secretly narrowed by a chip.
+              if (v.trim()) {
+                setAisle(null);
+                setSub(null);
+              }
+            }}
           />
 
           <div className="facet-row aisle-row">
@@ -476,14 +489,19 @@ export default function GraphicLibrary({
                 <section key={s.key} className="shelf">
                   <div className="shelf-head">
                     <h3>{s.title}</h3>
-                    <button className="btn mini" onClick={() => setSub(s.key)}>
-                      See all →
-                    </button>
                   </div>
-                  <div className="shelf-row">
-                    {s.items.map((g) => (
+                  <div className="library-grid">
+                    {s.items.slice(0, PREVIEW).map((g) => (
                       <Card key={g.design} g={g} onPick={pick} eager />
                     ))}
+                    {s.total > PREVIEW && (
+                      <button
+                        className="library-card see-all"
+                        onClick={() => setSub(s.key)}
+                      >
+                        <span>See all {s.total} →</span>
+                      </button>
+                    )}
                   </div>
                 </section>
               ))}
@@ -494,19 +512,19 @@ export default function GraphicLibrary({
                 <section key={s.title} className="shelf">
                   <div className="shelf-head">
                     <h3>{s.title}</h3>
-                    {s.seeAll && (
-                      <button
-                        className="btn mini"
-                        onClick={() => jumpToOccasion(s.seeAll!)}
-                      >
-                        See all →
-                      </button>
-                    )}
                   </div>
-                  <div className="shelf-row">
-                    {s.items.map((g) => (
+                  <div className="library-grid">
+                    {s.items.slice(0, PREVIEW).map((g) => (
                       <Card key={g.design} g={g} onPick={pick} eager />
                     ))}
+                    {s.seeAll && s.total > PREVIEW && (
+                      <button
+                        className="library-card see-all"
+                        onClick={() => jumpToOccasion(s.seeAll!)}
+                      >
+                        <span>See all {s.total} →</span>
+                      </button>
+                    )}
                   </div>
                 </section>
               ))}
