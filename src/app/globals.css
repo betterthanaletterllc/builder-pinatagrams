@@ -1764,7 +1764,7 @@ body:has(.bottom-stack) .site-footer {
 .cart-line {
   display: flex;
   gap: 14px;
-  align-items: center;
+  align-items: flex-start;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1778,6 +1778,7 @@ body:has(.bottom-stack) .site-footer {
   object-fit: contain;
   border-radius: 8px;
   background: #fff;
+  flex: none;
 }
 
 .cart-line-info {
@@ -1785,8 +1786,50 @@ body:has(.bottom-stack) .site-footer {
   min-width: 0;
 }
 
+/* Full per-piñata summary: label/value rows for filling, add-ons, date,
+   message, and the single ship-to address. */
+.cart-detail {
+  margin: 5px 0 9px;
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+}
+
+.cart-detail > div {
+  display: flex;
+  gap: 6px;
+}
+
+.cart-detail dt {
+  flex: none;
+  width: 58px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.cart-detail dd {
+  margin: 0;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.cart-detail .cart-msg {
+  font-style: italic;
+  color: var(--muted);
+}
+
 .cart-line-price {
   font-weight: 700;
+  text-align: right;
+  flex: none;
+  white-space: nowrap;
+}
+
+.cart-line-price-note {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .qty {

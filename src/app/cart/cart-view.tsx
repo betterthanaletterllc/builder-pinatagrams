@@ -352,16 +352,43 @@ export default function CartView() {
                   ? `Your design — ${l.styleName}`
                   : `${l.graphic.title} — ${l.styleName}`}
               </strong>
-              <p className="note">
-                {l.filling}
-                {(l.addons ?? [])
-                  .map((id) => addonById.get(id)?.label)
-                  .filter(Boolean)
-                  .map((label) => ` + ${label}`)
-                  .join("")}{" "}
-                · arrives {l.deliveryDate}
-                {l.message ? " · with gift message" : ""}
-              </p>
+              <dl className="cart-detail">
+                <div>
+                  <dt>Filling</dt>
+                  <dd>{l.filling}</dd>
+                </div>
+                {(l.addons ?? []).some((id) => addonById.get(id)?.label) && (
+                  <div>
+                    <dt>Add-ons</dt>
+                    <dd>
+                      {(l.addons ?? [])
+                        .map((id) => addonById.get(id)?.label)
+                        .filter(Boolean)
+                        .join(", ")}
+                    </dd>
+                  </div>
+                )}
+                <div>
+                  <dt>Arrives</dt>
+                  <dd>{l.deliveryDate}</dd>
+                </div>
+                {l.message && (
+                  <div>
+                    <dt>Message</dt>
+                    <dd className="cart-msg">“{l.message}”</dd>
+                  </div>
+                )}
+                {addressComplete(l.address) && (
+                  <div>
+                    <dt>Ships to</dt>
+                    <dd>
+                      {l.address.name} · {l.address.address1}
+                      {l.address.address2 ? `, ${l.address.address2}` : ""},{" "}
+                      {l.address.city}, {l.address.province} {l.address.zip}
+                    </dd>
+                  </div>
+                )}
+              </dl>
               <div className="el-controls">
                 <button
                   className="btn mini"
@@ -427,7 +454,14 @@ export default function CartView() {
             </div>
             {unitCents !== null && (
               <div className="cart-line-price">
-                {formatCents((unitCents + lineAddonCents(l)) * l.qty)}
+                {formatCents(
+                  (unitCents +
+                    lineAddonCents(l) +
+                    lineFillingCents(l) +
+                    (shipCents ?? 0)) *
+                    l.qty,
+                )}
+                <span className="cart-line-price-note">incl. shipping</span>
               </div>
             )}
           </div>
