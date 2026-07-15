@@ -1232,6 +1232,16 @@ body:has(.bottom-stack) .site-footer {
   box-shadow: var(--shadow-sm);
 }
 
+.delivery-step {
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.delivery-step .cal,
+.delivery-step .notice {
+  width: 100%;
+}
+
 .cal-head {
   display: flex;
   align-items: center;
@@ -1546,7 +1556,8 @@ body:has(.bottom-stack) .site-footer {
 
 .shelf-head h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 21px;
+  font-weight: 700;
 }
 
 .shelf-row {
@@ -1695,8 +1706,8 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .cart-thumb {
-  height: 72px;
-  width: 96px;
+  height: 104px;
+  width: 138px;
   object-fit: contain;
   border-radius: 8px;
   background: #fff;
@@ -1889,6 +1900,6 @@ body:has(.bottom-stack) .site-footer {
 
 .cart-thumb.box-composite {
   height: auto;
-  width: 96px;
+  width: 138px;
   padding: 0;
 }

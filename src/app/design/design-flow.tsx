@@ -790,7 +790,7 @@ export default function DesignFlow({
       )}
 
       {step === "Delivery" && (
-        <div className="step-panel">
+        <div className="step-panel delivery-step">
           <DateCalendar value={date} onChange={setDate} cfg={deliveryCfg} />
           {!date ? (
             <p className="note">
