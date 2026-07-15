@@ -163,6 +163,61 @@ export function newLineId(): string {
 }
 
 /* ---------------------------------------------------------------------------
+ * Pending order — a Shopify draft created at checkout but NOT yet paid. We
+ * snapshot it so an abandoned hosted-invoice doesn't lose the customer's work:
+ * the cart can offer "Resume payment" (back to the invoice) or "Edit order"
+ * (restore the lines to the cart). Expires so a stale/already-paid one clears.
+ * ------------------------------------------------------------------------- */
+
+export type PendingOrder = {
+  invoiceUrl: string;
+  createdAt: number; // ms epoch
+  lines: CartLine[]; // snapshot of what was ordered ([] if too big to store)
+};
+
+const PENDING_KEY = "pinatagrams-builder-pending";
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+export function savePendingOrder(p: PendingOrder): void {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify(p));
+  } catch {
+    // Photo-heavy carts can exceed the quota — keep the resume link even if
+    // the line snapshot won't fit (Edit-order is then just unavailable).
+    try {
+      localStorage.setItem(PENDING_KEY, JSON.stringify({ ...p, lines: [] }));
+    } catch {}
+  }
+}
+
+export function loadPendingOrder(): PendingOrder | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as PendingOrder;
+    if (!p?.invoiceUrl || typeof p.createdAt !== "number") return null;
+    if (Date.now() - p.createdAt > PENDING_TTL_MS) {
+      localStorage.removeItem(PENDING_KEY);
+      return null;
+    }
+    return {
+      invoiceUrl: p.invoiceUrl,
+      createdAt: p.createdAt,
+      lines: Array.isArray(p.lines) ? p.lines : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingOrder(): void {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {}
+}
+
+/* ---------------------------------------------------------------------------
  * In-progress draft — survives refresh, back-swipes and accidental closes.
  * sessionStorage (a draft belongs to this sitting, unlike the cart).
  * editLineId set = this draft is editing an existing cart line.

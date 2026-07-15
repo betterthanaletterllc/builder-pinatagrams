@@ -274,11 +274,24 @@ a.style-card:focus-visible {
   background: rgba(85, 168, 113, 0.08);
   font-size: 14px;
   color: var(--good);
+  margin-bottom: 6px;
+}
+
+/* Applied but not yet qualifying (below its own minimum) — amber, not green. */
+.discount-applied.below {
+  border-color: var(--warn);
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--warn);
 }
 
 .discount-msg {
   margin-top: 6px;
   color: var(--warn);
+}
+
+.discount-hint {
+  margin-top: 6px;
+  color: var(--muted);
 }
 
 .link-btn {
@@ -1830,6 +1843,33 @@ body:has(.bottom-stack) .site-footer {
   font-size: 11px;
   font-weight: 400;
   color: var(--muted);
+}
+
+/* Unpaid-draft recovery banner — a placed order waiting on payment. */
+.pending-order {
+  border: 1px solid var(--accent);
+  background: #eef1fd;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.pending-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pending-head strong {
+  font-size: 16px;
+}
+
+.pending-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
 }
 
 .qty {

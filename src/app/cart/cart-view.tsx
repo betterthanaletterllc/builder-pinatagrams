@@ -17,14 +17,18 @@ import {
 import {
   addressComplete,
   addressKey,
+  clearPendingOrder,
   EMPTY_ADDRESS,
   loadCart,
+  loadPendingOrder,
   rememberAddress,
   resolveFillings,
   saveCart,
   saveDraft,
+  savePendingOrder,
   type CartLine,
   type DeliveryAddress,
+  type PendingOrder,
 } from "@/lib/flow";
 import { cdnThumb } from "@/lib/library-data";
 import { trackBeginCheckout } from "@/lib/analytics";
@@ -102,6 +106,52 @@ function CartBoxThumb({ line }: { line: CartLine }) {
   );
 }
 
+// Shown when a draft was created but the customer hasn't paid — recovers an
+// abandoned Shopify invoice: resume payment, or restore the lines to edit.
+function PendingCard({
+  pending,
+  count,
+  onResume,
+  onEdit,
+  onDismiss,
+}: {
+  pending: PendingOrder;
+  count: number;
+  onResume: () => void;
+  onEdit: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="pending-order">
+      <div className="pending-head">
+        <strong>Your order is placed — it just needs payment.</strong>
+        <button className="link-btn" onClick={onDismiss}>
+          Dismiss
+        </button>
+      </div>
+      <p className="note">
+        {count > 0 ? (
+          <>
+            {count} piñata{count === 1 ? "" : "s"} waiting on our secure
+            checkout.{" "}
+          </>
+        ) : null}
+        Finish paying to lock it in — or make a change first.
+      </p>
+      <div className="pending-actions">
+        <button className="btn primary" onClick={onResume}>
+          Resume payment →
+        </button>
+        {pending.lines.length > 0 && (
+          <button className="btn ghost" onClick={onEdit}>
+            Edit order
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CartView() {
   const router = useRouter();
   const [lines, setLines] = useState<CartLine[] | null>(null);
@@ -122,9 +172,12 @@ export default function CartView() {
   const userTouched = useRef(false);
   // Non-null while editing the single ship-to address.
   const [editingAddr, setEditingAddr] = useState<DeliveryAddress | null>(null);
+  // An unpaid draft from a prior checkout (abandoned invoice recovery).
+  const [pending, setPending] = useState<PendingOrder | null>(null);
 
   useEffect(() => {
     setLines(loadCart());
+    setPending(loadPendingOrder());
     // Restore a previously applied code (survives a cart refresh). If it no
     // longer resolves (deleted/deactivated since), self-heal: clear the
     // field + storage so a dead code can't sit there looking applied.
@@ -257,7 +310,47 @@ export default function CartView() {
     setDiscountMsg(null);
   };
 
+  // Pending-order (unpaid draft) recovery.
+  const resumePayment = () => {
+    if (pending) window.location.assign(pending.invoiceUrl);
+  };
+  const editPendingOrder = () => {
+    if (!pending) return;
+    // Restore the ordered lines so they can change something and re-checkout
+    // (a fresh draft; the old unpaid one is abandoned in Shopify).
+    update([...(lines ?? []), ...pending.lines]);
+    clearPendingOrder();
+    setPending(null);
+  };
+  const dismissPending = () => {
+    clearPendingOrder();
+    setPending(null);
+  };
+  const pendingCount = pending
+    ? pending.lines.reduce((s, l) => s + l.qty, 0)
+    : 0;
+
   if (lines === null) return <p className="note">Loading…</p>;
+
+  // Just checked out: the cart is empty but an unpaid draft is waiting.
+  if (lines.length === 0 && !result && pending) {
+    return (
+      <div className="step-panel">
+        <PendingCard
+          pending={pending}
+          count={pendingCount}
+          onResume={resumePayment}
+          onEdit={editPendingOrder}
+          onDismiss={dismissPending}
+        />
+        <p>
+          <Link className="btn" href="/">
+            + Start a new order
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   if (lines.length === 0 && !result) {
     return (
@@ -393,14 +486,22 @@ export default function CartView() {
       }
       setResult(data);
       if (data.dryRun === false) {
-        update([]);
-        // Single-destination order: hand off straight into Shopify's hosted
-        // checkout (card / Shop Pay / Apple Pay). Multi-destination stays on
-        // this page listing each invoice.
+        // Single-destination order: snapshot it as a PENDING order (so an
+        // abandoned invoice doesn't lose their work), clear the active cart,
+        // then hand off to Shopify's hosted checkout (card/Shop Pay/Apple Pay).
         if (data.orders?.length === 1) {
+          savePendingOrder({
+            invoiceUrl: data.orders[0].invoiceUrl,
+            createdAt: Date.now(),
+            lines: current,
+          });
+          update([]);
           window.location.assign(data.orders[0].invoiceUrl);
           return;
         }
+        // Multi-destination (can't happen under single-address) stays on this
+        // page listing each invoice.
+        update([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Checkout failed.");
@@ -412,6 +513,15 @@ export default function CartView() {
   return (
     <div className="cart-grid">
       <div>
+        {pending && (
+          <PendingCard
+            pending={pending}
+            count={pendingCount}
+            onResume={resumePayment}
+            onEdit={editPendingOrder}
+            onDismiss={dismissPending}
+          />
+        )}
         {lines.map((l) => (
           <div className="cart-line" key={l.id}>
             <CartBoxThumb line={l} />
