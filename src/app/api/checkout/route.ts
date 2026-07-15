@@ -150,7 +150,14 @@ const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
 // store can't change between save and snapshot.
 const SHA256_RE = /^[a-f0-9]{64}$/;
 
-type CheckoutBody = { lines: CartLine[]; email?: string; discountCode?: string };
+type CheckoutBody = {
+  lines: CartLine[];
+  email?: string;
+  // Up to two native codes stack on the one draft (one order + one shipping);
+  // `discountCode` kept for older cart clients mid-deploy.
+  discountCode?: string;
+  discountCodes?: string[];
+};
 
 function bad(error: string): NextResponse {
   return NextResponse.json({ error }, { status: 400 });
@@ -383,10 +390,26 @@ export async function POST(req: Request) {
   // exhausted code never blocks checkout; the customer just sees the true
   // total on the invoice. We only send it (never an amount), so it can't be
   // tampered into a discount the merchant didn't configure.
-  const discountCode = str(body?.discountCode, 32).toUpperCase();
-  const discountCodes = /^[A-Z0-9]{2,32}$/.test(discountCode)
-    ? [discountCode]
-    : [];
+  // One order code + one shipping code may stack on the single draft. Accept
+  // the array (new clients) or the legacy single field, uppercase + validate
+  // each, dedupe, and cap at two so a tampered body can't spray codes. Shopify
+  // enforces eligibility AND the combinesWith rule — it applies both only if
+  // they're allowed to stack, and silently skips any it can't honor.
+  const rawCodes = Array.isArray(body?.discountCodes)
+    ? body!.discountCodes!
+    : body?.discountCode != null
+      ? [body.discountCode]
+      : [];
+  // Allow the characters Shopify codes actually use (letters, digits, hyphen,
+  // underscore) up to Shopify's length — a stricter filter than the client's
+  // would silently strip a real code that previewed a discount in the cart.
+  const discountCodes = [
+    ...new Set(
+      rawCodes
+        .map((c) => str(c, 64).toUpperCase())
+        .filter((c) => /^[A-Z0-9_-]{2,64}$/.test(c)),
+    ),
+  ].slice(0, 2);
 
   const lineAttributes = (l: CleanLine) => [
     // No leading underscore = SHOWS on the payment page under the line
