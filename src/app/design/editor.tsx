@@ -216,7 +216,9 @@ async function ingestPhoto(
   }
 }
 
-/** Largest font size (px) whose wrapped height fits the box. */
+/** Largest font size (px) whose wrapped height fits the box AND whose widest
+ *  single word fits on one line — so words wrap whole and are never broken
+ *  mid-word (Konva's "word" wrap otherwise splits a word too wide to fit). */
 function fitFontSize(
   text: string,
   w: number,
@@ -231,7 +233,10 @@ function fitFontSize(
     fontSize: size,
     lineHeight: 1.15,
   });
-  while (size > 30 && probe.height() > h) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const widestWord = () =>
+    words.reduce((m, word) => Math.max(m, probe.measureSize(word).width), 0);
+  while (size > 16 && (probe.height() > h || widestWord() > w)) {
     size = Math.floor(size * 0.9);
     probe.fontSize(size);
   }
