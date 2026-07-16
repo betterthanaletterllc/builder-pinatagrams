@@ -560,10 +560,16 @@ a.style-card:focus-visible {
 .tmpl-switch {
   display: flex;
   gap: 6px;
-  /* 8 template thumbs ≈ 460px — wrap instead of running off narrow screens */
-  flex-wrap: wrap;
+  /* 8 template thumbs ≈ 460px — one row that SLIDES on narrow screens
+     (same idiom as the chip rows) instead of running off the right */
+  overflow-x: auto;
   min-width: 0;
   max-width: 100%;
+  padding-bottom: 4px; /* room for the scrollbar */
+}
+
+.tmpl-switch-btn {
+  flex: 0 0 auto; /* keep thumbs full-size; the row scrolls instead */
 }
 
 .tmpl-switch-btn {

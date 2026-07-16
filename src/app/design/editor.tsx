@@ -797,9 +797,13 @@ export default function Editor({
 
   // Print sharpness: cover-fitting a photo into its slot upscales it by
   // max(slot/natural); at the 300-DPI print that's an effective DPI of
-  // dpi / scale. Below ~150 DPI it can look soft, so flag it — never block
-  // (the customer can always use their photo).
-  const DPI_WARN = 150;
+  // dpi / scale. Flag it — never block (the customer can always use their
+  // photo). Threshold 110, NOT 150: ingest's storage ladder floors big
+  // photos at a 1280px long edge, which puts a portrait phone photo in a
+  // full-width slot at ~120 effective DPI — fine at label size, and not
+  // the customer's fault. 110 still catches genuinely small sources
+  // (a 640×480 web grab ≈ 80 DPI).
+  const DPI_WARN = 110;
   const lowResSlots = rects.map((r, i) => {
     const c = doc.slots[i];
     if (!c || c.kind !== "photo") return false;
