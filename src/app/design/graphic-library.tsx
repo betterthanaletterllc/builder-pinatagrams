@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GraphicChoice } from "@/lib/flow";
 import {
   cdnThumb,
@@ -124,7 +124,8 @@ export default function GraphicLibrary({
   );
   const [sub, setSub] = useState<string | null>(restored.current?.s ?? null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setFailed(false);
     Promise.all([
       loadJson<Manifest>("/graphics.json"),
       loadJson<TagFile>("/library-index.json"),
@@ -149,6 +150,10 @@ export default function GraphicLibrary({
       if (y > 0) requestAnimationFrame(() => window.scrollTo(0, y));
     });
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Remember the view on every change; pick() below also captures scroll.
   useEffect(() => {
@@ -428,8 +433,13 @@ export default function GraphicLibrary({
     <div>
       {failed && (
         <div className="notice warn">
-          The graphic library didn&apos;t load — try again in a moment, or
-          design your own.
+          <p>
+            The graphic library didn&apos;t load. Check your connection and try
+            again — or head back and design your own.
+          </p>
+          <button className="btn" onClick={load}>
+            Try again
+          </button>
         </div>
       )}
       {!graphics && !failed && <p className="note">Loading graphics…</p>}

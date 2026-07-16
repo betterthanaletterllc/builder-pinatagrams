@@ -609,12 +609,19 @@ export default function DesignFlow({
       )}
 
       {choosing && graphicMode === "library" && (
-        <GraphicLibrary
-          onPick={(g) => {
-            setGraphic(g);
-            goStep("Graphic");
-          }}
-        />
+        <>
+          <p className="note">
+            <button className="btn mini" onClick={() => goView(null)}>
+              ← Back
+            </button>
+          </p>
+          <GraphicLibrary
+            onPick={(g) => {
+              setGraphic(g);
+              goStep("Graphic");
+            }}
+          />
+        </>
       )}
 
       {choosing && graphicMode === "canvas" && (

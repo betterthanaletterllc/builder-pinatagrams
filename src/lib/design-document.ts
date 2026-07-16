@@ -208,6 +208,8 @@ export function coverFit(
 
 // Brand palette offered as text-color swatches — the official base palette
 // from design-system/colors_and_type.css.
+// No white: text always sits on the white artboard background, so a white
+// swatch would print blank — an invisible-text trap.
 export const TEXT_SWATCHES = [
   "#180D38", // navy
   "#627AE3", // periwinkle
@@ -215,7 +217,6 @@ export const TEXT_SWATCHES = [
   "#F6DE6B", // yellow
   "#F2A7B0", // pink
   "#EB7C57", // coral
-  "#FFFFFF", // white
 ] as const;
 
 export function newDesign(
