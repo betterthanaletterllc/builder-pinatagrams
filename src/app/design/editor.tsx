@@ -763,6 +763,19 @@ export default function Editor({
       ? coverFit(rects[selectedSlot], selected.natW, selected.natH, selected.offset)
       : null;
 
+  // Print sharpness: cover-fitting a photo into its slot upscales it by
+  // max(slot/natural); at the 300-DPI print that's an effective DPI of
+  // dpi / scale. Below ~150 DPI it can look soft, so flag it — never block
+  // (the customer can always use their photo).
+  const DPI_WARN = 150;
+  const lowResSlots = rects.map((r, i) => {
+    const c = doc.slots[i];
+    if (!c || c.kind !== "photo") return false;
+    const scale = Math.max(r.w / Math.max(1, c.natW), r.h / Math.max(1, c.natH));
+    return doc.artboard.dpi / scale < DPI_WARN;
+  });
+  const anyLowRes = lowResSlots.some(Boolean);
+
   return (
     <div className="editor-v4">
       <div className="editor-toolbar">
@@ -966,6 +979,21 @@ export default function Editor({
               </div>
             );
           })}
+          {rects.map((r, i) =>
+            lowResSlots[i] ? (
+              <div
+                key={`warn${i}`}
+                className="slot-warn"
+                style={{
+                  left: geo.gx + r.x * geo.scale + 6,
+                  top: geo.gy + (r.y + r.h) * geo.scale - 26,
+                }}
+                title="This photo may look blurry printed this large"
+              >
+                ⚠ low-res
+              </div>
+            ) : null,
+          )}
         </div>
 
         <p className="note">
@@ -977,6 +1005,13 @@ export default function Editor({
                 ? "This is the printed area on your box — tap a ＋ to fill a box."
                 : "Your label, edge to edge — tap a ＋ to fill a box."}
         </p>
+        {anyLowRes && (
+          <p className="note dpi-warn">
+            ⚠ A photo you added is lower-resolution than ideal for this size and
+            may look a little soft in print. You can still use it — or tap ↺ to
+            swap in a sharper one.
+          </p>
+        )}
       </div>
 
       {selected && selectedSlot !== null && (
