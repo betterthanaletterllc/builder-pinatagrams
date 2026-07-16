@@ -31,6 +31,7 @@ import {
   type PendingOrder,
 } from "@/lib/flow";
 import { cdnThumb } from "@/lib/library-data";
+import { formatYmd } from "@/lib/delivery";
 import { trackBeginCheckout } from "@/lib/analytics";
 
 const MAX_QTY = 25;
@@ -578,7 +579,7 @@ export default function CartView() {
                 )}
                 <div>
                   <dt>Arrives</dt>
-                  <dd>{l.deliveryDate}</dd>
+                  <dd>{formatYmd(l.deliveryDate)}</dd>
                 </div>
                 {l.message && (
                   <div>
@@ -822,6 +823,9 @@ export default function CartView() {
                 <span>Total</span>
                 <span>{totalCents !== null ? formatCents(totalCents) : ""}</span>
               </div>
+              <p className="note tax-note">
+                Taxes calculated at checkout.
+              </p>
             </>
           ) : (
             <p className="note">Getting prices…</p>

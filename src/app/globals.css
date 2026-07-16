@@ -983,7 +983,7 @@ body:has(.bottom-stack) .site-footer {
   background: var(--card);
   border: 2px solid var(--line);
   border-radius: 12px;
-  padding: 34px 12px;
+  padding: 26px 16px;
   text-align: center;
   cursor: pointer;
   font-family: inherit;
@@ -999,6 +999,25 @@ body:has(.bottom-stack) .site-footer {
   font-size: 18px;
   font-weight: 700;
   color: var(--ink);
+}
+
+.choice-sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.ship-to-note {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.tax-note {
+  margin-top: 4px;
+  color: var(--muted);
 }
 
 .step-panel {

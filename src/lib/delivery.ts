@@ -91,6 +91,17 @@ export function fromYmd(ymd: string): Date {
   return new Date(y, m - 1, d);
 }
 
+/** A YYYY-MM-DD date the customer can read at a glance, e.g. "Mon, Jul 20".
+ *  Falls back to the raw string if it isn't a valid date. */
+export function formatYmd(ymd: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  return fromYmd(ymd).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function addDays(ymd: string, days: number): string {
   const d = fromYmd(ymd);
   d.setDate(d.getDate() + days);

@@ -34,7 +34,11 @@ import {
   type HubPrice,
   type LogoZone,
 } from "@/lib/hub";
-import { deliveryProblem, type DeliveryConfig } from "@/lib/delivery";
+import {
+  deliveryProblem,
+  formatYmd,
+  type DeliveryConfig,
+} from "@/lib/delivery";
 import { cdnThumb, clearLibraryState } from "@/lib/library-data";
 import { trackAddToCart } from "@/lib/analytics";
 import EditorShell from "./editor-shell";
@@ -525,6 +529,9 @@ export default function DesignFlow({
             <div className="choice-cards">
               <button className="choice-card" onClick={() => goView("library")}>
                 <span className="choice-title">Pick a graphic</span>
+                <span className="choice-sub">
+                  Browse hundreds of ready-made designs
+                </span>
               </button>
               <button
                 className="choice-card"
@@ -534,6 +541,9 @@ export default function DesignFlow({
                 }}
               >
                 <span className="choice-title">Design your own</span>
+                <span className="choice-sub">
+                  Add your photos &amp; text on a blank canvas
+                </span>
               </button>
             </div>
           ) : (
@@ -804,7 +814,13 @@ export default function DesignFlow({
           ) : dateProblem ? (
             <div className="notice warn">{dateProblem}</div>
           ) : (
-            <div className="notice info">Arrives on {date}.</div>
+            <div className="notice info">Arrives {formatYmd(date)}.</div>
+          )}
+          {hasCartAddress && (
+            <p className="note ship-to-note">
+              Ships to {cartAddress!.name}, {cartAddress!.city} — change in your
+              cart.
+            </p>
           )}
         </div>
       )}
@@ -1031,7 +1047,9 @@ export default function DesignFlow({
                           ? ` + ${selectedAddonLabels.join(" + ")}`
                           : "")
                       : null,
-                    !dateProblem && date && stepIndex >= 3 ? date : null,
+                    !dateProblem && date && stepIndex >= 3
+                      ? formatYmd(date)
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(" · ") || "building…"}

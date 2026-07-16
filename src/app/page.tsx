@@ -43,14 +43,25 @@ export default async function Home() {
       </main>
     );
   } catch {
+    const isProd = process.env.VERCEL_ENV === "production";
     return (
       <main>
         <div className="error-box">
-          <strong>The catalog is unavailable right now.</strong>
-          <p className="note">
-            Couldn&apos;t reach the hub at {HUB_URL}. If you&apos;re developing
-            locally, start the admin app first: <code>cd ../admin && npm run dev</code>.
-          </p>
+          <strong>Our builder is taking a quick breather.</strong>
+          {isProd ? (
+            <p className="note">
+              We couldn&apos;t load the piñata catalog just now — please refresh
+              in a moment. If it keeps happening,{" "}
+              <a href="mailto:nathan@pinatagrams.com">let us know</a> and
+              we&apos;ll sort it out.
+            </p>
+          ) : (
+            <p className="note">
+              Couldn&apos;t reach the hub at {HUB_URL}. If you&apos;re developing
+              locally, start the admin app first:{" "}
+              <code>cd ../admin && npm run dev</code>.
+            </p>
+          )}
         </div>
       </main>
     );
