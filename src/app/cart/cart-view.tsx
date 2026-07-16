@@ -279,8 +279,18 @@ export default function CartView() {
     fillingByLabel.get(l.filling)?.priceCents ?? 0;
 
   const update = (next: CartLine[]) => {
-    setLines(next);
-    saveCart(next);
+    // Persist FIRST: if the browser's storage is full (photo-heavy custom
+    // designs are large), commit nothing and say so loudly — better than a
+    // change that looks saved but silently vanishes on refresh. Removing a
+    // line shrinks the cart, so it always saves.
+    if (saveCart(next)) {
+      setLines(next);
+      setError(null);
+    } else {
+      setError(
+        "Your cart is full and we couldn't save that change. Custom designs with photos take the most room — try removing one.",
+      );
+    }
   };
 
   // The one ship-to address (all lines share it). Editing rewrites every

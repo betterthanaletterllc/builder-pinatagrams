@@ -310,12 +310,14 @@ function TextSlotEl({
   slot,
   rect,
   fontFamily,
+  fontsReady,
   onSelect,
   onEdit,
 }: {
   slot: TextSlot;
   rect: SlotRect;
   fontFamily: string;
+  fontsReady: boolean;
   onSelect: () => void;
   onEdit: () => void;
 }) {
@@ -324,9 +326,11 @@ function TextSlotEl({
   const h = rect.h - pad * 2;
   const empty = slot.text.trim() === "";
   const display = empty ? "Your text" : slot.text;
+  // fontsReady in the deps re-fits once Poppins loads (its metrics differ
+  // from the fallback the first fit may have measured).
   const fontSize = useMemo(
     () => fitFontSize(display, w, h, fontFamily),
-    [display, w, h, fontFamily],
+    [display, w, h, fontFamily, fontsReady],
   );
   return (
     <Group clip={{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}>
@@ -482,6 +486,24 @@ export default function Editor({
       .getPropertyValue("--font-poppins")
       .trim();
     return v || "sans-serif";
+  }, []);
+
+  // Text auto-fit measures against whatever font is loaded NOW; if Poppins
+  // isn't ready yet it measures the fallback and the size (baked into the
+  // exported print art) can clip. Flip this once fonts finish loading so the
+  // fit — and the export — recompute against the real metrics.
+  const [fontsReady, setFontsReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const done = () => live && setFontsReady(true);
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      document.fonts.ready.then(done);
+    } else {
+      done();
+    }
+    return () => {
+      live = false;
+    };
   }, []);
 
   // Wait for the box photo — no flat-artboard flash. If it FAILS, proceed in
@@ -884,6 +906,7 @@ export default function Editor({
                       slot={c}
                       rect={r}
                       fontFamily={fontFamily}
+                      fontsReady={fontsReady}
                       onSelect={() => setSelectedSlot(i)}
                       onEdit={() => {
                         setSelectedSlot(i);
