@@ -1843,7 +1843,9 @@ body:has(.bottom-stack) .site-footer {
 
 @media (max-width: 900px) {
   .cart-grid {
-    grid-template-columns: 1fr;
+    /* minmax(0,…) not 1fr: a wide child (the long ship-to line) must not blow
+       the single column past the viewport and cause a sideways scroll. */
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
