@@ -546,6 +546,7 @@ export default function CartView() {
   };
 
   return (
+    <>
     <div className="cart-grid">
       <div>
         {confirmed && (
@@ -598,7 +599,7 @@ export default function CartView() {
                   </div>
                 )}
                 {addressComplete(l.address) && (
-                  <div>
+                  <div className="cart-shipto">
                     <dt>Ships to</dt>
                     <dd>
                       {l.address.name} · {l.address.address1}
@@ -930,5 +931,25 @@ export default function CartView() {
         </p>
       </aside>
     </div>
+
+    {/* Sticky checkout bar — mobile only: the panel's Check out button sits
+        far below the fold, so keep an always-visible one at the bottom. */}
+    {lines.length > 0 && (
+      <div className="mobile-checkout-bar">
+        <span className="mcb-total">
+          {totalCents !== null ? formatCents(totalCents) : "…"}
+        </span>
+        <button
+          className="btn primary"
+          disabled={
+            submitting || missingAddress.length > 0 || totalCents === null
+          }
+          onClick={checkout}
+        >
+          {submitting ? "Heading out…" : "Check out →"}
+        </button>
+      </div>
+    )}
+    </>
   );
 }

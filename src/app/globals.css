@@ -1767,6 +1767,49 @@ body:has(.bottom-stack) .site-footer {
   margin: 0 0 16px;
 }
 
+/* Sticky mobile checkout bar — the panel's Check out button sits far below
+   the fold once the cart stacks, so pin an always-visible one to the bottom. */
+.mobile-checkout-bar {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-checkout-bar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: #fff;
+    border-top: 1px solid var(--line-strong);
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.07);
+  }
+  .mobile-checkout-bar .mcb-total {
+    font-size: 19px;
+    font-weight: 700;
+  }
+  .mobile-checkout-bar .btn.primary {
+    flex: 0 0 auto;
+    min-height: 46px;
+    padding: 12px 22px;
+    font-size: 16px;
+  }
+  /* clearance so the last cart content isn't hidden under the bar */
+  .cart-grid {
+    padding-bottom: 88px;
+  }
+  /* per-line ship-to is redundant with the sidebar ship-to once stacked
+     (the parent selector out-specifies `.cart-detail > div { display:flex }`) */
+  .cart-detail .cart-shipto {
+    display: none;
+  }
+}
+
 /* --- small screens ---------------------------------------------------------- */
 
 @media (max-width: 600px) {
@@ -1785,6 +1828,24 @@ body:has(.bottom-stack) .site-footer {
   }
   .style-card img {
     height: 76px;
+  }
+  /* Tighter cart lines on phones — the full detail stack was ~a full screen
+     per item (compounding the scroll to checkout). Parent selectors out-
+     specify the base cart rules that sit later in the file. */
+  .cart-grid .cart-line {
+    padding: 10px;
+    gap: 10px;
+  }
+  .cart-grid .cart-thumb {
+    height: 84px;
+    width: 112px;
+  }
+  .cart-grid .cart-detail {
+    gap: 2px;
+    font-size: 12.5px;
+  }
+  .cart-grid .cart-detail dt {
+    width: 52px;
   }
   .shelf-row .library-card {
     flex: 0 0 130px;
