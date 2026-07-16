@@ -172,6 +172,13 @@ export function newLineId(): string {
 export type PendingOrder = {
   invoiceUrl: string;
   createdAt: number; // ms epoch
+  // The Shopify draft gid, so the cart can ask whether it's been paid yet.
+  // Optional: records written before this field existed won't have it.
+  draftOrderId?: string;
+  // The cart line ids that went into this draft. When the order turns out
+  // paid, ONLY these are cleared — lines added to the cart afterwards (the
+  // cart persists through checkout) must survive. Written alongside draftOrderId.
+  lineIds?: string[];
 };
 
 const PENDING_KEY = "pinatagrams-builder-pending";
@@ -194,7 +201,16 @@ export function loadPendingOrder(): PendingOrder | null {
       localStorage.removeItem(PENDING_KEY);
       return null;
     }
-    return { invoiceUrl: p.invoiceUrl, createdAt: p.createdAt };
+    return {
+      invoiceUrl: p.invoiceUrl,
+      createdAt: p.createdAt,
+      ...(typeof p.draftOrderId === "string"
+        ? { draftOrderId: p.draftOrderId }
+        : {}),
+      ...(Array.isArray(p.lineIds)
+        ? { lineIds: p.lineIds.filter((x): x is string => typeof x === "string") }
+        : {}),
+    };
   } catch {
     return null;
   }

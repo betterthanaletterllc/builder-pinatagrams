@@ -158,10 +158,55 @@ export default function CartView() {
   const [editingAddr, setEditingAddr] = useState<DeliveryAddress | null>(null);
   // An unpaid draft from a prior checkout (abandoned invoice recovery).
   const [pending, setPending] = useState<PendingOrder | null>(null);
+  // Set true when the pending order turns out to be already PAID — the cart
+  // clears itself and shows a thank-you instead of the paid order.
+  const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
-    setLines(loadCart());
-    setPending(loadPendingOrder());
+    const cart = loadCart();
+    const p = loadPendingOrder();
+    setPending(p);
+    // If a recent order is pending, verify it wasn't ALREADY PAID before
+    // showing the cart — a paid order must not reappear as an editable cart.
+    // While the check runs, lines stays null (the "Loading…" state); it
+    // resolves in well under a second and falls back to the cart on any hiccup.
+    if (p?.draftOrderId) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
+      fetch("/api/order-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draftOrderId: p.draftOrderId }),
+        signal: ctrl.signal,
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((res) => {
+          if (res?.status === "paid") {
+            // Clear ONLY the lines that were in this (now-paid) draft — the
+            // cart persists through checkout, so anything added afterwards
+            // must survive.
+            const draftedIds = new Set(p.lineIds ?? []);
+            const remaining = cart.filter((l) => !draftedIds.has(l.id));
+            saveCart(remaining);
+            clearPendingOrder();
+            setLines(remaining);
+            setPending(null);
+            setConfirmed(true);
+          } else {
+            // "gone" = the draft was deleted/cleaned up → drop the stale
+            // banner but keep the (unpurchased) cart.
+            if (res?.status === "gone") {
+              clearPendingOrder();
+              setPending(null);
+            }
+            setLines(cart);
+          }
+        })
+        .catch(() => setLines(cart))
+        .finally(() => clearTimeout(t));
+    } else {
+      setLines(cart);
+    }
     // Restore a previously applied code (survives a cart refresh). If it no
     // longer resolves (deleted/deactivated since), self-heal: clear the
     // field + storage so a dead code can't sit there looking applied.
@@ -304,6 +349,28 @@ export default function CartView() {
   };
 
   if (lines === null) return <p className="note">Loading…</p>;
+
+  // The pending order was paid and nothing else is in the cart — thank-you.
+  if (confirmed && lines.length === 0) {
+    return (
+      <div className="step-panel">
+        <div className="pending-order">
+          <div className="pending-head">
+            <strong>Thanks — your order is confirmed! 🎉</strong>
+          </div>
+          <p className="note">
+            We&apos;ve got it from here. Watch for a confirmation, and we&apos;ll
+            get your piñata on its way.
+          </p>
+        </div>
+        <p>
+          <Link className="btn" href="/">
+            + Send another piñata
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   if (lines.length === 0 && !result) {
     return (
@@ -450,6 +517,8 @@ export default function CartView() {
           savePendingOrder({
             invoiceUrl: data.orders[0].invoiceUrl,
             createdAt: Date.now(),
+            draftOrderId: data.orders[0].draftOrderId,
+            lineIds: current.map((l) => l.id),
           });
           window.location.assign(data.orders[0].invoiceUrl);
           return;
@@ -468,6 +537,17 @@ export default function CartView() {
   return (
     <div className="cart-grid">
       <div>
+        {confirmed && (
+          <div className="pending-order">
+            <div className="pending-head">
+              <strong>Your order is confirmed! 🎉</strong>
+            </div>
+            <p className="note">
+              That piñata&apos;s on its way. Anything below is a separate order
+              you haven&apos;t placed yet.
+            </p>
+          </div>
+        )}
         {pending && (
           <PendingCard onResume={resumePayment} onDismiss={dismissPending} />
         )}
