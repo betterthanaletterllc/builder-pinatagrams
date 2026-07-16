@@ -1796,6 +1796,81 @@ body:has(.bottom-stack) .site-footer {
   margin: 0 0 16px;
 }
 
+/* --- landing hero: sell first, the picker below is the CTA ------------------ */
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 4px 0 18px;
+}
+
+.hero-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero h1 {
+  margin: 0 0 8px;
+}
+
+.hero-sub {
+  margin: 0 0 12px;
+  font-size: 16px;
+  line-height: 1.5;
+  max-width: 560px;
+}
+
+.hero-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.hero-trust .hero-price {
+  color: var(--ink);
+}
+
+.hero-img {
+  /* the studio shot is PORTRAIT — cap height so the hero stays compact and
+     the style grid peeks above the fold on desktop too */
+  flex: none;
+  max-height: 300px;
+  max-width: 30%;
+  width: auto;
+  height: auto;
+}
+
+@media (max-width: 700px) {
+  .hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .hero-img {
+    width: 100%;
+    max-height: 190px;
+    object-fit: contain;
+  }
+}
+
+.start-h2 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+
+.style-price-note {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Sticky mobile checkout bar — the panel's Check out button sits far below
    the fold once the cart stacks, so pin an always-visible one to the bottom. */
 .mobile-checkout-bar {
