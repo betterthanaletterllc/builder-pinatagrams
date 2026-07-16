@@ -37,6 +37,7 @@ import {
 import {
   deliveryProblem,
   formatYmd,
+  minDeliveryDate,
   type DeliveryConfig,
 } from "@/lib/delivery";
 import { cdnThumb, clearLibraryState } from "@/lib/library-data";
@@ -813,6 +814,11 @@ export default function DesignFlow({
 
       {step === "Delivery" && (
         <div className="step-panel delivery-step">
+          <p className="note earliest-hint">
+            Soonest arrival{" "}
+            <strong>{formatYmd(minDeliveryDate(deliveryCfg))}</strong> — we need
+            a day to make your piñata plus two FedEx days to fly it there.
+          </p>
           <DateCalendar value={date} onChange={setDate} cfg={deliveryCfg} />
           {!date ? (
             <p className="note">

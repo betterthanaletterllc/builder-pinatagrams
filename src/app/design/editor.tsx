@@ -506,6 +506,9 @@ export default function Editor({
     };
   }, []);
 
+  // Slot index whose photo is currently being ingested (shows a spinner).
+  const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
+
   // Wait for the box photo — no flat-artboard flash. If it FAILS, proceed in
   // flat mode rather than gating forever. (All hooks live ABOVE this gate.)
   if (boxImageUrl && !boxImg && !boxFailed) {
@@ -578,6 +581,11 @@ export default function Editor({
       );
       return;
     }
+    // Show "Adding your photo…" and let it PAINT before ingestPhoto's encode
+    // (which runs on the main thread and can freeze the UI for a second or
+    // two on a big phone photo — otherwise it just looks broken).
+    setUploadingSlot(i);
+    await new Promise((r) => setTimeout(r, 40));
     try {
       // ingestPhoto never fails on size — it compresses to fit. Its output
       // dims ARE the encoded image's dims (no second decode needed).
@@ -592,6 +600,8 @@ export default function Editor({
       setSelectedSlot(i);
     } catch {
       alert("That image couldn't be read — try a JPG or PNG.");
+    } finally {
+      setUploadingSlot(null);
     }
   };
 
@@ -982,12 +992,17 @@ export default function Editor({
                 }}
               >
                 {c.kind === "photo" ? (
-                  <button title="Replace photo" onClick={() => requestPhoto(i)}>
+                  <button
+                    title="Replace photo"
+                    aria-label="Replace photo"
+                    onClick={() => requestPhoto(i)}
+                  >
                     ↺
                   </button>
                 ) : (
                   <button
                     title="Edit text"
+                    aria-label="Edit text"
                     onClick={() => {
                       setSelectedSlot(i);
                       setEditingText(i);
@@ -996,7 +1011,11 @@ export default function Editor({
                     ✏️
                   </button>
                 )}
-                <button title="Remove" onClick={() => clearSlot(i)}>
+                <button
+                  title="Remove"
+                  aria-label="Remove this box"
+                  onClick={() => clearSlot(i)}
+                >
                   ✕
                 </button>
               </div>
@@ -1016,6 +1035,16 @@ export default function Editor({
                 ⚠ low-res
               </div>
             ) : null,
+          )}
+          {uploadingSlot !== null && rects[uploadingSlot] && (
+            <div
+              className="slot-uploading"
+              style={slotCss(rects[uploadingSlot])}
+              role="status"
+            >
+              <span className="mini-spinner" aria-hidden />
+              Adding your photo…
+            </div>
           )}
         </div>
 

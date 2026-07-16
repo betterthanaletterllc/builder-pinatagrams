@@ -635,6 +635,7 @@ export default function CartView() {
                 </button>
                 <button
                   className="btn mini"
+                  aria-label="Decrease quantity"
                   onClick={() =>
                     update(
                       lines.map((x) =>
@@ -650,6 +651,7 @@ export default function CartView() {
                 <span className="qty">{l.qty}</span>
                 <button
                   className="btn mini"
+                  aria-label="Increase quantity"
                   disabled={l.qty >= MAX_QTY}
                   onClick={() =>
                     update(
@@ -665,6 +667,7 @@ export default function CartView() {
                 </button>
                 <button
                   className="btn danger"
+                  aria-label="Remove this piñata"
                   onClick={() => update(lines.filter((x) => x.id !== l.id))}
                 >
                   ✕
@@ -710,7 +713,7 @@ export default function CartView() {
           </div>
         )}
         {result && !result.dryRun && (
-          <div className="notice info">
+          <div className="notice info" role="status" aria-live="polite">
             <strong>
               {result.orders.length === 1
                 ? "Order created!"
@@ -731,7 +734,11 @@ export default function CartView() {
             </ul>
           </div>
         )}
-        {error && <div className="notice warn">{error}</div>}
+        {error && (
+          <div className="notice warn" role="alert">
+            {error}
+          </div>
+        )}
       </div>
 
       <aside className="panel">

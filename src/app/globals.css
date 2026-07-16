@@ -669,6 +669,36 @@ a.style-card:focus-visible {
   color: var(--warn);
 }
 
+/* "Adding your photo…" overlay while a slot's image is being ingested. */
+.slot-uploading {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.mini-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .msg-from-nudge {
   font-weight: 600;
   color: var(--accent-hover);
@@ -1032,6 +1062,11 @@ body:has(.bottom-stack) .site-footer {
 .ship-to-note {
   margin-top: 10px;
   text-align: center;
+}
+
+.earliest-hint {
+  text-align: center;
+  margin-bottom: 8px;
 }
 
 .tax-note {
