@@ -394,7 +394,7 @@ export default function DesignFlow({
 
   const STEP_HEADINGS: Record<Step, string> = {
     Graphic: "Step Two: The graphic",
-    Message: "Step Three: Add a gift message",
+    Message: "Step Three: Message",
     Filling: "Step Four: What goes inside?",
     Delivery: "Step Five: Pick the delivery day",
     "Send to": "Step Six: Who's it going to?",

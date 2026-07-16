@@ -1255,11 +1255,6 @@ body:has(.bottom-stack) .site-footer {
 
 .flow-rail.msg-compact {
   max-width: 250px;
-  /* Message step only: put the textarea FIRST (order 0) and the flap preview
-     BELOW it (this rail = order 1), so the box you type in is visible on
-     arrival instead of pushed under the fixed dock by a tall open-box preview.
-     Type here → watch it land on the flap right below. */
-  order: 1;
 }
 
 @media (max-width: 900px) {
