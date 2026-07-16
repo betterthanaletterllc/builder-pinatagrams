@@ -913,7 +913,7 @@ export default function DesignFlow({
     <div className={"flow-root" + (choosing ? " wide" : "")}>
       <div className="chips">
         <button className="chip done" onClick={openSwitcher}>
-          ✓ {styleInfo.name} ▾
+          <span className="chip-num">1 ·</span> {styleInfo.name} ▾
         </button>
         {STEPS.filter((s) => s !== "Send to" || !hasCartAddress).map((s, i) => {
           const unreachable = i > Math.max(stepIndex, reachable);
@@ -931,7 +931,7 @@ export default function DesignFlow({
               onClick={() => !unreachable && goStep(s)}
             >
               {i < stepIndex ? "✓ " : ""}
-              {s}
+              <span className="chip-num">{i + 2} ·</span> {s}
             </button>
           );
         })}
@@ -970,7 +970,10 @@ export default function DesignFlow({
       )}
 
       {showHeading && (
-        <h1 className="step-h1" tabIndex={-1}>
+        // Visually hidden: the numbered chips ARE the step indicator now
+        // (frees ~50px of vertical space). Kept in the DOM for screen
+        // readers and as the focus target on step change.
+        <h1 className="step-h1 visually-hidden" tabIndex={-1}>
           {STEP_HEADINGS[step]}
         </h1>
       )}

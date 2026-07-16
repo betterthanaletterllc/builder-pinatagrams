@@ -38,7 +38,30 @@ export default async function Home() {
     ]);
     return (
       <main>
-        <h1 className="step-h1">Step One: Pick a body style</h1>
+        {/* The numbered step row IS the heading — a first-time visitor sees
+            the whole journey at a glance ("6 quick steps"). Body is active;
+            the rest unlock in the flow. */}
+        <nav className="chips home-chips" aria-label="How it works">
+          <span className="chip active">
+            <span className="chip-num">1 ·</span> Body
+          </span>
+          <span className="chip locked">
+            <span className="chip-num">2 ·</span> Graphic
+          </span>
+          <span className="chip locked">
+            <span className="chip-num">3 ·</span> Message
+          </span>
+          <span className="chip locked">
+            <span className="chip-num">4 ·</span> Filling
+          </span>
+          <span className="chip locked">
+            <span className="chip-num">5 ·</span> Delivery
+          </span>
+          <span className="chip locked">
+            <span className="chip-num">6 ·</span> Send to
+          </span>
+        </nav>
+        <h1 className="visually-hidden">Pick a body style</h1>
         <BuilderPreview bodyStyles={catalog.bodyStyles} priceCents={priceCents} />
       </main>
     );
