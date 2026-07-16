@@ -1831,7 +1831,8 @@ body:has(.bottom-stack) .site-footer {
   color: var(--muted);
 }
 
-.hero-trust .hero-price {
+.hero-trust .hero-price,
+.hero-trust .hero-stars {
   color: var(--ink);
 }
 

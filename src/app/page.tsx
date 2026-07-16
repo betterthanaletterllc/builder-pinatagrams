@@ -61,6 +61,10 @@ export default async function Home() {
                   From {formatCents(priceCents)} — shipping included
                 </span>
               )}
+              {/* Real Loox numbers (store-wide, verified 2026-07-16):
+                  2,044 reviews, 4.82 weighted average. Count rounded DOWN
+                  so the claim stays true as reviews grow. */}
+              <span className="hero-stars">★ 4.8 · 2,000+ reviews</span>
               <span>Arrives on the day you pick</span>
               <span>300,000+ piñatas delivered</span>
             </p>
