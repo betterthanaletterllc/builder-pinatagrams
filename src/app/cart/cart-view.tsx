@@ -106,19 +106,13 @@ function CartBoxThumb({ line }: { line: CartLine }) {
   );
 }
 
-// Shown when a draft was created but the customer hasn't paid — recovers an
-// abandoned Shopify invoice: resume payment, or restore the lines to edit.
+// Shown when a draft was created but not yet paid — one tap back to the exact
+// Shopify invoice. The cart itself is kept, so "keep editing" = the cart below.
 function PendingCard({
-  pending,
-  count,
   onResume,
-  onEdit,
   onDismiss,
 }: {
-  pending: PendingOrder;
-  count: number;
   onResume: () => void;
-  onEdit: () => void;
   onDismiss: () => void;
 }) {
   return (
@@ -130,23 +124,13 @@ function PendingCard({
         </button>
       </div>
       <p className="note">
-        {count > 0 ? (
-          <>
-            {count} piñata{count === 1 ? "" : "s"} waiting on our secure
-            checkout.{" "}
-          </>
-        ) : null}
-        Finish paying to lock it in — or make a change first.
+        Finish paying on our secure checkout to lock it in — or change your cart
+        and check out again for a new total.
       </p>
       <div className="pending-actions">
         <button className="btn primary" onClick={onResume}>
           Resume payment →
         </button>
-        {pending.lines.length > 0 && (
-          <button className="btn ghost" onClick={onEdit}>
-            Edit order
-          </button>
-        )}
       </div>
     </div>
   );
@@ -310,51 +294,23 @@ export default function CartView() {
     setDiscountMsg(null);
   };
 
-  // Pending-order (unpaid draft) recovery.
+  // Pending-order (unpaid draft) recovery — resume the invoice or dismiss.
   const resumePayment = () => {
     if (pending) window.location.assign(pending.invoiceUrl);
-  };
-  const editPendingOrder = () => {
-    if (!pending) return;
-    // Restore the ordered lines so they can change something and re-checkout
-    // (a fresh draft; the old unpaid one is abandoned in Shopify).
-    update([...(lines ?? []), ...pending.lines]);
-    clearPendingOrder();
-    setPending(null);
   };
   const dismissPending = () => {
     clearPendingOrder();
     setPending(null);
   };
-  const pendingCount = pending
-    ? pending.lines.reduce((s, l) => s + l.qty, 0)
-    : 0;
 
   if (lines === null) return <p className="note">Loading…</p>;
-
-  // Just checked out: the cart is empty but an unpaid draft is waiting.
-  if (lines.length === 0 && !result && pending) {
-    return (
-      <div className="step-panel">
-        <PendingCard
-          pending={pending}
-          count={pendingCount}
-          onResume={resumePayment}
-          onEdit={editPendingOrder}
-          onDismiss={dismissPending}
-        />
-        <p>
-          <Link className="btn" href="/">
-            + Start a new order
-          </Link>
-        </p>
-      </div>
-    );
-  }
 
   if (lines.length === 0 && !result) {
     return (
       <div className="step-panel">
+        {pending && (
+          <PendingCard onResume={resumePayment} onDismiss={dismissPending} />
+        )}
         <p>Nothing here yet.</p>
         <Link className="btn primary" href="/">
           Design a piñata →
@@ -486,16 +442,15 @@ export default function CartView() {
       }
       setResult(data);
       if (data.dryRun === false) {
-        // Single-destination order: snapshot it as a PENDING order (so an
-        // abandoned invoice doesn't lose their work), clear the active cart,
-        // then hand off to Shopify's hosted checkout (card/Shop Pay/Apple Pay).
+        // Single-destination order: record the draft's invoice as PENDING and
+        // hand off to Shopify's hosted checkout — but DON'T clear the cart, so
+        // hitting "back" from the invoice lands them on their cart intact (the
+        // banner just offers a one-tap return to this exact invoice).
         if (data.orders?.length === 1) {
           savePendingOrder({
             invoiceUrl: data.orders[0].invoiceUrl,
             createdAt: Date.now(),
-            lines: current,
           });
-          update([]);
           window.location.assign(data.orders[0].invoiceUrl);
           return;
         }
@@ -514,13 +469,7 @@ export default function CartView() {
     <div className="cart-grid">
       <div>
         {pending && (
-          <PendingCard
-            pending={pending}
-            count={pendingCount}
-            onResume={resumePayment}
-            onEdit={editPendingOrder}
-            onDismiss={dismissPending}
-          />
+          <PendingCard onResume={resumePayment} onDismiss={dismissPending} />
         )}
         {lines.map((l) => (
           <div className="cart-line" key={l.id}>

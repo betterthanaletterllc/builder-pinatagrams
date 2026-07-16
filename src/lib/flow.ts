@@ -163,16 +163,15 @@ export function newLineId(): string {
 }
 
 /* ---------------------------------------------------------------------------
- * Pending order — a Shopify draft created at checkout but NOT yet paid. We
- * snapshot it so an abandoned hosted-invoice doesn't lose the customer's work:
- * the cart can offer "Resume payment" (back to the invoice) or "Edit order"
- * (restore the lines to the cart). Expires so a stale/already-paid one clears.
+ * Pending order — a Shopify draft created at checkout but NOT yet paid. The
+ * cart is NOT cleared on checkout, so hitting "back" from the hosted invoice
+ * lands the customer on their cart intact; this record just adds a "Resume
+ * payment" link back to that exact invoice. Expires so a stale/paid one clears.
  * ------------------------------------------------------------------------- */
 
 export type PendingOrder = {
   invoiceUrl: string;
   createdAt: number; // ms epoch
-  lines: CartLine[]; // snapshot of what was ordered ([] if too big to store)
 };
 
 const PENDING_KEY = "pinatagrams-builder-pending";
@@ -181,13 +180,7 @@ const PENDING_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 export function savePendingOrder(p: PendingOrder): void {
   try {
     localStorage.setItem(PENDING_KEY, JSON.stringify(p));
-  } catch {
-    // Photo-heavy carts can exceed the quota — keep the resume link even if
-    // the line snapshot won't fit (Edit-order is then just unavailable).
-    try {
-      localStorage.setItem(PENDING_KEY, JSON.stringify({ ...p, lines: [] }));
-    } catch {}
-  }
+  } catch {}
 }
 
 export function loadPendingOrder(): PendingOrder | null {
@@ -201,11 +194,7 @@ export function loadPendingOrder(): PendingOrder | null {
       localStorage.removeItem(PENDING_KEY);
       return null;
     }
-    return {
-      invoiceUrl: p.invoiceUrl,
-      createdAt: p.createdAt,
-      lines: Array.isArray(p.lines) ? p.lines : [],
-    };
+    return { invoiceUrl: p.invoiceUrl, createdAt: p.createdAt };
   } catch {
     return null;
   }
