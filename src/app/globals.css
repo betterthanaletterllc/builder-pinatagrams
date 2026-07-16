@@ -560,6 +560,10 @@ a.style-card:focus-visible {
 .tmpl-switch {
   display: flex;
   gap: 6px;
+  /* 8 template thumbs ≈ 460px — wrap instead of running off narrow screens */
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tmpl-switch-btn {
@@ -2155,9 +2159,9 @@ body:has(.bottom-stack) .site-footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(8px, 1.6vw, 12px);
+  font-size: clamp(14px, 3.6vw, 20px);
   line-height: 1.15;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent-hover);
   text-align: center;
   overflow: hidden;
