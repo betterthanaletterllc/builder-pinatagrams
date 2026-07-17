@@ -37,47 +37,76 @@ export default async function Home() {
       getCatalog(),
       b2cDeliveredCents(),
     ]);
-    // Hero visual: the standard piñata's studio shot (hub-controlled, same
-    // image the link previews use); any style's image as a fallback.
-    const heroImg =
+    // Hero imagery: the hub-managed landing shots (admin /pricing →
+    // "Landing page", first three active). Fallback: the standard piñata's
+    // studio image, until the hub serves landing images.
+    const landingImgs = (catalog.landing?.images ?? [])
+      .filter((i) => i.url)
+      .slice(0, 3);
+    const fallbackImg =
       catalog.bodyStyles.find((s) => s.id === "standard")?.imageUrl ??
       catalog.bodyStyles.find((s) => s.imageUrl)?.imageUrl ??
       null;
+    const trustStrip = (
+      <p className="hero-trust">
+        {priceCents != null && (
+          <span className="hero-price">
+            From {formatCents(priceCents)} — shipping included
+          </span>
+        )}
+        {/* Real Loox numbers (store-wide, verified 2026-07-16): 2,044
+            reviews, 4.82 weighted average. Count rounded DOWN so the claim
+            stays true as reviews grow. */}
+        <span className="hero-stars">★ 4.8 · 2,000+ reviews</span>
+        <span>Arrives on the day you pick</span>
+        <span>300,000+ piñatas delivered</span>
+      </p>
+    );
     return (
       <main>
-        {/* Compact hero: sell first, the picker right below IS the CTA.
-            NO smash copy — the candy comes out and the piñata gets kept. */}
-        <section className="hero">
-          <div className="hero-copy">
-            <h1>The sweetest gift!</h1>
-            <p className="hero-sub">
-              Design a custom piñata — we stuff it with candy and fly it
-              right to their door. They pull out the treats and keep the
-              cute piñata.
-            </p>
-            <p className="hero-trust">
-              {priceCents != null && (
-                <span className="hero-price">
-                  From {formatCents(priceCents)} — shipping included
-                </span>
-              )}
-              {/* Real Loox numbers (store-wide, verified 2026-07-16):
-                  2,044 reviews, 4.82 weighted average. Count rounded DOWN
-                  so the claim stays true as reviews grow. */}
-              <span className="hero-stars">★ 4.8 · 2,000+ reviews</span>
-              <span>Arrives on the day you pick</span>
-              <span>300,000+ piñatas delivered</span>
-            </p>
-          </div>
-          {heroImg && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              className="hero-img"
-              src={heroImg}
-              alt="A Piñatagram piñata"
-            />
-          )}
-        </section>
+        {/* Hero: sell first, the picker right below IS the CTA. NO smash
+            copy — the candy comes out and the piñata gets kept. */}
+        {landingImgs.length > 0 ? (
+          // Overlay style: product shots as the backdrop, message on top.
+          <section className="hero-overlay">
+            <div className="hero-tiles">
+              {landingImgs.map((img) => (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img key={img.id} src={img.url} alt={img.label} />
+              ))}
+            </div>
+            <div className="hero-panel">
+              <div className="hero-panel-inner">
+                <h1>The sweetest gift!</h1>
+                <p className="hero-line">
+                  Personalized mini piñatas — filled with sweets and treats,
+                  carrying a message, delivered straight to their door.
+                </p>
+                {trustStrip}
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="hero">
+            <div className="hero-copy">
+              <h1>The sweetest gift!</h1>
+              <p className="hero-sub">
+                Design a custom piñata — we stuff it with candy and fly it
+                right to their door. They pull out the treats and keep the
+                cute piñata.
+              </p>
+              {trustStrip}
+            </div>
+            {fallbackImg && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                className="hero-img"
+                src={fallbackImg}
+                alt="A Piñatagram piñata"
+              />
+            )}
+          </section>
+        )}
 
         {/* The numbered step row — a first-time visitor sees the whole
             journey at a glance ("6 quick steps"). Body is active; the rest
