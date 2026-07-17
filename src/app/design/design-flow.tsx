@@ -401,7 +401,6 @@ export default function DesignFlow({
     step === "Add-ons" ||
     step === "Delivery" ||
     step === "Send to";
-  const railVisible = !choosing && !docked;
   // The dock shows on EVERY step (not just the docked ones) — inside the
   // library/canvas it would fight the editor's own bottom UI, so not there.
   const dockVisible = !choosing;
@@ -454,6 +453,30 @@ export default function DesignFlow({
 
   const selectedSavedKey = addressKey(address);
   const addressOk = addressComplete(address);
+
+  // One source for the order-summary strings — the mobile bottom dock and
+  // the desktop rail card must never drift apart.
+  const summaryTitle =
+    graphic?.type === "custom"
+      ? `Your design — ${styleInfo.name}`
+      : graphic
+        ? `${graphic.title} — ${styleInfo.name}`
+        : styleInfo.name;
+  const summaryDetail =
+    [
+      message
+        ? `“${message.slice(0, 22)}${message.length > 22 ? "…" : ""}”`
+        : null,
+      filling
+        ? filling +
+          (selectedAddonLabels.length
+            ? ` + ${selectedAddonLabels.join(" + ")}`
+            : "")
+        : null,
+      !dateProblem && date && stepIndex >= 3 ? formatYmd(date) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "building…";
 
   // Titles get their "Step N" from the VISIBLE position (body style is One),
   // so the number always matches the numbered chip row even when Add-ons or
@@ -1066,8 +1089,19 @@ export default function DesignFlow({
         </h1>
       )}
 
-      {railVisible ? (
-        <div className={"flow-grid" + (dockVisible ? " has-dock" : "")}>
+      {!choosing ? (
+        // One grid for every step. Mobile: rail above steps on the graphic/
+        // message steps, hidden on the docked ones (rail-docked) — exactly
+        // the old behavior. Desktop (>=1024px CSS): the rail becomes a big
+        // STICKY preview column on the left of every step, with the order
+        // summary card under it replacing the bottom dock.
+        <div
+          className={
+            "flow-grid" +
+            (dockVisible ? " has-dock" : "") +
+            (docked ? " rail-docked" : "")
+          }
+        >
           {steps}
           <aside
             className={
@@ -1092,10 +1126,29 @@ export default function DesignFlow({
               pinataFallback={styleInfo.imageUrl}
               pinataZone={styleInfo.pinataZone}
             />
+            <div className="desk-summary">
+              <strong className="desk-summary-title">{summaryTitle}</strong>
+              <span className="desk-summary-detail">{summaryDetail}</span>
+              {deliveredCents !== null && (
+                <div className="desk-summary-price">
+                  <strong>{formatCents(deliveredCents)}</strong>
+                  <span>shipping included</span>
+                </div>
+              )}
+              {primaryCta && (
+                <button
+                  className="btn primary desk-summary-cta"
+                  disabled={primaryCta.disabled}
+                  onClick={primaryCta.onClick}
+                >
+                  {primaryCta.label}
+                </button>
+              )}
+            </div>
           </aside>
         </div>
       ) : (
-        <div className={dockVisible ? "has-dock" : undefined}>{steps}</div>
+        <div>{steps}</div>
       )}
 
       {dockVisible && (
@@ -1135,31 +1188,8 @@ export default function DesignFlow({
                 )}
               </div>
               <div className="dock-info">
-                <strong>
-                  {graphic?.type === "custom"
-                    ? `Your design — ${styleInfo.name}`
-                    : graphic
-                      ? `${graphic.title} — ${styleInfo.name}`
-                      : styleInfo.name}
-                </strong>
-                <span>
-                  {[
-                    message
-                      ? `“${message.slice(0, 22)}${message.length > 22 ? "…" : ""}”`
-                      : null,
-                    filling
-                      ? filling +
-                        (selectedAddonLabels.length
-                          ? ` + ${selectedAddonLabels.join(" + ")}`
-                          : "")
-                      : null,
-                    !dateProblem && date && stepIndex >= 3
-                      ? formatYmd(date)
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "building…"}
-                </span>
+                <strong>{summaryTitle}</strong>
+                <span>{summaryDetail}</span>
               </div>
               {deliveredCents !== null && (
                 <div className="dock-price">
