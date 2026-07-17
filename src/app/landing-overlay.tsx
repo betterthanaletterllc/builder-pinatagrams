@@ -105,7 +105,7 @@ export default function LandingOverlay({
           </div>
         ))}
         <button className="btn primary landing-cta" onClick={dismiss}>
-          Build My Piñata
+          Build My Piñatagram
         </button>
       </div>
     </div>
