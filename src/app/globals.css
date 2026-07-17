@@ -1818,9 +1818,11 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .landing-logo {
-  height: 46px;
+  height: 76px;
   width: auto;
   margin-bottom: 8px;
+  max-width: 100%;
+  object-fit: contain;
 }
 
 .landing-sec {
@@ -1829,8 +1831,14 @@ body:has(.bottom-stack) .site-footer {
 
 .landing-line {
   margin: 18px 0 10px;
+  /* Poppins explicitly (not just inherited) — the pitch lines must never
+     render in a fallback face */
+  font-family:
+    var(--font-poppins),
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
   font-size: 21px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ink);
   line-height: 1.25;
 }
