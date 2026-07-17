@@ -70,10 +70,13 @@ export default async function Home() {
             <span className="chip-num">4 ·</span> Filling
           </span>
           <span className="chip locked">
-            <span className="chip-num">5 ·</span> Delivery
+            <span className="chip-num">5 ·</span> Add-ons
           </span>
           <span className="chip locked">
-            <span className="chip-num">6 ·</span> Send to
+            <span className="chip-num">6 ·</span> Delivery
+          </span>
+          <span className="chip locked">
+            <span className="chip-num">7 ·</span> Send to
           </span>
         </nav>
         <h2 className="start-h2">Start here — pick a body style</h2>

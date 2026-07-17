@@ -59,13 +59,21 @@ type StyleInfo = {
   cutoutUrl: string | null;
 };
 
-const STEPS = ["Graphic", "Message", "Filling", "Delivery", "Send to"] as const;
+const STEPS = [
+  "Graphic",
+  "Message",
+  "Filling",
+  "Add-ons",
+  "Delivery",
+  "Send to",
+] as const;
 type Step = (typeof STEPS)[number];
 
 const STEP_SLUGS: Record<Step, string> = {
   Graphic: "graphic",
   Message: "message",
   Filling: "filling",
+  "Add-ons": "addons",
   Delivery: "delivery",
   "Send to": "sendto",
 };
@@ -159,13 +167,26 @@ export default function DesignFlow({
   const hasCartAddress = cartAddress !== null && addressComplete(cartAddress);
 
   /* --- step gating: the furthest step the current state supports ---------- */
+  // Add-ons is a REAL step only when there's something to offer: at least one
+  // active add-on that the chosen filling permits. No filling picked yet →
+  // prospectively yes (the chip shows, gated behind Filling anyway).
+  const addonsApplyTo = useCallback(
+    (f: Filling | null): boolean => {
+      if (addonOptions.length === 0) return false;
+      const rec = f ? fillingOptions.find((x) => x.label === f) : undefined;
+      if (!rec) return true;
+      return addonOptions.some((a) => fillingAllowsAddon(rec, a.id));
+    },
+    [addonOptions, fillingOptions],
+  );
+
   const maxStep = useCallback(
     (g: GraphicChoice | null, f: Filling | null, d: string): number => {
       if (!g) return 0; // Graphic
       if (!f) return 2; // through Filling
-      if (deliveryProblem(d, deliveryCfg)) return 3; // through Delivery
+      if (deliveryProblem(d, deliveryCfg)) return 4; // through Delivery
       // Address already known → Delivery is the last step; else Send-to.
-      return hasCartAddress ? 3 : 4;
+      return hasCartAddress ? 4 : 5;
     },
     [deliveryCfg, hasCartAddress],
   );
@@ -233,10 +254,14 @@ export default function DesignFlow({
       const p = new URLSearchParams(window.location.search);
       const target = SLUG_TO_STEP[p.get("step") ?? "graphic"] ?? "Graphic";
       const idx = Math.min(STEPS.indexOf(target), maxStep(g, f, dt));
-      setStepState(STEPS[Math.max(0, idx)]);
+      let landed = STEPS[Math.max(0, idx)];
+      // A URL can't land on a skipped step (e.g. the filling disallows every
+      // add-on, or the catalog has none) — bounce to Filling.
+      if (landed === "Add-ons" && !addonsApplyTo(f)) landed = "Filling";
+      setStepState(landed);
       const view = p.get("view");
       setGraphicModeState(
-        STEPS[idx] === "Graphic" && (view === "library" || view === "canvas") && !g
+        landed === "Graphic" && (view === "library" || view === "canvas") && !g
           ? view
           : null,
       );
@@ -254,7 +279,9 @@ export default function DesignFlow({
         STEPS.indexOf(target),
         maxStep(s.graphic, s.filling, s.date),
       );
-      const clamped = STEPS[Math.max(0, idx)];
+      let clamped = STEPS[Math.max(0, idx)];
+      // Back/forward through history skips over a hidden Add-ons step.
+      if (clamped === "Add-ons" && !addonsApplyTo(s.filling)) clamped = "Filling";
       setStepState(clamped);
       const view = p.get("view");
       setGraphicModeState(
@@ -350,7 +377,10 @@ export default function DesignFlow({
   // the saved graphic in state, so Back/refresh can't destroy the design.
   const choosing = step === "Graphic" && graphicMode !== null;
   const docked =
-    step === "Filling" || step === "Delivery" || step === "Send to";
+    step === "Filling" ||
+    step === "Add-ons" ||
+    step === "Delivery" ||
+    step === "Send to";
   const railVisible = !choosing && !docked;
   // The dock shows on EVERY step (not just the docked ones) — inside the
   // library/canvas it would fight the editor's own bottom UI, so not there.
@@ -366,6 +396,18 @@ export default function DesignFlow({
   const fillingRec = filling
     ? fillingOptions.find((f) => f.label === filling)
     : undefined;
+  // Whether the Add-ons step exists for the current filling; the chip row,
+  // sequential CTAs, and URL restore all consult this one flag.
+  const addonsApplicable = addonsApplyTo(filling);
+  // The chip row as actually shown: Send-to collapses once the cart owns an
+  // address; Add-ons disappears when the filling permits none. Each entry
+  // keeps its ORIGINAL index (for done/reachable math) while numbering runs
+  // over the visible position.
+  const visibleSteps = STEPS.map((s, idx) => ({ s, idx })).filter(
+    ({ s }) =>
+      (s !== "Send to" || !hasCartAddress) &&
+      (s !== "Add-ons" || addonsApplicable),
+  );
   const fillingCents = fillingRec?.priceCents ?? 0;
   const deliveredCents = unitPrice
     ? unitPrice.unitPriceCents +
@@ -393,13 +435,23 @@ export default function DesignFlow({
   const selectedSavedKey = addressKey(address);
   const addressOk = addressComplete(address);
 
-  const STEP_HEADINGS: Record<Step, string> = {
-    Graphic: "Step Two: The graphic",
-    Message: "Step Three: Message",
-    Filling: "Step Four: What goes inside?",
-    Delivery: "Step Five: Pick the delivery day",
-    "Send to": "Step Six: Who's it going to?",
+  // Titles get their "Step N" from the VISIBLE position (body style is One),
+  // so the number always matches the numbered chip row even when Add-ons or
+  // Send-to is skipped.
+  const STEP_TITLES: Record<Step, string> = {
+    Graphic: "The graphic",
+    Message: "Message",
+    Filling: "What goes inside?",
+    "Add-ons": "Add extras",
+    Delivery: "Pick the delivery day",
+    "Send to": "Who's it going to?",
   };
+  const ORDINALS = ["Two", "Three", "Four", "Five", "Six", "Seven"];
+  const visiblePos = Math.max(
+    0,
+    visibleSteps.findIndex((v) => v.s === step),
+  );
+  const stepHeading = `Step ${ORDINALS[visiblePos]}: ${STEP_TITLES[step]}`;
   const showHeading = !choosing;
 
   /* --- style switcher ------------------------------------------------------ */
@@ -493,9 +545,13 @@ export default function DesignFlow({
       case "Filling":
         return {
           label: "Continue →",
-          onClick: () => goStep("Delivery"),
+          // The Add-ons step only exists when this filling permits one.
+          onClick: () => goStep(addonsApplicable ? "Add-ons" : "Delivery"),
           disabled: !filling,
         };
+      case "Add-ons":
+        // Extras are optional — Continue is never gated here.
+        return { label: "Continue →", onClick: () => goStep("Delivery") };
       case "Delivery":
         // Address already known → Delivery is the last step, add straight to
         // the cart. First piñata (no address yet) → continue to Send-to.
@@ -770,53 +826,57 @@ export default function DesignFlow({
               </button>
             ))}
           </div>
-          {addonOptions.length > 0 &&
-            (fillingRec?.addons === "none" ? (
-              <p className="note addon-note">
-                Add-ons aren&apos;t available with {fillingRec.label} — it
-                fills the whole box.
-              </p>
-            ) : (
-              <section className="addon-section">
-                <h3 className="addon-head">Add extras</h3>
-                <div className="addon-list">
-                  {addonOptions.map((a) => {
-                    const allowed = fillingAllowsAddon(fillingRec, a.id);
-                    const on = addons.includes(a.id) && allowed;
-                    return (
-                      <label
-                        key={a.id}
-                        className={
-                          "addon-row" +
-                          (on ? " selected" : "") +
-                          (allowed ? "" : " blocked")
-                        }
-                      >
-                        <input
-                          type="checkbox"
-                          checked={on}
-                          disabled={!allowed}
-                          onChange={() =>
-                            setAddons(
-                              on
-                                ? addons.filter((id) => id !== a.id)
-                                : [...addons, a.id],
-                            )
-                          }
-                        />
-                        <span className="addon-label">{a.label}</span>
-                        <span className="addon-price">
-                          {allowed
-                            ? `+${formatCents(a.priceCents)}`
-                            : `not available with ${filling ?? "this filling"}`}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+          {addonOptions.length > 0 && fillingRec?.addons === "none" && (
+            // Explains why no Add-ons step follows this filling.
+            <p className="note addon-note">
+              Add-ons aren&apos;t available with {fillingRec.label} — it fills
+              the whole box.
+            </p>
+          )}
           {addonNotice && <div className="notice info">{addonNotice}</div>}
+        </div>
+      )}
+
+      {step === "Add-ons" && (
+        <div className="step-panel">
+          <section className="addon-section">
+            <h3 className="addon-head">Add extras</h3>
+            <div className="addon-list">
+              {addonOptions.map((a) => {
+                const allowed = fillingAllowsAddon(fillingRec, a.id);
+                const on = addons.includes(a.id) && allowed;
+                return (
+                  <label
+                    key={a.id}
+                    className={
+                      "addon-row" +
+                      (on ? " selected" : "") +
+                      (allowed ? "" : " blocked")
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={!allowed}
+                      onChange={() =>
+                        setAddons(
+                          on
+                            ? addons.filter((id) => id !== a.id)
+                            : [...addons, a.id],
+                        )
+                      }
+                    />
+                    <span className="addon-label">{a.label}</span>
+                    <span className="addon-price">
+                      {allowed
+                        ? `+${formatCents(a.priceCents)}`
+                        : `not available with ${filling ?? "this filling"}`}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
         </div>
       )}
 
@@ -923,23 +983,26 @@ export default function DesignFlow({
         <button className="chip done" onClick={openSwitcher}>
           <span className="chip-num">1 ·</span> {styleInfo.name} ▾
         </button>
-        {STEPS.filter((s) => s !== "Send to" || !hasCartAddress).map((s, i) => {
-          const unreachable = i > Math.max(stepIndex, reachable);
+        {visibleSteps.map(({ s, idx }, vi) => {
+          // done/reachable math runs on the ORIGINAL index; the number the
+          // customer sees runs on the visible position, so it stays
+          // contiguous when Add-ons or Send-to is skipped.
+          const unreachable = idx > Math.max(stepIndex, reachable);
           return (
             <button
               key={s}
               className={
                 "chip" +
                 (s === step ? " active" : "") +
-                (i < stepIndex ? " done" : "")
+                (idx < stepIndex ? " done" : "")
               }
               disabled={unreachable}
               aria-disabled={unreachable}
               aria-current={s === step ? "step" : undefined}
               onClick={() => !unreachable && goStep(s)}
             >
-              {i < stepIndex ? "✓ " : ""}
-              <span className="chip-num">{i + 2} ·</span> {s}
+              {idx < stepIndex ? "✓ " : ""}
+              <span className="chip-num">{vi + 2} ·</span> {s}
             </button>
           );
         })}
@@ -982,7 +1045,7 @@ export default function DesignFlow({
         // (frees ~50px of vertical space). Kept in the DOM for screen
         // readers and as the focus target on step change.
         <h1 className="step-h1 visually-hidden" tabIndex={-1}>
-          {STEP_HEADINGS[step]}
+          {stepHeading}
         </h1>
       )}
 
