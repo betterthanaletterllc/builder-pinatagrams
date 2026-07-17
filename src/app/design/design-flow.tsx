@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import {
   addressComplete,
   addressKey,
@@ -485,7 +486,7 @@ export default function DesignFlow({
     switch (step) {
       case "Graphic":
         return graphic
-          ? { label: "Looks good →", onClick: () => goStep("Message") }
+          ? { label: "Continue →", onClick: () => goStep("Message") }
           : null;
       case "Message":
         return { label: "Continue →", onClick: () => goStep("Filling") };
@@ -557,6 +558,15 @@ export default function DesignFlow({
                   <button
                     className="choice-card"
                     onClick={() => {
+                      setEditingDraft(null);
+                      goView("library");
+                    }}
+                  >
+                    <span className="choice-title">Pick a graphic</span>
+                  </button>
+                  <button
+                    className="choice-card"
+                    onClick={() => {
                       // keep `graphic` — the saved design must survive a
                       // cancelled edit (browser Back) or a refresh. Old v1
                       // freeform docs can't open in the template editor;
@@ -568,15 +578,6 @@ export default function DesignFlow({
                     }}
                   >
                     <span className="choice-title">Edit graphic</span>
-                  </button>
-                  <button
-                    className="choice-card"
-                    onClick={() => {
-                      setEditingDraft(null);
-                      goView("library");
-                    }}
-                  >
-                    <span className="choice-title">Pick a graphic</span>
                   </button>
                 </>
               ) : (
@@ -743,8 +744,15 @@ export default function DesignFlow({
                 <span className="filling-media">
                   <span className="filling-name">{f.label}</span>
                   {f.imageUrl && (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={f.imageUrl} alt="" loading="lazy" />
+                    // next/image: ~10 KB thumbs instead of the multi-MB
+                    // uploads the hub stores at full size
+                    <Image
+                      src={f.imageUrl}
+                      alt=""
+                      width={260}
+                      height={176}
+                      sizes="130px"
+                    />
                   )}
                 </span>
                 <span className="filling-body">

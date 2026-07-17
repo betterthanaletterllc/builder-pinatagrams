@@ -1851,6 +1851,12 @@ body:has(.bottom-stack) .site-footer {
   box-shadow: var(--shadow-sm);
 }
 
+/* The first shot's transparent background reads oddly against the cream
+   page — sit it on white so the box pops like a product card. */
+.landing-sec:first-of-type .landing-photo {
+  background: #fff;
+}
+
 .landing-cta {
   margin-top: 20px;
   width: 100%;
