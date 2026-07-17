@@ -2233,10 +2233,15 @@ body:has(.bottom-stack) .site-footer {
     max-width: 1120px;
   }
   /* Two columns: the step panel where people make selections LEFT, the big
-     sticky preview RIGHT. */
+     sticky preview RIGHT. The preview column is HEIGHT-aware: sized so the
+     tallest preview (the portrait open-box, ~1.39x its width) PLUS the
+     summary card under it fit the viewport with no vertical scrolling —
+     even a landscape iPad (768px tall → ~308px column). Tall monitors cap
+     at 460px as before. Shrinking the COLUMN keeps every %-positioned
+     overlay (art, piñata, flap card) aligned. */
   .flow-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 460px;
+    grid-template-columns: minmax(0, 1fr) clamp(260px, calc(70vh - 230px), 460px);
     gap: 0 44px;
     align-items: start;
   }
