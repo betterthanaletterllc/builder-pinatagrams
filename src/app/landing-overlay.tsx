@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
+import logo from "../../public/pinatagrams-logo.png";
 
 /**
  * Full-screen scrollable landing overlay shown OVER the builder (Nathan's
- * sketch): logo, then alternating line + photo — "Personalized mini piñatas"
- * / "Filled with sweets and treats" / "Carrying a message" — closing with
- * "Delivered straight to their door" and one Build-my-Piñata button that
- * dismisses to the body picker underneath. Photos are the hub-managed
- * landing images (admin /pricing → "Landing page"), in order; a section
- * whose photo hasn't been uploaded yet just shows its line.
+ * sketch): logo, then alternating line + photo, reading as ONE sentence —
+ * "Personalized mini piñatas, / filled with sweets and treats, / carrying a
+ * message, / delivered straight to their door." — closing with a single
+ * Build-My-Piñata button that dismisses to the body picker underneath.
+ * Photos are the hub-managed landing images (admin /pricing → "Landing
+ * page"), in order; a section whose photo hasn't been uploaded yet just
+ * shows its line. All images go through next/image so the overlay ships
+ * ~100 KB of WebP instead of megabytes of PNG.
  *
  * Dismissal is remembered for the SITTING (sessionStorage) so bouncing back
  * to the home page mid-build doesn't replay the pitch; a fresh visit sees it
@@ -18,11 +22,13 @@ import { useEffect, useState } from "react";
 
 const SEEN_KEY = "pinatagrams-landing-seen";
 
+// One continuous sentence across the stack — lowercase continuations and
+// punctuation are deliberate.
 const LINES = [
-  "Personalized mini piñatas",
-  "Filled with sweets and treats",
-  "Carrying a message",
-  "Delivered straight to their door",
+  "Personalized mini piñatas,",
+  "filled with sweets and treats,",
+  "carrying a message,",
+  "delivered straight to their door.",
 ];
 
 export default function LandingOverlay({
@@ -61,24 +67,25 @@ export default function LandingOverlay({
   return (
     <div className="landing-overlay" role="dialog" aria-label="Piñatagrams">
       <div className="landing-scroll">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="landing-logo" src="/pinatagrams-logo.png" alt="Piñatagrams" />
+        <Image className="landing-logo" src={logo} alt="Piñatagrams" priority />
         {LINES.map((line, i) => (
           <div className="landing-sec" key={line}>
             <p className="landing-line">{line}</p>
             {i < LINES.length - 1 && images[i] && (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
+              <Image
                 className="landing-photo"
                 src={images[i].url}
                 alt={images[i].label}
-                loading={i === 0 ? "eager" : "lazy"}
+                width={1080}
+                height={1080}
+                sizes="(max-width: 500px) calc(100vw - 40px), 420px"
+                priority={i === 0}
               />
             )}
           </div>
         ))}
         <button className="btn primary landing-cta" onClick={dismiss}>
-          Build my Piñata
+          Build My Piñata
         </button>
       </div>
     </div>

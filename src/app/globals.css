@@ -1845,6 +1845,7 @@ body:has(.bottom-stack) .site-footer {
 
 .landing-photo {
   width: 100%;
+  height: auto;
   border-radius: 16px;
   display: block;
   box-shadow: var(--shadow-sm);

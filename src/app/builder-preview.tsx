@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { formatCents, type HubBodyStyle } from "@/lib/hub";
 
 /**
@@ -36,8 +37,8 @@ export default function BuilderPreview({
               className="style-card"
             >
               {s.imageUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={s.imageUrl} alt={s.name} loading="lazy" />
+                // next/image: ~10 KB WebP thumbs instead of full-size files
+                <Image src={s.imageUrl} alt={s.name} width={445} height={720} sizes="180px" />
               ) : null}
               <div className="style-name">{s.name}</div>
               {price}
@@ -45,8 +46,7 @@ export default function BuilderPreview({
           ) : (
             <div key={s.id} className="style-card oos" aria-disabled>
               {s.imageUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={s.imageUrl} alt={s.name} loading="lazy" />
+                <Image src={s.imageUrl} alt={s.name} width={445} height={720} sizes="180px" />
               ) : null}
               <div className="style-name">{s.name}</div>
               {price}
