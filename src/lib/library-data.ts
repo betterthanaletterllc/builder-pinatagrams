@@ -11,6 +11,8 @@ export type LibraryGraphic = {
   title: string;
   thumb: string | null;
   art: string | null;
+  // matching inside-flap message card (graphics/message metafield)
+  message?: string | null;
 };
 
 export type GraphicTags = { r: string[]; v: string[]; m: number[] };

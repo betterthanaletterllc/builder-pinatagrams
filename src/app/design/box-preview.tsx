@@ -58,6 +58,7 @@ export default function BoxPreview({
   variant = "full",
   interiorUrl,
   messageZone,
+  messageCard,
   pinataSrc,
   pinataFallback,
   pinataZone: pinataZoneProp,
@@ -77,6 +78,10 @@ export default function BoxPreview({
   // keep the preview working when the hub hasn't been configured yet.
   interiorUrl?: string | null;
   messageZone?: LogoZone | null;
+  // The design's matching inside-flap card (graphics/message) — rendered
+  // UNDER the message text so the preview matches what Paper prints.
+  // Absent → the interior photo's blank card shows through as before.
+  messageCard?: string | null;
   // The chosen piñata, nestled inside the open box: transparent cutout first
   // (/pinatas/{id}.png), the hub catalog image as fallback. The zone comes
   // from the hub (admin "Box placement" per style) with a built-in default.
@@ -199,9 +204,27 @@ export default function BoxPreview({
                 }}
               />
             )}
+            {messageCard && !photoFailed && (
+              // The matching card sits in the flap zone, text painted on top.
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={messageCard}
+                alt=""
+                className="flap-card"
+                style={{
+                  left: `${zone.x * 100}%`,
+                  top: `${zone.y * 100}%`,
+                  width: `${zone.w * 100}%`,
+                  height: `${zone.h * 100}%`,
+                }}
+              />
+            )}
             <div
               ref={msgRef}
-              className="flap-message"
+              className={
+                "flap-message" +
+                (messageCard && !photoFailed ? " on-card" : "")
+              }
               style={{
                 left: `${zone.x * 100}%`,
                 top: `${zone.y * 100}%`,

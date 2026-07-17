@@ -2269,6 +2269,15 @@ body:has(.bottom-stack) .site-footer {
   filter: drop-shadow(0 6px 10px rgba(24, 13, 56, 0.28));
 }
 
+/* The design's matching message card, filling the flap zone; the text layer
+   sits on top of its white center. */
+.flap-card {
+  position: absolute;
+  object-fit: fill;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(24, 13, 56, 0.14);
+}
+
 .flap-message {
   /* the printed message card: solid white with breathing room inside the
      admin-drawn zone */
@@ -2288,6 +2297,14 @@ body:has(.bottom-stack) .site-footer {
   overflow: hidden;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* When the matching card is underneath, the text layer goes transparent and
+   pads further in so words stay inside the card's white center. */
+.flap-message.on-card {
+  background: transparent;
+  box-shadow: none;
+  padding: 7% 12%;
 }
 
 .box-meta {

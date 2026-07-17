@@ -168,6 +168,7 @@ export default function GraphicLibrary({
       title: g.title,
       thumb: g.thumb,
       art: g.art,
+      message: g.message ?? null,
     });
   };
 

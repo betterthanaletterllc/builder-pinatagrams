@@ -81,6 +81,11 @@ const SLUG_TO_STEP = Object.fromEntries(
   Object.entries(STEP_SLUGS).map(([k, v]) => [v, k]),
 ) as Record<string, Step>;
 
+// The brand confetti message card (Confetti Birthday's graphics/message) —
+// custom designs preview AND print on this card (Nathan's call, 2026-07-17).
+const DEFAULT_MESSAGE_CARD =
+  "https://cdn.shopify.com/s/files/1/1116/8788/files/HBD01-GOOGLY_message_graphic.svg?v=1696183772";
+
 const ADDRESS_FIELDS: [keyof DeliveryAddress, string][] = [
   ["name", "Recipient name"],
   ["address1", "Address"],
@@ -371,6 +376,17 @@ export default function DesignFlow({
     ? graphic.type === "custom"
       ? graphic.preview
       : cdnThumb(graphic.art ?? graphic.thumb, 720)
+    : null;
+
+  // Matching inside-flap card for the message preview: the library design's
+  // own graphics/message card, or the brand confetti card for custom designs
+  // (the same card Paper prints for CUSTOM lines — set on the Custom Built
+  // Piñatagram product's graphics.message metafield). Pre-field drafts
+  // (message undefined) fall back to the interior photo's blank card.
+  const messageCard = graphic
+    ? graphic.type === "shopify"
+      ? (graphic.message ?? null)
+      : DEFAULT_MESSAGE_CARD
     : null;
 
   // choosing no longer requires !graphic: entering the canvas to EDIT keeps
@@ -1069,6 +1085,7 @@ export default function DesignFlow({
               variant="bare"
               interiorUrl={boxInterior?.interiorUrl}
               messageZone={boxInterior?.messageZone}
+              messageCard={messageCard}
               pinataSrc={styleInfo.cutoutUrl ?? `/pinatas/${styleInfo.id}.png`}
               pinataFallback={styleInfo.imageUrl}
               pinataZone={styleInfo.pinataZone}

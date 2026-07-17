@@ -61,6 +61,10 @@ export type GraphicChoice =
       title: string;
       thumb: string | null;
       art: string | null; // print-art URL (graphics/front metafield)
+      // matching inside-flap card (graphics/message metafield) — the message
+      // preview renders ON it, exactly what Paper prints. Absent on drafts
+      // saved before this field existed → generic flap preview.
+      message?: string | null;
     }
   | {
       // made in the canvas editor
