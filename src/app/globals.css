@@ -2225,6 +2225,10 @@ body:has(.bottom-stack) .site-footer {
     grid-column: 1;
     grid-row: 1;
     min-width: 0;
+    /* Center the selection panel against the taller preview column so a
+       short panel (e.g. the message box) sits mid-preview instead of
+       stranded at the top. No effect when the panel is the taller side. */
+    align-self: center;
   }
   .flow-grid .flow-rail,
   .flow-grid.rail-docked .flow-rail {
@@ -2236,6 +2240,8 @@ body:has(.bottom-stack) .site-footer {
     top: 16px;
     max-width: none;
     margin: 0;
+    /* containing block for the absolutely-placed summary card below */
+    /* (sticky already positions this box) */
   }
   .flow-rail.msg-compact {
     max-width: none;
@@ -2254,9 +2260,17 @@ body:has(.bottom-stack) .site-footer {
   }
 
   .desk-summary {
+    /* Absolutely placed just under the preview inside the sticky rail, so it
+       rides along under the piñata when scrolling BUT doesn't add to the
+       rail's layout height — that keeps the grid row height equal to the
+       preview alone, so the left selection panel centers against the actual
+       preview (not preview + this card). */
+    position: absolute;
+    top: calc(100% + 12px);
+    left: 0;
+    right: 0;
     display: grid;
     gap: 6px;
-    margin-top: 12px;
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 12px;
