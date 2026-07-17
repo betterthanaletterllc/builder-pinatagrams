@@ -796,13 +796,10 @@ export default function DesignFlow({
             className="message-box"
             maxLength={300}
             rows={4}
-            placeholder="Add a gift message — it prints on the inside flap. Leave blank to skip."
+            placeholder="Add a gift message — it prints on the inside flap. Don't forget to say who it's from!"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <p className="note msg-from-nudge">
-            💡 Don&apos;t forget to say who it&apos;s from!
-          </p>
         </div>
       )}
 

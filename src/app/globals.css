@@ -1873,6 +1873,33 @@ body:has(.bottom-stack) .site-footer {
   font-size: 17px;
 }
 
+/* Desktop: the pitch reads ACROSS — three line+photo columns, the closing
+   line spanning beneath them, then the button. */
+@media (min-width: 900px) {
+  .landing-scroll {
+    max-width: 1080px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px 28px;
+    align-items: start;
+    justify-items: center;
+  }
+  .landing-logo {
+    grid-column: 1 / -1;
+  }
+  /* the closing line ("delivered straight to their door.") has no photo —
+     it spans the row beneath the three columns */
+  .landing-sec:nth-of-type(4) {
+    grid-column: 1 / -1;
+  }
+  .landing-cta {
+    grid-column: 1 / -1;
+    max-width: 380px;
+    justify-self: center;
+    margin-top: 10px;
+  }
+}
+
 .start-h2 {
   font-size: 17px;
   font-weight: 700;
