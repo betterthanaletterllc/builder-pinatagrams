@@ -2270,10 +2270,12 @@ body:has(.bottom-stack) .site-footer {
 }
 
 /* The design's matching message card, filling the flap zone; the text layer
-   sits on top of its white center. */
+   sits on top of its white center. Solid white behind it so cards with
+   transparent backgrounds read as printed cards, not floating borders. */
 .flap-card {
   position: absolute;
   object-fit: fill;
+  background: #ffffff;
   border-radius: 4px;
   box-shadow: 0 1px 5px rgba(24, 13, 56, 0.14);
 }

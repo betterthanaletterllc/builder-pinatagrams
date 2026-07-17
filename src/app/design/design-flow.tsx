@@ -104,7 +104,11 @@ export default function DesignFlow({
   deliveryCfg,
 }: {
   style: StyleInfo;
-  boxInterior: { interiorUrl: string | null; messageZone: LogoZone | null } | null;
+  boxInterior: {
+    interiorUrl: string | null;
+    messageZone: LogoZone | null;
+    messageCardPadding?: { x: number; y: number } | null;
+  } | null;
   addonOptions: HubAddon[];
   fillingOptions: HubFilling[];
   deliveryCfg: DeliveryConfig;
@@ -1086,6 +1090,7 @@ export default function DesignFlow({
               interiorUrl={boxInterior?.interiorUrl}
               messageZone={boxInterior?.messageZone}
               messageCard={messageCard}
+              messagePadding={boxInterior?.messageCardPadding}
               pinataSrc={styleInfo.cutoutUrl ?? `/pinatas/${styleInfo.id}.png`}
               pinataFallback={styleInfo.imageUrl}
               pinataZone={styleInfo.pinataZone}

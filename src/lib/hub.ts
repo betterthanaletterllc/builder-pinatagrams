@@ -107,6 +107,8 @@ export type HubCatalog = {
   box?: {
     interiorUrl: string | null;
     messageZone: LogoZone | null;
+    // percent padding keeping message text inside the card's border art
+    messageCardPadding?: { x: number; y: number } | null;
   };
   // Active add-ons from the hub's Pricing page; absent on older deploys.
   addons?: HubAddon[];

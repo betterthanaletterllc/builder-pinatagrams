@@ -59,6 +59,7 @@ export default function BoxPreview({
   interiorUrl,
   messageZone,
   messageCard,
+  messagePadding,
   pinataSrc,
   pinataFallback,
   pinataZone: pinataZoneProp,
@@ -82,6 +83,9 @@ export default function BoxPreview({
   // UNDER the message text so the preview matches what Paper prints.
   // Absent → the interior photo's blank card shows through as before.
   messageCard?: string | null;
+  // Hub-tunable padding (admin /catalog) keeping the text inside the card's
+  // border art, as percent of the card. Absent → the CSS default (12/7).
+  messagePadding?: { x: number; y: number } | null;
   // The chosen piñata, nestled inside the open box: transparent cutout first
   // (/pinatas/{id}.png), the hub catalog image as fallback. The zone comes
   // from the hub (admin "Box placement" per style) with a built-in default.
@@ -122,7 +126,7 @@ export default function BoxPreview({
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [message, mode, zone.w, zone.h]);
+  }, [message, mode, zone.w, zone.h, messagePadding?.x, messagePadding?.y]);
 
   return (
     <div className="box-preview">
@@ -230,6 +234,9 @@ export default function BoxPreview({
                 top: `${zone.y * 100}%`,
                 width: `${zone.w * 100}%`,
                 height: `${zone.h * 100}%`,
+                ...(messageCard && !photoFailed && messagePadding
+                  ? { padding: `${messagePadding.y}% ${messagePadding.x}%` }
+                  : null),
               }}
             >
               {message || "Your message appears here, printed on the inside flap."}
