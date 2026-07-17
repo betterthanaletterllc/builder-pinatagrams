@@ -278,8 +278,10 @@ a.style-card:focus-visible {
 
 .discount-field .in {
   text-transform: uppercase;
-  /* a roomier tap target for the code bar */
-  padding: 12px;
+  /* a roomier tap target for the code bar; 17px stays safely above the
+     16px iOS zoom threshold (Nathan still hit zoom at 16 on device) */
+  padding: 14px;
+  font-size: 17px;
 }
 
 .discount-applied {
@@ -2444,6 +2446,16 @@ body:has(.bottom-stack) .site-footer {
   background: #ffffff;
   border-radius: 4px;
   box-shadow: 0 1px 5px rgba(24, 13, 56, 0.14);
+}
+
+@media (min-width: 1024px) {
+  /* The card art is 2:1 but the flap zone is wider (~2.3:1) — at desktop
+     size the stretched border shows. contain keeps the card's true aspect;
+     the white background fills the sliver of zone beside it seamlessly.
+     Mobile stays fill (smaller render hides the stretch; Nathan likes it). */
+  .flap-card {
+    object-fit: contain;
+  }
 }
 
 .flap-message {

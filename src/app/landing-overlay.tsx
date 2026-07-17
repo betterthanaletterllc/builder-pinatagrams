@@ -27,7 +27,7 @@ const SEEN_KEY = "pinatagrams-landing-seen";
 const LINES = [
   "Personalized mini piñatas,",
   "filled with sweets and treats,",
-  "carrying a message,",
+  "carrying your personal message,",
   "delivered straight to their door.",
 ];
 

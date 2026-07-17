@@ -661,7 +661,7 @@ export default function DesignFlow({
                       goView("library");
                     }}
                   >
-                    <span className="choice-title">Pick a graphic</span>
+                    <span className="choice-title">Pick a different graphic</span>
                   </button>
                   <button
                     className="choice-card"
@@ -676,7 +676,7 @@ export default function DesignFlow({
                       goView("canvas");
                     }}
                   >
-                    <span className="choice-title">Edit graphic</span>
+                    <span className="choice-title">Edit this graphic</span>
                   </button>
                 </>
               ) : (

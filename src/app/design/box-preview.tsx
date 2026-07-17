@@ -233,7 +233,10 @@ export default function BoxPreview({
                 left: `${zone.x * 100}%`,
                 top: `${zone.y * 100}%`,
                 width: `${zone.w * 100}%`,
-                height: `${zone.h * 100}%`,
+                // On the card, the text box stops ABOVE the Piñatagrams logo
+                // baked into the card art's bottom strip (~22% of the card) —
+                // placeholder and typed words both stay clear of it.
+                height: `${zone.h * (messageCard && !photoFailed ? 78 : 100)}%`,
                 ...(messageCard && !photoFailed && messagePadding
                   ? { padding: `${messagePadding.y}% ${messagePadding.x}%` }
                   : null),
