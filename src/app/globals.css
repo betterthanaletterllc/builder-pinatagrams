@@ -225,7 +225,9 @@ a.style-card:focus-visible {
   padding: 8px 10px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  font-size: 14px;
+  /* 16px is the iOS threshold — anything smaller makes Safari ZOOM the page
+     when the input is tapped (Nathan hit this on the discount bar). */
+  font-size: 16px;
   font-family: inherit;
   background: #fff;
   color: var(--ink);
@@ -259,8 +261,25 @@ a.style-card:focus-visible {
   margin-top: 12px;
 }
 
+/* Shared bare-input class (cart's discount + email bars). 16px is the iOS
+   threshold — anything smaller makes Safari ZOOM the page when the input is
+   tapped (Nathan hit this on the discount bar). */
+.in {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 16px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--ink);
+}
+
 .discount-field .in {
   text-transform: uppercase;
+  /* a roomier tap target for the code bar */
+  padding: 12px;
 }
 
 .discount-applied {
@@ -2300,6 +2319,16 @@ body:has(.bottom-stack) .site-footer {
     width: 100%;
     padding: 12px 16px;
     margin-top: 4px;
+  }
+
+  /* At desktop preview sizes, stretching the 2:1 message card to the zone's
+     wider box visibly distorts its border art — show the card at its TRUE
+     print aspect instead (contain), the white card backing fills the sides.
+     Mobile keeps fill: the compact preview hides the distortion and Nathan
+     prefers its look there. (Parent-scoped: the base .flap-card rule sits
+     LATER in this file and would win a same-specificity fight.) */
+  .box-composite .flap-card {
+    object-fit: contain;
   }
 }
 

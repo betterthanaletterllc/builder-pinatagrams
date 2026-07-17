@@ -411,6 +411,35 @@ export async function POST(req: Request) {
     ),
   ].slice(0, 2);
 
+  // Shopify does NOT discount a draft's custom shippingLine — a valid
+  // free-shipping code left a real invoice still charging shipping
+  // (2026-07-18). The hub MINTS these codes, so its describe endpoint is
+  // the rule's source of truth: when the stack carries an active shipping
+  // code, the builder zeroes the shipping line itself (minimum checked
+  // against each group's merchandise below). The code still rides on the
+  // draft, so Shopify records its redemption at payment. Describe
+  // unreachable → the priced line stands (fail toward charging the real
+  // rate, never toward giving shipping away).
+  let shippingRule: { minSubtotalCents: number } | null = null;
+  for (const code of discountCodes) {
+    try {
+      const r = await fetch(
+        `${HUB_URL}/api/public/discount?code=${encodeURIComponent(code)}`,
+        { cache: "no-store" },
+      );
+      if (!r.ok) continue;
+      const d = (await r.json())?.discount as {
+        kind?: string;
+        minSubtotalCents?: number;
+      } | null;
+      if (d?.kind === "shipping") {
+        shippingRule = { minSubtotalCents: Number(d.minSubtotalCents) || 0 };
+      }
+    } catch {
+      // hub blip → no free shipping this order; never throw here
+    }
+  }
+
   const lineAttributes = (l: CleanLine) => [
     // No leading underscore = SHOWS on the payment page under the line
     // title — the customer sees their choices while paying. (The line title
@@ -464,6 +493,20 @@ export async function POST(req: Request) {
     const units = groupLines.reduce((s, l) => s + l.qty, 0);
     const [firstName, ...rest] = a.name.split(/\s+/);
     const lastName = rest.join(" ") || firstName;
+    // Free shipping only when the group's merchandise clears the code's own
+    // minimum — the same gate the cart preview shows.
+    const merchandiseCents =
+      groupLines.reduce(
+        (s, l) => s + (price.unitPriceCents + l.fillingCents) * l.qty,
+        0,
+      ) +
+      addonTotals(groupLines).reduce(
+        (s, { addon, qty }) => s + addon.priceCents * qty,
+        0,
+      );
+    const freeShip =
+      shippingRule !== null &&
+      merchandiseCents >= shippingRule.minSubtotalCents;
     return {
       groupKey,
       shipTo: formatAddress(a),
@@ -489,8 +532,12 @@ export async function POST(req: Request) {
           phone: a.phone || null,
         },
         shippingLine: {
-          title: "Delivered on your selected dates",
-          price: ((price.shipPerUnitCents * units) / 100).toFixed(2),
+          title: freeShip
+            ? "Delivered on your selected dates — free shipping"
+            : "Delivered on your selected dates",
+          price: freeShip
+            ? "0.00"
+            : ((price.shipPerUnitCents * units) / 100).toFixed(2),
         },
         lineItems: [
           ...groupLines.map((l) => customLine(l)),
