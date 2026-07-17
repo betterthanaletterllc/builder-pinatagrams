@@ -48,7 +48,7 @@ export default async function Home() {
         {/* Full-screen scrollable pitch OVER the builder; "Build my Piñata"
             dismisses to the picker below. NO smash copy — the candy comes
             out and the piñata gets kept. */}
-        <LandingOverlay images={landingImgs} />
+        <LandingOverlay logo={catalog.landing?.logo} images={landingImgs} />
         <h1 className="visually-hidden">
           Piñatagrams — personalized mini piñatas, delivered
         </h1>

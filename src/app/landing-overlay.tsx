@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import logo from "../../public/pinatagrams-logo.png";
+import builtInLogo from "../../public/pinatagrams-logo.png";
 
 /**
  * Full-screen scrollable landing overlay shown OVER the builder (Nathan's
@@ -32,8 +32,10 @@ const LINES = [
 ];
 
 export default function LandingOverlay({
+  logo,
   images,
 }: {
+  logo?: string | null;
   images: { id: string; label: string; url: string }[];
 }) {
   const [open, setOpen] = useState(true);
@@ -67,7 +69,25 @@ export default function LandingOverlay({
   return (
     <div className="landing-overlay" role="dialog" aria-label="Piñatagrams">
       <div className="landing-scroll">
-        <Image className="landing-logo" src={logo} alt="Piñatagrams" priority />
+        {logo ? (
+          // Hub-managed logo (admin /pricing → "Landing page" → Logo).
+          <Image
+            className="landing-logo landing-logo-tall"
+            src={logo}
+            alt="Piñatagrams"
+            width={1200}
+            height={1200}
+            priority
+          />
+        ) : (
+          // Built-in brand logo (wide wordmark) until the hub sets one.
+          <Image
+            className="landing-logo landing-logo-wide"
+            src={builtInLogo}
+            alt="Piñatagrams"
+            priority
+          />
+        )}
         {LINES.map((line, i) => (
           <div className="landing-sec" key={line}>
             <p className="landing-line">{line}</p>

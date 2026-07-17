@@ -115,7 +115,10 @@ export type HubCatalog = {
   fillings?: HubFilling[];
   // Landing-page hero images (admin /pricing → "Landing page"); absent on
   // older hub deploys — the builder falls back to its single-image hero.
-  landing?: { images?: { id: string; label: string; url: string }[] };
+  landing?: {
+    logo?: string | null;
+    images?: { id: string; label: string; url: string }[];
+  };
   // Delivery calendars (admin /delivery); parse with resolveDeliveryConfig —
   // absent or partial blocks fall back to the compiled defaults.
   delivery?: unknown;

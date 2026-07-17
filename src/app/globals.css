@@ -1818,11 +1818,20 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .landing-logo {
-  height: 76px;
   width: auto;
+  height: auto;
   margin-bottom: 8px;
   max-width: 100%;
   object-fit: contain;
+}
+
+/* wide wordmark (built-in) vs stacked square (hub) want different heights */
+.landing-logo-wide {
+  height: 76px;
+}
+
+.landing-logo-tall {
+  height: 132px;
 }
 
 .landing-sec {
