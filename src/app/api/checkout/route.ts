@@ -431,8 +431,11 @@ export async function POST(req: Request) {
       const d = (await r.json())?.discount as {
         kind?: string;
         minSubtotalCents?: number;
+        freeShipping?: boolean;
       } | null;
-      if (d?.kind === "shipping") {
+      // kind "shipping" OR a paired order code flagged freeShipping — either
+      // way the hub says this stack rides free.
+      if (d?.kind === "shipping" || d?.freeShipping === true) {
         shippingRule = { minSubtotalCents: Number(d.minSubtotalCents) || 0 };
       }
     } catch {

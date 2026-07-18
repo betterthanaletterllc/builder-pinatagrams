@@ -55,6 +55,8 @@ export type HubDiscount = {
   type: "percent" | "fixed"; // order only
   value: number; // percent 1–100, or CENTS for fixed (order only)
   minSubtotalCents: number; // 0 = no minimum
+  // paired order code: ALSO zeroes shipping (one code, product + shipping)
+  freeShipping?: boolean;
 };
 
 /**
@@ -98,7 +100,8 @@ export function discountAmountCents(
     d.type === "percent"
       ? Math.round((merchandiseCents * d.value) / 100)
       : d.value;
-  return Math.min(off, merchandiseCents);
+  // paired code: the one code takes the merchandise off AND the shipping
+  return Math.min(off, merchandiseCents) + (d.freeShipping ? shippingCents : 0);
 }
 
 export type HubCatalog = {

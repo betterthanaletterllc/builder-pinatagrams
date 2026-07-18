@@ -827,7 +827,11 @@ export default function CartView() {
                   <div className="row discount-row" key={d.code}>
                     <span>
                       {d.code}
-                      {d.kind === "shipping" ? " (free shipping)" : ""}
+                      {d.kind === "shipping"
+                        ? " (free shipping)"
+                        : d.freeShipping
+                          ? " (incl. free shipping)"
+                          : ""}
                     </span>
                     <span>−{formatCents(off)}</span>
                   </div>
@@ -860,9 +864,10 @@ export default function CartView() {
                 {known && !eligible ? "○" : "✓"} <strong>{d.code}</strong>{" "}
                 {d.kind === "shipping"
                   ? "free shipping"
-                  : d.type === "percent"
-                    ? `${d.value}% off`
-                    : `${formatCents(d.value)} off`}
+                  : (d.type === "percent"
+                      ? `${d.value}% off`
+                      : `${formatCents(d.value)} off`) +
+                    (d.freeShipping ? " + free shipping" : "")}
               </span>
               <button
                 className="btn mini ghost"
