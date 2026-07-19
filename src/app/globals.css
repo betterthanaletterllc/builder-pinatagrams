@@ -1908,14 +1908,19 @@ body:has(.bottom-stack) .site-footer {
   .landing-logo {
     grid-column: 1 / -1;
   }
-  /* Every column heading on ONE line (clamped so the longest —
-     "carrying your personal message," — still fits a column at 900px),
-     and every photo an identical cover-cropped square: the three tiles
-     land perfectly level. */
+  /* Photos FIRST, their line beneath as a caption — the tiles sit level
+     by construction (no heading can push an image down), and the four
+     text fragments read as one near-contiguous sentence under the row. */
+  .landing-sec {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  /* Every caption on ONE line (clamped so the longest —
+     "carrying your personal message," — still fits a column at 900px). */
   .landing-line {
     font-size: clamp(15px, 1.7vw, 18.5px);
     white-space: nowrap;
-    margin: 14px 0 10px;
+    margin: 12px 0 0;
   }
   .landing-photo {
     aspect-ratio: 1;
