@@ -7,7 +7,10 @@
  */
 
 export const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? "G-TF4J3S84QY";
-export const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "";
+// Nathan's pixel (2026-07-19). Pixel IDs are public client-side values —
+// same pattern as GA_ID; the env var can still override.
+export const META_PIXEL_ID =
+  process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "621443411344269";
 
 type Gtag = (...args: unknown[]) => void;
 type Fbq = (...args: unknown[]) => void;
