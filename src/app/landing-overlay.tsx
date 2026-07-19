@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import builtInLogo from "../../public/pinatagrams-logo.png";
+import { track } from "@/lib/analytics";
 
 /**
  * Full-screen scrollable landing overlay shown OVER the builder (Nathan's
@@ -59,6 +60,7 @@ export default function LandingOverlay({
   if (!open) return null;
 
   const dismiss = () => {
+    track("landing_overlay_dismissed");
     try {
       sessionStorage.setItem(SEEN_KEY, "1");
     } catch {}

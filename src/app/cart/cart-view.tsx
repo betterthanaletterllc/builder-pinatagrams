@@ -32,7 +32,7 @@ import {
 } from "@/lib/flow";
 import { cdnThumb } from "@/lib/library-data";
 import { formatYmd } from "@/lib/delivery";
-import { trackBeginCheckout } from "@/lib/analytics";
+import { track, trackBeginCheckout } from "@/lib/analytics";
 
 const MAX_QTY = 25;
 const DISCOUNT_KEY = "pinatagrams-builder-discount";
@@ -193,6 +193,9 @@ export default function CartView() {
             setLines(remaining);
             setPending(null);
             setConfirmed(true);
+            // Store-side pixels own the real Purchase; this closes the
+            // PostHog/GA funnel when the payer returns to the builder tab.
+            track("purchase_confirmed");
           } else {
             // "gone" = the draft was deleted/cleaned up → drop the stale
             // banner but keep the (unpurchased) cart.

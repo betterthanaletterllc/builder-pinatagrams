@@ -42,7 +42,7 @@ import {
   type DeliveryConfig,
 } from "@/lib/delivery";
 import { cdnThumb, clearLibraryState } from "@/lib/library-data";
-import { trackAddToCart } from "@/lib/analytics";
+import { track, trackAddToCart } from "@/lib/analytics";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
 import BoxPreview from "./box-preview";
@@ -227,6 +227,11 @@ export default function DesignFlow({
       setGraphicModeState(v);
       setStepState("Graphic");
       writeUrl("Graphic", v, true);
+      if (v) {
+        track(
+          v === "library" ? "graphic_library_opened" : "custom_editor_opened",
+        );
+      }
     },
     [writeUrl],
   );
@@ -439,6 +444,7 @@ export default function DesignFlow({
   // silently (the checkout enforces the same rule server-side).
   const pickFilling = (f: HubFilling) => {
     setFilling(f.label);
+    track("filling_selected", { filling: f.label });
     const dropped = addons.filter((id) => !fillingAllowsAddon(f, id));
     if (dropped.length) {
       setAddons(addons.filter((id) => fillingAllowsAddon(f, id)));
@@ -584,7 +590,15 @@ export default function DesignFlow({
           ? { label: "Continue →", onClick: () => goStep("Message") }
           : null;
       case "Message":
-        return { label: "Continue →", onClick: () => goStep("Filling") };
+        return {
+          label: "Continue →",
+          onClick: () => {
+            track("message_step_completed", {
+              has_message: message.trim().length > 0,
+            });
+            goStep("Filling");
+          },
+        };
       case "Filling":
         return {
           label: "Continue →",
@@ -719,6 +733,7 @@ export default function DesignFlow({
           <GraphicLibrary
             onPick={(g) => {
               setGraphic(g);
+              track("graphic_picked", { design: g.design });
               goStep("Graphic");
             }}
           />
@@ -759,6 +774,7 @@ export default function DesignFlow({
                 artSha256: assets.artSha256,
               });
               setEditingDraft(null);
+              track("custom_design_saved");
               goStep("Graphic");
             }}
             onAssets={(assets, docJson) => {
@@ -898,13 +914,14 @@ export default function DesignFlow({
                       type="checkbox"
                       checked={on}
                       disabled={!allowed}
-                      onChange={() =>
+                      onChange={() => {
                         setAddons(
                           on
                             ? addons.filter((id) => id !== a.id)
                             : [...addons, a.id],
-                        )
-                      }
+                        );
+                        track("addon_toggled", { addon: a.id, on: !on });
+                      }}
                     />
                     <span className="addon-label">{a.label}</span>
                     <span className="addon-price">
@@ -927,7 +944,14 @@ export default function DesignFlow({
             <strong>{formatYmd(minDeliveryDate(deliveryCfg))}</strong> — we need
             a day to make your piñata plus two FedEx days to fly it there.
           </p>
-          <DateCalendar value={date} onChange={setDate} cfg={deliveryCfg} />
+          <DateCalendar
+            value={date}
+            onChange={(d) => {
+              setDate(d);
+              track("delivery_date_picked", { date: d });
+            }}
+            cfg={deliveryCfg}
+          />
           {!date ? (
             <p className="note">
               Tap a day — grayed-out days aren&apos;t available.

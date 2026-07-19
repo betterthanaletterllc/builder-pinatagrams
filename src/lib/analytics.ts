@@ -11,6 +11,11 @@ export const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? "G-TF4J3S84QY";
 // same pattern as GA_ID; the env var can still override.
 export const META_PIXEL_ID =
   process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "621443411344269";
+// PostHog project key (public client-side value, phc_…). DORMANT until set —
+// drop the key here or in Vercel env and the whole funnel starts capturing.
+export const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "";
+export const POSTHOG_HOST =
+  process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 
 type Gtag = (...args: unknown[]) => void;
 type Fbq = (...args: unknown[]) => void;
@@ -22,10 +27,27 @@ declare global {
   }
 }
 
+import posthog from "posthog-js";
+
+/** Fan a funnel event out to GA4 + PostHog (Meta gets only its standard
+ *  events — AddToCart/InitiateCheckout/PageView — via the helpers below).
+ *  One call per moment in flow code; never throws. */
+export function track(event: string, props?: Record<string, unknown>): void {
+  try {
+    window.gtag?.("event", event, props ?? {});
+  } catch {}
+  try {
+    if (POSTHOG_KEY) posthog.capture(event, props);
+  } catch {}
+}
+
 export function trackPageView(path: string): void {
   try {
     window.gtag?.("event", "page_view", { page_path: path });
     window.fbq?.("track", "PageView");
+  } catch {}
+  try {
+    if (POSTHOG_KEY) posthog.capture("$pageview");
   } catch {}
 }
 
@@ -35,6 +57,9 @@ export function trackAddToCart(valueCents: number | null): void {
     window.gtag?.("event", "add_to_cart", { currency: "USD", value });
     window.fbq?.("track", "AddToCart", { currency: "USD", value });
   } catch {}
+  try {
+    if (POSTHOG_KEY) posthog.capture("add_to_cart", { currency: "USD", value });
+  } catch {}
 }
 
 export function trackBeginCheckout(valueCents: number | null): void {
@@ -42,5 +67,9 @@ export function trackBeginCheckout(valueCents: number | null): void {
   try {
     window.gtag?.("event", "begin_checkout", { currency: "USD", value });
     window.fbq?.("track", "InitiateCheckout", { currency: "USD", value });
+  } catch {}
+  try {
+    if (POSTHOG_KEY)
+      posthog.capture("begin_checkout", { currency: "USD", value });
   } catch {}
 }

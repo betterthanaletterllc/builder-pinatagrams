@@ -3,12 +3,32 @@
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { GA_ID, META_PIXEL_ID, trackPageView } from "@/lib/analytics";
+import posthog from "posthog-js";
+import {
+  GA_ID,
+  META_PIXEL_ID,
+  POSTHOG_HOST,
+  POSTHOG_KEY,
+  trackPageView,
+} from "@/lib/analytics";
 
-/** GA4 (+ optional Meta pixel) bootstrap and SPA page-view tracking. */
+/** GA4 + Meta pixel + PostHog bootstrap and SPA page-view tracking. */
 export default function Analytics() {
   const pathname = usePathname();
   const first = useRef(true);
+
+  useEffect(() => {
+    // Dormant until POSTHOG_KEY is set. Manual pageviews (below) so SPA
+    // navigation is counted exactly once alongside GA/Meta.
+    if (POSTHOG_KEY && !posthog.__loaded) {
+      posthog.init(POSTHOG_KEY, {
+        api_host: POSTHOG_HOST,
+        capture_pageview: false,
+        capture_pageleave: true,
+      });
+      posthog.capture("$pageview");
+    }
+  }, []);
 
   useEffect(() => {
     // the initial page_view comes from the gtag config below
