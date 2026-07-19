@@ -1908,16 +1908,49 @@ body:has(.bottom-stack) .site-footer {
   .landing-logo {
     grid-column: 1 / -1;
   }
+  /* Every column heading on ONE line (clamped so the longest —
+     "carrying your personal message," — still fits a column at 900px),
+     and every photo an identical cover-cropped square: the three tiles
+     land perfectly level. */
+  .landing-line {
+    font-size: clamp(15px, 1.7vw, 18.5px);
+    white-space: nowrap;
+    margin: 14px 0 10px;
+  }
+  .landing-photo {
+    aspect-ratio: 1;
+    height: auto;
+    object-fit: cover;
+  }
   /* the closing line ("delivered straight to their door.") has no photo —
-     it spans the row beneath the three columns */
+     it spans beneath the tiles, larger and clearly separated so it reads
+     as the sentence's finale, not a caption on the middle photo */
   .landing-sec:nth-of-type(4) {
     grid-column: 1 / -1;
+  }
+  .landing-sec:nth-of-type(4) .landing-line {
+    white-space: normal;
+    font-size: 21px;
+    margin: 26px 0 4px;
   }
   .landing-cta {
     grid-column: 1 / -1;
     max-width: 380px;
     justify-self: center;
     margin-top: 10px;
+  }
+}
+
+/* Mobile: bolder pitch lines, and the first line hugs the logo. */
+@media (max-width: 899px) {
+  .landing-line {
+    font-weight: 700;
+  }
+  .landing-logo {
+    margin-bottom: 0;
+  }
+  .landing-sec:first-of-type .landing-line {
+    margin-top: 4px;
   }
 }
 
