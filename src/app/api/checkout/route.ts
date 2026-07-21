@@ -535,9 +535,15 @@ export async function POST(req: Request) {
           phone: a.phone || null,
         },
         shippingLine: {
+          // ⚠ The leading word "Guaranteed" is LOAD-BEARING: Paper's
+          // fulfill-date logic branches on it (startsWith "guaranteed" →
+          // ship 2 business days before the requested date, the FedEx
+          // 2-Day math; anything else → the 5-day standard-shipping lead).
+          // Builder shipping IS the guaranteed-date service — without this
+          // prefix every builder order gets fulfilled ~3 days early.
           title: freeShip
-            ? "Delivered on your selected dates — free shipping"
-            : "Delivered on your selected dates",
+            ? "Guaranteed delivery on your selected dates — free shipping"
+            : "Guaranteed delivery on your selected dates",
           price: freeShip
             ? "0.00"
             : ((price.shipPerUnitCents * units) / 100).toFixed(2),
