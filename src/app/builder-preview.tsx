@@ -16,14 +16,23 @@ import { track } from "@/lib/analytics";
 export default function BuilderPreview({
   bodyStyles,
   priceCents,
+  from = false,
+  variantParam = null,
 }: {
   bodyStyles: HubBodyStyle[];
   priceCents?: number | null;
+  // Tiered variants say "from" (upcharges ride on top); flat variants show
+  // the ONE all-in delivered price.
+  from?: boolean;
+  // Non-production preview sitting: the ?variant= name to carry onto the
+  // server-rendered design page so the whole walkthrough stays one profile.
+  variantParam?: string | null;
 }) {
   const price =
     priceCents != null ? (
       <div className="style-price">
-        from {formatCents(priceCents)}{" "}
+        {from ? "from " : ""}
+        {formatCents(priceCents)}{" "}
         <span className="style-price-note">delivered</span>
       </div>
     ) : null;
@@ -34,7 +43,9 @@ export default function BuilderPreview({
           s.inStock ? (
             <Link
               key={s.id}
-              href={`/design?style=${s.id}`}
+              href={`/design?style=${s.id}${
+                variantParam ? `&variant=${encodeURIComponent(variantParam)}` : ""
+              }`}
               className="style-card"
               onClick={() => track("body_style_selected", { style: s.id })}
             >

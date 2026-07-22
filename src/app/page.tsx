@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import {
   getCatalog,
   HUB_URL,
@@ -5,8 +6,10 @@ import {
   resolveBuilderPricing,
   type HubPrice,
 } from "@/lib/hub";
+import { normalizeHost, resolveVariantProfile } from "@/lib/variant";
 import BuilderPreview from "./builder-preview";
 import LandingOverlay from "./landing-overlay";
+import VariantBoot from "./variant-boot";
 
 // Always render against the live hub — no build-time snapshot yet, and the
 // build must succeed even when the hub is unreachable (see catch below).
@@ -36,14 +39,34 @@ async function b2cPrice(): Promise<HubPrice | null> {
   }
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ variant?: string }>;
+}) {
   try {
-    const [catalog, price] = await Promise.all([getCatalog(), b2cPrice()]);
-    // "from" = Classic graphic (included) + the cheaper carrier's shipping.
+    // The hostname picks the variant profile (hub /pricing → "Builder
+    // variants"); ?variant= previews any profile OUTSIDE production only.
+    const host = normalizeHost((await headers()).get("host"));
+    const previewVariant =
+      process.env.VERCEL_ENV !== "production"
+        ? ((await searchParams).variant ?? null)
+        : null;
+    const [catalog, price] = await Promise.all([
+      getCatalog({ host, previewVariant }),
+      b2cPrice(),
+    ]);
+    const variant = resolveVariantProfile(catalog.variant);
     const pricing = resolveBuilderPricing(catalog.pricing);
+    // Tiered: "from" = Classic graphic (included) + the cheapest carrier.
+    // Flat: ONE all-in delivered price — the number IS the price, no "from".
     const priceCents = price
-      ? price.unitPriceCents +
-        Math.min(price.shipPerUnitCents, pricing.uspsShipPerUnitCents)
+      ? variant.pricing === "tiered"
+        ? price.unitPriceCents +
+          (variant.carriers.includes("usps")
+            ? Math.min(price.shipPerUnitCents, pricing.uspsShipPerUnitCents)
+            : price.shipPerUnitCents)
+        : price.unitDeliveredCents
       : null;
     // Landing overlay photos: the hub-managed shots (admin /pricing →
     // "Landing page", first three active), in order — one per pitch line.
@@ -52,10 +75,21 @@ export default async function Home() {
       .slice(0, 3);
     return (
       <main>
+        {/* Remembers a non-production ?variant= preview for client surfaces
+            (cart) and flags unresolved hosts loudly. Renders nothing. */}
+        <VariantBoot
+          variantName={variant.name}
+          resolvedVia={variant.resolvedVia}
+          preview={!!previewVariant}
+        />
         {/* Full-screen scrollable pitch OVER the builder; "Build my Piñata"
             dismisses to the picker below. NO smash copy — the candy comes
             out and the piñata gets kept. */}
-        <LandingOverlay logo={catalog.landing?.logo} images={landingImgs} />
+        <LandingOverlay
+          logo={catalog.landing?.logo}
+          images={landingImgs}
+          lines={variant.landingLines}
+        />
         <h1 className="visually-hidden">
           Piñatagrams — personalized mini piñatas, delivered
         </h1>
@@ -87,7 +121,12 @@ export default async function Home() {
           </span>
         </nav>
         <h2 className="start-h2">Start here — pick a body style</h2>
-        <BuilderPreview bodyStyles={catalog.bodyStyles} priceCents={priceCents} />
+        <BuilderPreview
+          bodyStyles={catalog.bodyStyles}
+          priceCents={priceCents}
+          from={variant.pricing === "tiered"}
+          variantParam={previewVariant}
+        />
       </main>
     );
   } catch {

@@ -49,6 +49,7 @@ import {
   type DeliveryConfig,
 } from "@/lib/delivery";
 import { cdnThumb, clearLibraryState } from "@/lib/library-data";
+import type { VariantProfile } from "@/lib/variant";
 import { track, trackAddToCart } from "@/lib/analytics";
 import EditorShell from "./editor-shell";
 import GraphicLibrary from "./graphic-library";
@@ -110,6 +111,7 @@ export default function DesignFlow({
   fillingOptions,
   deliveryCfg,
   pricing,
+  variant,
 }: {
   style: StyleInfo;
   boxInterior: {
@@ -121,7 +123,13 @@ export default function DesignFlow({
   fillingOptions: HubFilling[];
   deliveryCfg: DeliveryConfig;
   pricing: BuilderPricing;
+  variant: VariantProfile;
 }) {
+  // Variant knobs (hub /pricing → "Builder variants"): tiered shows the
+  // Classic/library/custom price ladder; flat is ONE all-in price. USPS
+  // appears only when the variant offers it — otherwise FedEx is forced.
+  const tiered = variant.pricing === "tiered";
+  const uspsOffered = variant.carriers.includes("usps");
   // The style can be swapped in place (keeps the design/message/etc.).
   const [styleInfo, setStyleInfo] = useState<StyleInfo>(style);
   const [step, setStepState] = useState<Step>("Graphic");
@@ -281,7 +289,8 @@ export default function DesignFlow({
     // NEW piñata starts on FedEx 2-Day (Nathan's call, 2026-07-22 — no
     // inheriting the cart's carrier). The one-carrier-per-order invariant
     // still holds: whatever is selected at add-to-cart re-stamps the cart.
-    setCarrier(d?.carrier ?? "fedex");
+    // A variant that doesn't offer USPS forces FedEx regardless of draft.
+    setCarrier(uspsOffered ? (d?.carrier ?? "fedex") : "fedex");
     const applyUrl = () => {
       const p = new URLSearchParams(window.location.search);
       const target = SLUG_TO_STEP[p.get("step") ?? "graphic"] ?? "Graphic";
@@ -465,9 +474,10 @@ export default function DesignFlow({
   );
   const fillingCents = fillingRec?.priceCents ?? 0;
   // Version-B tiers: the Classic default rides at the base price; a library
-  // pick or custom design adds its upcharge. Shipping prices by the chosen
-  // carrier. (Checkout re-derives all of this server-side.)
-  const tierCents = graphicTierCents(graphic, pricing);
+  // pick or custom design adds its upcharge. Flat variants price every
+  // graphic the same. Shipping prices by the chosen carrier. (Checkout
+  // re-derives all of this server-side from the same variant profile.)
+  const tierCents = tiered ? graphicTierCents(graphic, pricing) : 0;
   const shipCents =
     carrier === "usps"
       ? pricing.uspsShipPerUnitCents
@@ -712,25 +722,30 @@ export default function DesignFlow({
       {step === "Graphic" && !choosing && (
         <div className="step-panel">
           {!graphic ? (
-            // Version-B tiers: the Classic branded box is included at the
+            // Tiered variants: the Classic branded box is included at the
             // base price; a library pick and a custom design each show
-            // their flat upcharge (hub-controlled, /pricing).
+            // their upcharge (hub-controlled, /pricing). Flat variants show
+            // the original two equal-priced cards — no Classic, no tags.
             <div className="choice-cards">
-              <button className="choice-card" onClick={pickClassic}>
-                <span className="choice-title">Classic Piñatagrams</span>
-                <span className="choice-sub">
-                  Our signature confetti box — ready to go
-                </span>
-                <span className="choice-price included">Included</span>
-              </button>
+              {tiered && (
+                <button className="choice-card" onClick={pickClassic}>
+                  <span className="choice-title">Classic Piñatagrams</span>
+                  <span className="choice-sub">
+                    Our signature confetti box — ready to go
+                  </span>
+                  <span className="choice-price included">Included</span>
+                </button>
+              )}
               <button className="choice-card" onClick={() => goView("library")}>
                 <span className="choice-title">Pick a graphic</span>
                 <span className="choice-sub">
                   Browse hundreds of ready-made designs
                 </span>
-                <span className="choice-price plus">
-                  +{formatCents(pricing.graphicLibraryUpchargeCents)}
-                </span>
+                {tiered && (
+                  <span className="choice-price plus">
+                    +{formatCents(pricing.graphicLibraryUpchargeCents)}
+                  </span>
+                )}
               </button>
               <button
                 className="choice-card"
@@ -743,9 +758,11 @@ export default function DesignFlow({
                 <span className="choice-sub">
                   Add your photos &amp; text on a blank canvas
                 </span>
-                <span className="choice-price plus">
-                  +{formatCents(pricing.graphicCustomUpchargeCents)}
-                </span>
+                {tiered && (
+                  <span className="choice-price plus">
+                    +{formatCents(pricing.graphicCustomUpchargeCents)}
+                  </span>
+                )}
               </button>
             </div>
           ) : (
@@ -765,9 +782,11 @@ export default function DesignFlow({
                     }}
                   >
                     <span className="choice-title">Pick a different graphic</span>
-                    <span className="choice-price plus">
-                      +{formatCents(pricing.graphicLibraryUpchargeCents)}
-                    </span>
+                    {tiered && (
+                      <span className="choice-price plus">
+                        +{formatCents(pricing.graphicLibraryUpchargeCents)}
+                      </span>
+                    )}
                   </button>
                   <button
                     className="choice-card"
@@ -784,10 +803,12 @@ export default function DesignFlow({
                   >
                     <span className="choice-title">Edit this graphic</span>
                   </button>
-                  <button className="choice-card" onClick={pickClassic}>
-                    <span className="choice-title">Use the Classic box</span>
-                    <span className="choice-price included">Included</span>
-                  </button>
+                  {tiered && (
+                    <button className="choice-card" onClick={pickClassic}>
+                      <span className="choice-title">Use the Classic box</span>
+                      <span className="choice-price included">Included</span>
+                    </button>
+                  )}
                 </>
               ) : (
                 <>
@@ -806,7 +827,7 @@ export default function DesignFlow({
                         ? "Pick a graphic"
                         : "Change graphic"}
                     </span>
-                    {graphicTier(graphic) === "classic" && (
+                    {tiered && graphicTier(graphic) === "classic" && (
                       <span className="choice-price plus">
                         +{formatCents(pricing.graphicLibraryUpchargeCents)}
                       </span>
@@ -820,11 +841,13 @@ export default function DesignFlow({
                     }}
                   >
                     <span className="choice-title">Design your own</span>
-                    <span className="choice-price plus">
-                      +{formatCents(pricing.graphicCustomUpchargeCents)}
-                    </span>
+                    {tiered && (
+                      <span className="choice-price plus">
+                        +{formatCents(pricing.graphicCustomUpchargeCents)}
+                      </span>
+                    )}
                   </button>
-                  {graphicTier(graphic) === "library" && (
+                  {tiered && graphicTier(graphic) === "library" && (
                     <button className="choice-card" onClick={pickClassic}>
                       <span className="choice-title">Use the Classic box</span>
                       <span className="choice-price included">Included</span>
@@ -845,6 +868,7 @@ export default function DesignFlow({
             </button>
           </p>
           <GraphicLibrary
+            restrict={variant.library === "birthday" ? "birthday" : null}
             onPick={(g) => {
               setGraphic(g);
               track("graphic_picked", { design: g.design });
@@ -1055,35 +1079,38 @@ export default function DesignFlow({
         <div className="step-panel delivery-step">
           {/* One delivery speed per ORDER — the choice re-stamps every
               piñata in the cart at add-to-cart (one draft, one shipping
-              line). USPS = cheaper, arrives in a window; FedEx = exact day. */}
-          <div className="carrier-cards">
-            <button
-              className={
-                "carrier-card" + (carrier === "fedex" ? " selected" : "")
-              }
-              onClick={() => pickCarrier("fedex")}
-            >
-              <span className="carrier-name">FedEx 2-Day</span>
-              <span className="carrier-desc">Arrives on your exact day</span>
-              <span className="carrier-price">
-                {unitPrice ? formatCents(unitPrice.shipPerUnitCents) : ""}
-              </span>
-            </button>
-            <button
-              className={
-                "carrier-card" + (carrier === "usps" ? " selected" : "")
-              }
-              onClick={() => pickCarrier("usps")}
-            >
-              <span className="carrier-name">USPS First Class</span>
-              <span className="carrier-desc">
-                Arrives within 2 days of your pick
-              </span>
-              <span className="carrier-price">
-                {formatCents(pricing.uspsShipPerUnitCents)}
-              </span>
-            </button>
-          </div>
+              line). USPS = cheaper, arrives in a window; FedEx = exact day.
+              Variants without USPS skip the chooser (FedEx forced). */}
+          {uspsOffered && (
+            <div className="carrier-cards">
+              <button
+                className={
+                  "carrier-card" + (carrier === "fedex" ? " selected" : "")
+                }
+                onClick={() => pickCarrier("fedex")}
+              >
+                <span className="carrier-name">FedEx 2-Day</span>
+                <span className="carrier-desc">Arrives on your exact day</span>
+                <span className="carrier-price">
+                  {unitPrice ? formatCents(unitPrice.shipPerUnitCents) : ""}
+                </span>
+              </button>
+              <button
+                className={
+                  "carrier-card" + (carrier === "usps" ? " selected" : "")
+                }
+                onClick={() => pickCarrier("usps")}
+              >
+                <span className="carrier-name">USPS First Class</span>
+                <span className="carrier-desc">
+                  Arrives within 2 days of your pick
+                </span>
+                <span className="carrier-price">
+                  {formatCents(pricing.uspsShipPerUnitCents)}
+                </span>
+              </button>
+            </div>
+          )}
           <p className="note earliest-hint">
             {carrier === "usps" ? (
               <>

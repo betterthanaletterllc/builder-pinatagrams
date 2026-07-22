@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import {
   getCatalog,
   resolveBuilderPricing,
@@ -10,6 +11,13 @@ import {
 } from "@/lib/hub";
 import { resolveFillings } from "@/lib/flow";
 import { resolveDeliveryConfig, type DeliveryConfig } from "@/lib/delivery";
+import {
+  DEFAULT_VARIANT,
+  normalizeHost,
+  resolveVariantProfile,
+  type VariantProfile,
+} from "@/lib/variant";
+import VariantBoot from "../variant-boot";
 import DesignFlow from "./design-flow";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +25,12 @@ export const dynamic = "force-dynamic";
 export default async function DesignPage({
   searchParams,
 }: {
-  searchParams: Promise<{ style?: string }>;
+  searchParams: Promise<{ style?: string; variant?: string }>;
 }) {
-  const { style } = await searchParams;
+  const { style, variant: variantParam } = await searchParams;
+  const host = normalizeHost((await headers()).get("host"));
+  const previewVariant =
+    process.env.VERCEL_ENV !== "production" ? (variantParam ?? null) : null;
 
   let match: HubBodyStyle | null = null;
   let box: { interiorUrl: string | null; messageZone: LogoZone | null } | null =
@@ -28,15 +39,17 @@ export default async function DesignPage({
   let fillings: HubFilling[] = resolveFillings(undefined);
   let deliveryCfg: DeliveryConfig = resolveDeliveryConfig(undefined);
   let pricing: BuilderPricing = resolveBuilderPricing(undefined);
+  let variant: VariantProfile = DEFAULT_VARIANT;
   let hubDown = false;
   try {
-    const catalog = await getCatalog();
+    const catalog = await getCatalog({ host, previewVariant });
     match = catalog.bodyStyles.find((s) => s.id === style && s.inStock) ?? null;
     box = catalog.box ?? null;
     addons = catalog.addons ?? [];
     fillings = resolveFillings(catalog.fillings);
     deliveryCfg = resolveDeliveryConfig(catalog.delivery);
     pricing = resolveBuilderPricing(catalog.pricing);
+    variant = resolveVariantProfile(catalog.variant);
   } catch {
     // Hub unreachable — the flow still works; the style is re-validated
     // server-side at order time anyway.
@@ -58,6 +71,15 @@ export default async function DesignPage({
 
   return (
     <main>
+      {/* No boot while the hub is down: a fallback-by-outage must not fire
+          the misconfiguration alarm (checkout 503s anyway — no order risk). */}
+      {!hubDown && (
+        <VariantBoot
+          variantName={variant.name}
+          resolvedVia={variant.resolvedVia}
+          preview={!!previewVariant}
+        />
+      )}
       <DesignFlow
         style={{
           id: style,
@@ -73,6 +95,7 @@ export default async function DesignPage({
         fillingOptions={fillings}
         deliveryCfg={deliveryCfg}
         pricing={pricing}
+        variant={variant}
       />
     </main>
   );

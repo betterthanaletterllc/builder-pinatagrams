@@ -104,8 +104,14 @@ function Card({
 
 export default function GraphicLibrary({
   onPick,
+  restrict = null,
 }: {
   onPick: (g: GraphicChoice) => void;
+  // Variant knob (hub "Builder variants" → library): "birthday" trims the
+  // whole library to the Birthday set — HBD-coded designs plus the curated
+  // storefront-collection extras — and hides the aisle row (search and
+  // shelves keep working within the trimmed set).
+  restrict?: "birthday" | null;
 }) {
   const [graphics, setGraphics] = useState<LibraryGraphic[] | null>(null);
   const [tags, setTags] = useState<TagIndex>({});
@@ -119,10 +125,16 @@ export default function GraphicLibrary({
   const isAisle = (v: string | null): v is Aisle =>
     AISLES.some((a) => a.id === v);
   const [query, setQuery] = useState(restored.current?.q ?? "");
+  // A restricted library has no aisle row — ignore any restored aisle/sub
+  // (they'd invisibly filter the trimmed set down to nothing).
   const [aisle, setAisle] = useState<Aisle | null>(
-    isAisle(restored.current?.a ?? null) ? (restored.current!.a as Aisle) : null,
+    !restrict && isAisle(restored.current?.a ?? null)
+      ? (restored.current!.a as Aisle)
+      : null,
   );
-  const [sub, setSub] = useState<string | null>(restored.current?.s ?? null);
+  const [sub, setSub] = useState<string | null>(
+    restrict ? null : (restored.current?.s ?? null),
+  );
 
   const load = useCallback(() => {
     setFailed(false);
@@ -136,11 +148,16 @@ export default function GraphicLibrary({
         setFailed(true);
         return;
       }
-      setGraphics(
-        manifest.graphics.filter(
-          (g) => !EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, "")),
-        ),
+      let list = manifest.graphics.filter(
+        (g) => !EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, "")),
       );
+      if (restrict === "birthday") {
+        const extra = new Set(collections?.birthday ?? []);
+        list = list.filter(
+          (g) => occasionOf(g.design) === "Birthday" || extra.has(g.design),
+        );
+      }
+      setGraphics(list);
       if (tagFile?.tags) setTags(tagFile.tags);
       if (popularFile?.ranking) setPopular(popularFile.ranking);
       if (collections?.birthday) setBdayExtra(new Set(collections.birthday));
@@ -149,7 +166,7 @@ export default function GraphicLibrary({
       const y = restored.current?.y ?? 0;
       if (y > 0) requestAnimationFrame(() => window.scrollTo(0, y));
     });
-  }, []);
+  }, [restrict]);
 
   useEffect(() => {
     load();
@@ -464,19 +481,21 @@ export default function GraphicLibrary({
             }}
           />
 
-          <div className="facet-row aisle-row">
-            <div className="facet-scroll">
-              {AISLES.filter((a) => !a.needsTags || hasTags).map((a) => (
-                <button
-                  key={a.id}
-                  className={"chip" + (aisle === a.id ? " active" : "")}
-                  onClick={() => pickAisle(a.id)}
-                >
-                  {a.label}
-                </button>
-              ))}
+          {!restrict && (
+            <div className="facet-row aisle-row">
+              <div className="facet-scroll">
+                {AISLES.filter((a) => !a.needsTags || hasTags).map((a) => (
+                  <button
+                    key={a.id}
+                    className={"chip" + (aisle === a.id ? " active" : "")}
+                    onClick={() => pickAisle(a.id)}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {subChips.length > 0 && (
             <div className="facet-row sub-row">

@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import {
+  catalogUrl,
   HUB_URL,
   resolveBuilderPricing,
   type HubAddon,
   type HubCatalog,
   type HubPrice,
 } from "@/lib/hub";
+import {
+  normalizeHost,
+  resolveVariantProfile,
+  variantUnresolved,
+} from "@/lib/variant";
 import {
   addressKey,
   CLASSIC_GRAPHIC,
@@ -162,6 +168,10 @@ type CheckoutBody = {
   // `discountCode` kept for older cart clients mid-deploy.
   discountCode?: string;
   discountCodes?: string[];
+  // NON-PRODUCTION ONLY: preview a variant by name so local/preview builds
+  // can exercise any profile's checkout. Production ignores it completely —
+  // there the variant comes from this request's own Host, full stop.
+  previewVariant?: string;
 };
 
 function bad(error: string): NextResponse {
@@ -216,10 +226,21 @@ export async function POST(req: Request) {
   if (rawLines.length > MAX_LINES)
     return bad(`That's a lot of piñatas — the builder caps at ${MAX_LINES} lines. For bulk orders use the quote form.`);
 
+  // The variant profile is resolved from THIS REQUEST'S OWN Host — Vercel
+  // only routes hostnames attached to the project, so the profile that
+  // prices this order is provably the one whose storefront the customer
+  // used. (?previewVariant rides only outside production, for local tests.)
+  const reqHost = normalizeHost(req.headers.get("host"));
+  const previewVariant =
+    process.env.VERCEL_ENV !== "production" && typeof body?.previewVariant === "string"
+      ? body.previewVariant
+      : null;
+
   // Live catalog: styles must exist and be in stock at order time.
-  const catalogRes = await fetch(`${HUB_URL}/api/public/catalog`, {
-    next: { revalidate: 60 },
-  });
+  const catalogRes = await fetch(
+    catalogUrl({ host: reqHost, previewVariant }),
+    { next: { revalidate: 60 } },
+  );
   if (!catalogRes.ok) {
     return NextResponse.json(
       { error: "The catalog is unavailable right now — try again shortly." },
@@ -233,6 +254,11 @@ export async function POST(req: Request) {
   // time exactly like fillings/add-ons. The client's display math ran the
   // same resolver; the numbers here are authoritative.
   const pricing = resolveBuilderPricing(catalog.pricing);
+  // The storefront's variant profile: flat variants price every graphic the
+  // same; carriers gate USPS. Same resolver as the pages — display = invoice.
+  const variant = resolveVariantProfile(catalog.variant);
+  const tiered = variant.pricing === "tiered";
+  const uspsOffered = variant.carriers.includes("usps");
 
   // ONE carrier per order (one draft = one shipping line; Paper branches its
   // fulfill-date math on that line's title). The client re-stamps every cart
@@ -247,6 +273,13 @@ export async function POST(req: Request) {
     );
   }
   const orderCarrier: Carrier = carriers.has("usps") ? "usps" : "fedex";
+  // Backstop for the cart's self-heal: a USPS cart can't check out on a
+  // storefront that doesn't offer USPS (profile changed mid-sitting).
+  if (orderCarrier === "usps" && !uspsOffered) {
+    return bad(
+      "USPS isn't offered on this store — open your cart (shipping updates to FedEx automatically) and try again.",
+    );
+  }
   // Add-ons re-resolve from the live catalog: the client sends ids only,
   // labels + prices come from the hub at order time.
   const addonById = new Map((catalog.addons ?? []).map((a) => [a.id, a]));
@@ -325,11 +358,13 @@ export async function POST(req: Request) {
       frontGraphic = art;
       title = `${str(l.graphic.title, 120) || design} — ${style.name}`;
       // Tier by design code: the Classic branded default rides free, any
-      // other library pick carries the upcharge. (A tampered cart claiming
-      // the Classic code with someone else's art dodges at most the ~$2
-      // library tier — same exposure class as spoofing the line title.)
-      tierCents =
-        design === CLASSIC_GRAPHIC.design
+      // other library pick carries the upcharge. Flat variants price every
+      // graphic the same. (A tampered cart claiming the Classic code with
+      // someone else's art dodges at most the ~$2 library tier — same
+      // exposure class as spoofing the line title.)
+      tierCents = !tiered
+        ? 0
+        : design === CLASSIC_GRAPHIC.design
           ? 0
           : pricing.graphicLibraryUpchargeCents;
     } else if (l.graphic?.type === "custom") {
@@ -357,7 +392,7 @@ export async function POST(req: Request) {
       const sidecar = str(l.graphic.designUrl, 500);
       designJson = BLOB_RE.test(sidecar) ? sidecar : "";
       title = `Custom Piñatagram — ${style.name}`;
-      tierCents = pricing.graphicCustomUpchargeCents;
+      tierCents = tiered ? pricing.graphicCustomUpchargeCents : 0;
     } else {
       return bad(`${label}: pick or design a graphic.`);
     }
@@ -417,6 +452,23 @@ export async function POST(req: Request) {
     orderCarrier === "usps"
       ? pricing.uspsShipPerUnitCents
       : price.shipPerUnitCents;
+
+  // The revenue-attribution tag (search Shopify by tag = revenue per
+  // variant). A host the registry didn't recognize is tagged LOUDLY as
+  // unresolved — never silently pooled into variant-default; a malformed
+  // name is dropped (a comma would split the tag Shopify searches by).
+  let variantTag: string | null;
+  if (variantUnresolved(variant.resolvedVia, reqHost)) {
+    variantTag = "variant-unresolved";
+    console.error(
+      `checkout: host "${reqHost}" matched no variant profile — order tagged variant-unresolved. Check hub /pricing → Builder variants.`,
+    );
+  } else if (/^[a-z0-9-]{1,32}$/.test(variant.name)) {
+    variantTag = `variant-${variant.name}`;
+  } else {
+    variantTag = null;
+    console.error(`checkout: malformed variant name ${JSON.stringify(variant.name)} — tag dropped.`);
+  }
   const addonTotals = (groupLines: CleanLine[]) => {
     const units = new Map<string, { addon: HubAddon; qty: number }>();
     for (const l of groupLines)
@@ -531,8 +583,10 @@ export async function POST(req: Request) {
     { key: "_requestedDate", value: l.deliveryDate },
     // Carrier rails for Paper's coming USPS release: the order's carrier on
     // every line, plus the promised window (target date stays on
-    // _requestedDate — Paper's scheduling anchor is unchanged).
-    { key: "_carrier", value: orderCarrier },
+    // _requestedDate — Paper's scheduling anchor is unchanged). Emitted only
+    // when the variant OFFERS a carrier choice, so a flat/FedEx storefront's
+    // payload stays byte-identical to the pre-variant live orders.
+    ...(uspsOffered ? [{ key: "_carrier", value: orderCarrier }] : []),
     ...(l.window
       ? [{ key: "_requestedWindow", value: `${l.window.start}..${l.window.end}` }]
       : []),
@@ -581,8 +635,11 @@ export async function POST(req: Request) {
         ...(discountCodes.length
           ? { discountCodes, allowDiscountCodesInCheckout: false }
           : {}),
-        tags: ["builder"],
-        note: "builder.pinatagrams.com",
+        tags: variantTag ? ["builder", variantTag] : ["builder"],
+        // Forensics: which storefront sold this, under which profile shape,
+        // priced from which catalog snapshot — orders self-document their
+        // config epoch (a mid-test knob edit is visible per order).
+        note: `builder @ ${reqHost || "unknown-host"} · variant ${variant.name} (${variant.pricing}/${variant.carriers.join("+")}) · catalog ${catalog.asOf}`,
         shippingAddress: {
           firstName,
           lastName,

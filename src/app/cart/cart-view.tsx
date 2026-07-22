@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
+  catalogUrl,
   discountAmountCents,
   formatCents,
-  HUB_URL,
   priceUrl,
   resolveBuilderPricing,
   resolveDiscount,
@@ -16,6 +16,12 @@ import {
   type HubFilling,
   type HubPrice,
 } from "@/lib/hub";
+import {
+  DEFAULT_VARIANT,
+  previewVariantName,
+  resolveVariantProfile,
+  type VariantProfile,
+} from "@/lib/variant";
 import {
   addressComplete,
   addressKey,
@@ -163,6 +169,16 @@ export default function CartView() {
   const [deliveryCfg, setDeliveryCfg] = useState<DeliveryConfig>(
     resolveDeliveryConfig(undefined),
   );
+  // The storefront's variant profile (resolved by hostname; preview override
+  // outside production). Flat = no tier upcharges; carriers gate USPS.
+  const [variant, setVariant] = useState<VariantProfile>(DEFAULT_VARIANT);
+  // True only once the catalog fetch DELIVERED a profile. The self-heal
+  // below must never run against the compiled default — the fetch races the
+  // cart load, and healing on the placeholder would rewrite a legitimate
+  // USPS cart to FedEx on a storefront that offers USPS.
+  const [variantLoaded, setVariantLoaded] = useState(false);
+  // Set when the cart self-healed a USPS line on a FedEx-only variant.
+  const [carrierNotice, setCarrierNotice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -277,17 +293,47 @@ export default function CartView() {
       .then(setUnitPrice)
       .catch(() => {});
     // Add-on/filling labels + prices come from the live catalog (display
-    // only — checkout re-resolves everything server-side).
-    fetch(`${HUB_URL}/api/public/catalog`)
+    // only — checkout re-resolves everything server-side). The fetch carries
+    // this page's hostname so the variant profile matches what the server
+    // pages resolved (and what checkout will re-resolve).
+    fetch(
+      catalogUrl({
+        host: window.location.hostname,
+        previewVariant: previewVariantName(),
+      }),
+    )
       .then((r) => (r.ok ? r.json() : null))
       .then((c) => {
         setAddonCatalog(c?.addons ?? []);
         setFillingCatalog(resolveFillings(c?.fillings));
         setPricing(resolveBuilderPricing(c?.pricing));
         setDeliveryCfg(resolveDeliveryConfig(c?.delivery));
+        if (c?.variant) {
+          setVariant(resolveVariantProfile(c.variant));
+          setVariantLoaded(true);
+        }
       })
       .catch(() => {});
   }, []);
+
+  // Self-heal: a cart built while USPS was offered, now viewed on a variant
+  // without it (profile change mid-sitting, or a cross-variant link) —
+  // rewrite the lines to FedEx VISIBLY, never leave a cart whose display
+  // and checkout disagree. Mirrors the single-address collapse pattern.
+  // Gated on a RESOLVED profile: a failed/slow catalog fetch must never
+  // heal against the placeholder (checkout's own re-resolution is the
+  // loud backstop for a genuinely invalid USPS order).
+  useEffect(() => {
+    if (!lines || !variantLoaded || variant.carriers.includes("usps")) return;
+    if (!lines.some((l) => l.carrier === "usps")) return;
+    const healed = lines.map((l) =>
+      l.carrier === "usps" ? { ...l, carrier: "fedex" as const } : l,
+    );
+    if (saveCart(healed)) {
+      setLines(healed);
+      setCarrierNotice(true);
+    }
+  }, [lines, variant, variantLoaded]);
 
   const addonById = new Map(addonCatalog.map((a) => [a.id, a]));
   const fillingByLabel = new Map(fillingCatalog.map((f) => [f.label, f]));
@@ -429,10 +475,13 @@ export default function CartView() {
     carrier === "usps"
       ? pricing.uspsShipPerUnitCents
       : (unitPrice?.shipPerUnitCents ?? null);
-  // Version-B graphic tiers: Classic default = base price; library/custom
-  // lines carry their upcharge (folded into the piñatas row below).
+  // Graphic tiers apply only on tiered variants: Classic default = base
+  // price; library/custom lines carry their upcharge (folded into the
+  // piñatas row below). Flat variants price every graphic the same.
+  const lineTierCents = (l: CartLine) =>
+    variant.pricing === "tiered" ? graphicTierCents(l.graphic, pricing) : 0;
   const tierTotalCents = lines.reduce(
-    (s, l) => s + graphicTierCents(l.graphic, pricing) * l.qty,
+    (s, l) => s + lineTierCents(l) * l.qty,
     0,
   );
   const extrasTotalCents = lines.reduce(
@@ -515,6 +564,12 @@ export default function CartView() {
         body: JSON.stringify({
           lines: payloadLines,
           ...(codesToSend.length ? { discountCodes: codesToSend } : {}),
+          // Non-production preview sitting: checkout must price the SAME
+          // profile the cart displayed. The server hard-ignores this field
+          // in production (its own Host is the only authority there).
+          ...(previewVariantName()
+            ? { previewVariant: previewVariantName() }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -669,8 +724,14 @@ export default function CartView() {
                     // Land on the last step (address is inherited, so the
                     // Send-to step is skipped) — ready to re-save, with the
                     // chips to jump back to graphic/message/etc.
+                    // Preview sittings carry the variant across the server-
+                    // rendered hop, or the design page would render default.
                     router.push(
-                      `/design?style=${l.styleId}&edit=${l.id}&step=delivery`,
+                      `/design?style=${l.styleId}&edit=${l.id}&step=delivery${
+                        previewVariantName()
+                          ? `&variant=${encodeURIComponent(previewVariantName()!)}`
+                          : ""
+                      }`,
                     );
                   }}
                 >
@@ -721,7 +782,7 @@ export default function CartView() {
               <div className="cart-line-price">
                 {formatCents(
                   (unitCents +
-                    graphicTierCents(l.graphic, pricing) +
+                    lineTierCents(l) +
                     lineAddonCents(l) +
                     lineFillingCents(l) +
                     (shipCents ?? 0)) *
@@ -850,6 +911,12 @@ export default function CartView() {
           </p>
         </div>
 
+        {carrierNotice && (
+          <div className="notice info">
+            Shipping updated — USPS isn&apos;t offered here, so your order
+            ships FedEx 2-Day and arrives on your selected dates.
+          </div>
+        )}
         <div className="price-lines">
           {unitCents !== null && shipCents !== null ? (
             <>
@@ -882,8 +949,13 @@ export default function CartView() {
               )}
               <div className="row">
                 <span>
-                  Shipping —{" "}
-                  {carrier === "usps" ? "USPS First Class" : "FedEx 2-Day"}
+                  {/* Carrier suffix only where a carrier CHOICE exists —
+                      the default flow's cart label stays exactly "Shipping"
+                      (live-flow fidelity). */}
+                  Shipping
+                  {variant.carriers.includes("usps")
+                    ? ` — ${carrier === "usps" ? "USPS First Class" : "FedEx 2-Day"}`
+                    : ""}
                 </span>
                 <span>{formatCents(shipCents * totalUnits)}</span>
               </div>

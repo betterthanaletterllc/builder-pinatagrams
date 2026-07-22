@@ -31,47 +31,61 @@ declare global {
 
 import posthog from "posthog-js";
 
+/** The variant dimension for every event: the HOSTNAME, available
+ *  synchronously before any event fires (the async-fetched profile name
+ *  would miss the landing pageview — the funnel's denominator). Map
+ *  hostname → variant at analysis time via the hub's variants table. */
+function hostProps(): Record<string, string> {
+  try {
+    return { store_host: window.location.hostname };
+  } catch {
+    return {};
+  }
+}
+
 /** Fan a funnel event out to GA4 + PostHog (Meta gets only its standard
  *  events — AddToCart/InitiateCheckout/PageView — via the helpers below).
  *  One call per moment in flow code; never throws. */
 export function track(event: string, props?: Record<string, unknown>): void {
+  const p = { ...hostProps(), ...(props ?? {}) };
   try {
-    window.gtag?.("event", event, props ?? {});
+    window.gtag?.("event", event, p);
   } catch {}
   try {
-    if (POSTHOG_KEY) posthog.capture(event, props);
+    if (POSTHOG_KEY) posthog.capture(event, p);
   } catch {}
 }
 
 export function trackPageView(path: string): void {
   try {
-    window.gtag?.("event", "page_view", { page_path: path });
+    window.gtag?.("event", "page_view", { page_path: path, ...hostProps() });
     window.fbq?.("track", "PageView");
   } catch {}
   try {
-    if (POSTHOG_KEY) posthog.capture("$pageview");
+    if (POSTHOG_KEY) posthog.capture("$pageview", hostProps());
   } catch {}
 }
 
 export function trackAddToCart(valueCents: number | null): void {
   const value = valueCents !== null ? valueCents / 100 : undefined;
   try {
-    window.gtag?.("event", "add_to_cart", { currency: "USD", value });
+    window.gtag?.("event", "add_to_cart", { currency: "USD", value, ...hostProps() });
     window.fbq?.("track", "AddToCart", { currency: "USD", value });
   } catch {}
   try {
-    if (POSTHOG_KEY) posthog.capture("add_to_cart", { currency: "USD", value });
+    if (POSTHOG_KEY)
+      posthog.capture("add_to_cart", { currency: "USD", value, ...hostProps() });
   } catch {}
 }
 
 export function trackBeginCheckout(valueCents: number | null): void {
   const value = valueCents !== null ? valueCents / 100 : undefined;
   try {
-    window.gtag?.("event", "begin_checkout", { currency: "USD", value });
+    window.gtag?.("event", "begin_checkout", { currency: "USD", value, ...hostProps() });
     window.fbq?.("track", "InitiateCheckout", { currency: "USD", value });
   } catch {}
   try {
     if (POSTHOG_KEY)
-      posthog.capture("begin_checkout", { currency: "USD", value });
+      posthog.capture("begin_checkout", { currency: "USD", value, ...hostProps() });
   } catch {}
 }

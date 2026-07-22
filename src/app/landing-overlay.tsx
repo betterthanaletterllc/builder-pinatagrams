@@ -35,11 +35,16 @@ const LINES = [
 export default function LandingOverlay({
   logo,
   images,
+  lines,
 }: {
   logo?: string | null;
   images: { id: string; label: string; url: string }[];
+  // Variant override (hub "Builder variants" → landing lines); null = the
+  // standard pitch.
+  lines?: string[] | null;
 }) {
   const [open, setOpen] = useState(true);
+  const pitchLines = lines && lines.length ? lines : LINES;
 
   useEffect(() => {
     try {
@@ -90,10 +95,10 @@ export default function LandingOverlay({
             priority
           />
         )}
-        {LINES.map((line, i) => (
+        {pitchLines.map((line, i) => (
           <div className="landing-sec" key={line}>
             <p className="landing-line">{line}</p>
-            {i < LINES.length - 1 && images[i] && (
+            {i < pitchLines.length - 1 && images[i] && (
               <Image
                 className="landing-photo"
                 src={images[i].url}

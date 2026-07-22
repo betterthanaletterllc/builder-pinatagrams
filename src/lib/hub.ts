@@ -166,6 +166,9 @@ export type HubCatalog = {
   // Builder pricing knobs (graphic tiers + USPS rate); parse with
   // resolveBuilderPricing — absent on older hub deploys.
   pricing?: unknown;
+  // The variant profile resolved for the ?host=/?variant= the fetch carried;
+  // parse with resolveVariantProfile (lib/variant) — absent on older hubs.
+  variant?: unknown;
   // Delivery calendars (admin /delivery); parse with resolveDeliveryConfig —
   // absent or partial blocks fall back to the compiled defaults.
   delivery?: unknown;
@@ -196,9 +199,26 @@ export type HubPrice = {
   asOf: string;
 };
 
+/** Build the catalog URL, optionally scoped to a variant resolution: `host`
+ *  (production — the hostname the customer visited / checkout's own Host) or
+ *  `previewVariant` (non-production ?variant= override, resolved by name). */
+export function catalogUrl(opts?: {
+  host?: string | null;
+  previewVariant?: string | null;
+}): string {
+  const q = new URLSearchParams();
+  if (opts?.previewVariant) q.set("variant", opts.previewVariant);
+  else if (opts?.host) q.set("host", opts.host);
+  const qs = q.toString();
+  return `${HUB_URL}/api/public/catalog${qs ? `?${qs}` : ""}`;
+}
+
 /** Server-side catalog fetch; short cache so admin edits land in ~2 minutes. */
-export async function getCatalog(): Promise<HubCatalog> {
-  const res = await fetch(`${HUB_URL}/api/public/catalog`, {
+export async function getCatalog(opts?: {
+  host?: string | null;
+  previewVariant?: string | null;
+}): Promise<HubCatalog> {
+  const res = await fetch(catalogUrl(opts), {
     next: { revalidate: 60 },
   });
   if (!res.ok) throw new Error(`hub catalog: HTTP ${res.status}`);
