@@ -104,6 +104,45 @@ export function discountAmountCents(
   return Math.min(off, merchandiseCents) + (d.freeShipping ? shippingCents : 0);
 }
 
+/**
+ * Builder pricing knobs (hub /pricing → served on the catalog): version-B
+ * graphic tiers — the Classic Piñatagrams default sells at the base retail
+ * price, a library pick and a custom design each add a flat upcharge — plus
+ * the USPS First Class ship rate (FedEx comes from /api/public/price).
+ */
+export type BuilderPricing = {
+  graphicLibraryUpchargeCents: number;
+  graphicCustomUpchargeCents: number;
+  uspsShipPerUnitCents: number;
+};
+
+const DEFAULT_BUILDER_PRICING: BuilderPricing = {
+  graphicLibraryUpchargeCents: 200,
+  graphicCustomUpchargeCents: 500,
+  uspsShipPerUnitCents: 650,
+};
+
+/** Merge the hub's (possibly partial/absent) pricing block over defaults. */
+export function resolveBuilderPricing(raw: unknown): BuilderPricing {
+  const r = (raw ?? {}) as Partial<Record<keyof BuilderPricing, unknown>>;
+  const cents = (v: unknown, fb: number) =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : fb;
+  return {
+    graphicLibraryUpchargeCents: cents(
+      r.graphicLibraryUpchargeCents,
+      DEFAULT_BUILDER_PRICING.graphicLibraryUpchargeCents,
+    ),
+    graphicCustomUpchargeCents: cents(
+      r.graphicCustomUpchargeCents,
+      DEFAULT_BUILDER_PRICING.graphicCustomUpchargeCents,
+    ),
+    uspsShipPerUnitCents: cents(
+      r.uspsShipPerUnitCents,
+      DEFAULT_BUILDER_PRICING.uspsShipPerUnitCents,
+    ),
+  };
+}
+
 export type HubCatalog = {
   bodyStyles: HubBodyStyle[];
   // Global box-interior config (gift-message step); absent on older deploys.
@@ -124,6 +163,9 @@ export type HubCatalog = {
     logo?: string | null;
     images?: { id: string; label: string; url: string }[];
   };
+  // Builder pricing knobs (graphic tiers + USPS rate); parse with
+  // resolveBuilderPricing — absent on older hub deploys.
+  pricing?: unknown;
   // Delivery calendars (admin /delivery); parse with resolveDeliveryConfig —
   // absent or partial blocks fall back to the compiled defaults.
   delivery?: unknown;

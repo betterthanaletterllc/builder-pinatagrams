@@ -7,10 +7,10 @@ import { track } from "@/lib/analytics";
 
 /**
  * Step 1 of the flow: pick a body style. One tap goes straight into the
- * design flow — no intermediate panel. Each card shows the hub's DELIVERED
- * B2C price (same for every body; add-ons ride on top) so the number never
- * grows between landing and invoice; the running total lives in the build
- * dock once a style is picked.
+ * design flow — no intermediate panel. Each card shows the "from" DELIVERED
+ * price: the Classic graphic included, cheapest carrier (USPS). Graphic
+ * upcharges, extras and FedEx build on top in the flow's running dock
+ * (version-B tiers, 2026-07-22 — the flat one-price display retired).
  */
 
 export default function BuilderPreview({
@@ -23,7 +23,7 @@ export default function BuilderPreview({
   const price =
     priceCents != null ? (
       <div className="style-price">
-        {formatCents(priceCents)}{" "}
+        from {formatCents(priceCents)}{" "}
         <span className="style-price-note">delivered</span>
       </div>
     ) : null;

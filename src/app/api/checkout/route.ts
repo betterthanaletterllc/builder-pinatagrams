@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import {
   HUB_URL,
+  resolveBuilderPricing,
   type HubAddon,
   type HubCatalog,
   type HubPrice,
 } from "@/lib/hub";
 import {
   addressKey,
+  CLASSIC_GRAPHIC,
   fillingAllowsAddon,
   formatAddress,
   resolveFillings,
@@ -15,7 +17,10 @@ import {
 } from "@/lib/flow";
 import {
   deliveryProblemAtCheckout,
+  formatWindow,
   resolveDeliveryConfig,
+  uspsWindow,
+  type Carrier,
 } from "@/lib/delivery";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -224,6 +229,24 @@ export async function POST(req: Request) {
   const catalog: HubCatalog = await catalogRes.json();
   const styleById = new Map(catalog.bodyStyles.map((s) => [s.id, s]));
   const deliveryCfg = resolveDeliveryConfig(catalog.delivery);
+  // Graphic-tier upcharges + USPS rate — hub-controlled, re-read at order
+  // time exactly like fillings/add-ons. The client's display math ran the
+  // same resolver; the numbers here are authoritative.
+  const pricing = resolveBuilderPricing(catalog.pricing);
+
+  // ONE carrier per order (one draft = one shipping line; Paper branches its
+  // fulfill-date math on that line's title). The client re-stamps every cart
+  // line on add-to-cart, so a mix here means a tampered or half-migrated
+  // cart — refuse loudly rather than guess which speed the customer paid for.
+  const carriers = new Set<Carrier>(
+    rawLines.map((l: CartLine) => (l?.carrier === "usps" ? "usps" : "fedex")),
+  );
+  if (carriers.size > 1) {
+    return bad(
+      "One delivery speed per order — open your cart, re-save a piñata to apply one carrier to everything, and try again.",
+    );
+  }
+  const orderCarrier: Carrier = carriers.has("usps") ? "usps" : "fedex";
   // Add-ons re-resolve from the live catalog: the client sends ids only,
   // labels + prices come from the hub at order time.
   const addonById = new Map((catalog.addons ?? []).map((a) => [a.id, a]));
@@ -243,8 +266,12 @@ export async function POST(req: Request) {
     designJson: string;
     filling: string;
     fillingCents: number;
+    // Version-B graphic tier upcharge (0 = the Classic branded default).
+    tierCents: number;
     addons: HubAddon[];
     deliveryDate: string;
+    // USPS only: the promised arrival window ("start..end" + display label).
+    window: { start: string; end: string } | null;
     message: string;
     address: DeliveryAddress;
   };
@@ -277,6 +304,7 @@ export async function POST(req: Request) {
     const dateIssue = deliveryProblemAtCheckout(
       String(l.deliveryDate ?? ""),
       deliveryCfg,
+      orderCarrier,
     );
     if (dateIssue) return bad(`${label}: ${dateIssue}`);
     const message = str(l.message, 300);
@@ -288,6 +316,7 @@ export async function POST(req: Request) {
     let frontGraphicSha256 = "";
     let designJson = "";
     let title: string;
+    let tierCents: number;
     if (l.graphic?.type === "shopify") {
       design = str(l.graphic.design, 24).toUpperCase();
       if (!DESIGN_RE.test(design)) return bad(`${label}: unrecognized graphic.`);
@@ -295,6 +324,14 @@ export async function POST(req: Request) {
       if (!ART_RE.test(art)) return bad(`${label}: unrecognized graphic art.`);
       frontGraphic = art;
       title = `${str(l.graphic.title, 120) || design} — ${style.name}`;
+      // Tier by design code: the Classic branded default rides free, any
+      // other library pick carries the upcharge. (A tampered cart claiming
+      // the Classic code with someone else's art dodges at most the ~$2
+      // library tier — same exposure class as spoofing the line title.)
+      tierCents =
+        design === CLASSIC_GRAPHIC.design
+          ? 0
+          : pricing.graphicLibraryUpchargeCents;
     } else if (l.graphic?.type === "custom") {
       design = "custom";
       // The flattened print file the editor uploaded to Blob; Paper prints
@@ -320,6 +357,7 @@ export async function POST(req: Request) {
       const sidecar = str(l.graphic.designUrl, 500);
       designJson = BLOB_RE.test(sidecar) ? sidecar : "";
       title = `Custom Piñatagram — ${style.name}`;
+      tierCents = pricing.graphicCustomUpchargeCents;
     } else {
       return bad(`${label}: pick or design a graphic.`);
     }
@@ -335,8 +373,13 @@ export async function POST(req: Request) {
       designJson,
       filling: fillingRec.label,
       fillingCents: fillingRec.priceCents,
+      tierCents,
       addons: addons as HubAddon[],
       deliveryDate: l.deliveryDate,
+      window:
+        orderCarrier === "usps"
+          ? uspsWindow(l.deliveryDate, deliveryCfg)
+          : null,
       message,
       address,
     });
@@ -362,12 +405,18 @@ export async function POST(req: Request) {
     );
   }
   // ONE order shape, exactly like legacy storefront orders: piñata lines at
-  // retail (+ the filling's price delta — a filling is what the piñata IS,
-  // so it prices into the line), each add-on as its own aggregated product
-  // line (money + sales reporting), while WHICH piñata gets it stays on
-  // that piñata line's _addons attribute (the packer's mapping).
+  // retail (+ the graphic tier's upcharge + the filling's price delta — both
+  // are what the piñata IS, so they price into the line), each add-on as its
+  // own aggregated product line (money + sales reporting), while WHICH piñata
+  // gets it stays on that piñata line's _addons attribute (the packer's map).
   const lineUnit = (l: CleanLine) =>
-    ((price.unitPriceCents + l.fillingCents) / 100).toFixed(2);
+    ((price.unitPriceCents + l.tierCents + l.fillingCents) / 100).toFixed(2);
+  // Shipping rate by the order's carrier: FedEx comes from the price API
+  // (builder.shipPerUnitCents), USPS from the catalog's pricing block.
+  const shipRateCents =
+    orderCarrier === "usps"
+      ? pricing.uspsShipPerUnitCents
+      : price.shipPerUnitCents;
   const addonTotals = (groupLines: CleanLine[]) => {
     const units = new Map<string, { addon: HubAddon; qty: number }>();
     for (const l of groupLines)
@@ -456,9 +505,12 @@ export async function POST(req: Request) {
     ...(l.addons.length
       ? [{ key: "Add-ons", value: l.addons.map((a) => a.label).join(", ") }]
       : []),
-    // No visible "Arrives on" row — the shipping line carries delivery now,
-    // so the invoice doesn't repeat a per-item date box. Paper still gets
-    // the exact date from the hidden _requestedDate below.
+    // FedEx: no visible "Arrives" row — the shipping line carries delivery
+    // (exact dates ride the hidden _requestedDate). USPS: the promised
+    // WINDOW is this line's actual terms, so it shows on the invoice.
+    ...(l.window
+      ? [{ key: "Arrives", value: formatWindow(l.window) }]
+      : []),
     // Underscored = hidden machine rails Paper reads at fulfillment.
     { key: "_bodyStyle", value: l.styleId },
     { key: "_design", value: l.design },
@@ -477,6 +529,13 @@ export async function POST(req: Request) {
       ? [{ key: "_addons", value: l.addons.map((a) => a.label).join(", ") }]
       : []),
     { key: "_requestedDate", value: l.deliveryDate },
+    // Carrier rails for Paper's coming USPS release: the order's carrier on
+    // every line, plus the promised window (target date stays on
+    // _requestedDate — Paper's scheduling anchor is unchanged).
+    { key: "_carrier", value: orderCarrier },
+    ...(l.window
+      ? [{ key: "_requestedWindow", value: `${l.window.start}..${l.window.end}` }]
+      : []),
     ...(l.message ? [{ key: "message", value: l.message }] : []),
   ];
 
@@ -500,7 +559,8 @@ export async function POST(req: Request) {
     // minimum — the same gate the cart preview shows.
     const merchandiseCents =
       groupLines.reduce(
-        (s, l) => s + (price.unitPriceCents + l.fillingCents) * l.qty,
+        (s, l) =>
+          s + (price.unitPriceCents + l.tierCents + l.fillingCents) * l.qty,
         0,
       ) +
       addonTotals(groupLines).reduce(
@@ -539,14 +599,23 @@ export async function POST(req: Request) {
           // fulfill-date logic branches on it (startsWith "guaranteed" →
           // ship 2 business days before the requested date, the FedEx
           // 2-Day math; anything else → the 5-day standard-shipping lead).
-          // Builder shipping IS the guaranteed-date service — without this
-          // prefix every builder order gets fulfilled ~3 days early.
-          title: freeShip
-            ? "Guaranteed delivery on your selected dates — free shipping"
-            : "Guaranteed delivery on your selected dates",
+          // FedEx IS the guaranteed-date service, so its title keeps the
+          // prefix. USPS deliberately does NOT start with it — Paper's
+          // standard lead (~5 days before the requested date) is exactly
+          // First Class's schedule, so USPS orders route correctly today
+          // with zero Paper changes. Verify both branches in the Paper
+          // release before advertising USPS.
+          title:
+            orderCarrier === "usps"
+              ? freeShip
+                ? "USPS First Class — arrives around your selected dates — free shipping"
+                : "USPS First Class — arrives around your selected dates"
+              : freeShip
+                ? "Guaranteed delivery on your selected dates — free shipping"
+                : "Guaranteed delivery on your selected dates",
           price: freeShip
             ? "0.00"
-            : ((price.shipPerUnitCents * units) / 100).toFixed(2),
+            : ((shipRateCents * units) / 100).toFixed(2),
         },
         lineItems: [
           ...groupLines.map((l) => customLine(l)),

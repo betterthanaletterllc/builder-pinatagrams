@@ -7,6 +7,7 @@ import {
   maxDeliveryDate,
   minDeliveryDate,
   toYmd,
+  type Carrier,
   type DeliveryConfig,
 } from "@/lib/delivery";
 
@@ -27,17 +28,19 @@ export default function DateCalendar({
   value,
   onChange,
   cfg,
+  carrier = "fedex",
 }: {
   value: string; // "" = nothing chosen yet
   onChange: (ymd: string) => void;
   cfg: DeliveryConfig;
+  carrier?: Carrier;
 }) {
   const [view, setView] = useState(() => {
-    const d = value ? fromYmd(value) : fromYmd(minDeliveryDate(cfg));
+    const d = value ? fromYmd(value) : fromYmd(minDeliveryDate(cfg, carrier));
     return { y: d.getFullYear(), m: d.getMonth() };
   });
 
-  const min = fromYmd(minDeliveryDate(cfg));
+  const min = fromYmd(minDeliveryDate(cfg, carrier));
   const max = fromYmd(maxDeliveryDate(cfg));
   const atMin =
     view.y === min.getFullYear() && view.m === min.getMonth();
@@ -100,11 +103,11 @@ export default function DateCalendar({
               className={
                 "cal-day" +
                 (ymd === value ? " selected" : "") +
-                (deliveryProblem(ymd, cfg) ? " off" : "")
+                (deliveryProblem(ymd, cfg, carrier) ? " off" : "")
               }
-              disabled={!!deliveryProblem(ymd, cfg)}
+              disabled={!!deliveryProblem(ymd, cfg, carrier)}
               aria-label={`${MONTHS[view.m]} ${Number(ymd.slice(8))}, ${view.y}${
-                deliveryProblem(ymd, cfg) ? " — unavailable" : ""
+                deliveryProblem(ymd, cfg, carrier) ? " — unavailable" : ""
               }`}
               aria-pressed={ymd === value}
               onClick={() => onChange(ymd)}

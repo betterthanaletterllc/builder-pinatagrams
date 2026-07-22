@@ -1,4 +1,10 @@
-import { getCatalog, HUB_URL, priceUrl, type HubPrice } from "@/lib/hub";
+import {
+  getCatalog,
+  HUB_URL,
+  priceUrl,
+  resolveBuilderPricing,
+  type HubPrice,
+} from "@/lib/hub";
 import BuilderPreview from "./builder-preview";
 import LandingOverlay from "./landing-overlay";
 
@@ -6,10 +12,10 @@ import LandingOverlay from "./landing-overlay";
 // build must succeed even when the hub is unreachable (see catch below).
 export const dynamic = "force-dynamic";
 
-// The DELIVERED price (unit + shipping) shown in the hero and on every style
-// card — one honest number that never grows between landing and invoice.
-// Null on any hiccup — the hero/cards just omit it.
-async function b2cDeliveredCents(): Promise<number | null> {
+// The base retail price + ship rate, for the "from" price on every style
+// card: Classic graphic included, cheapest carrier (USPS). Tiers/add-ons/
+// FedEx ride on top in the flow. Null on any hiccup — the cards just omit it.
+async function b2cPrice(): Promise<HubPrice | null> {
   try {
     const res = await fetch(
       priceUrl({
@@ -24,9 +30,7 @@ async function b2cDeliveredCents(): Promise<number | null> {
     );
     if (!res.ok) return null;
     const p: HubPrice = await res.json();
-    return Number.isFinite(p.unitDeliveredCents) && p.unitDeliveredCents > 0
-      ? p.unitDeliveredCents
-      : null;
+    return Number.isFinite(p.unitPriceCents) && p.unitPriceCents > 0 ? p : null;
   } catch {
     return null;
   }
@@ -34,10 +38,13 @@ async function b2cDeliveredCents(): Promise<number | null> {
 
 export default async function Home() {
   try {
-    const [catalog, priceCents] = await Promise.all([
-      getCatalog(),
-      b2cDeliveredCents(),
-    ]);
+    const [catalog, price] = await Promise.all([getCatalog(), b2cPrice()]);
+    // "from" = Classic graphic (included) + the cheaper carrier's shipping.
+    const pricing = resolveBuilderPricing(catalog.pricing);
+    const priceCents = price
+      ? price.unitPriceCents +
+        Math.min(price.shipPerUnitCents, pricing.uspsShipPerUnitCents)
+      : null;
     // Landing overlay photos: the hub-managed shots (admin /pricing →
     // "Landing page", first three active), in order — one per pitch line.
     const landingImgs = (catalog.landing?.images ?? [])

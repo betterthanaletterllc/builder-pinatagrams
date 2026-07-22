@@ -8,7 +8,9 @@ import {
   formatCents,
   HUB_URL,
   priceUrl,
+  resolveBuilderPricing,
   resolveDiscount,
+  type BuilderPricing,
   type HubAddon,
   type HubDiscount,
   type HubFilling,
@@ -17,8 +19,10 @@ import {
 import {
   addressComplete,
   addressKey,
+  cartCarrier,
   clearPendingOrder,
   EMPTY_ADDRESS,
+  graphicTierCents,
   loadCart,
   loadPendingOrder,
   rememberAddress,
@@ -31,7 +35,13 @@ import {
   type PendingOrder,
 } from "@/lib/flow";
 import { cdnThumb } from "@/lib/library-data";
-import { formatYmd } from "@/lib/delivery";
+import {
+  formatWindow,
+  formatYmd,
+  resolveDeliveryConfig,
+  uspsWindow,
+  type DeliveryConfig,
+} from "@/lib/delivery";
 import { track, trackBeginCheckout } from "@/lib/analytics";
 
 const MAX_QTY = 25;
@@ -144,6 +154,14 @@ export default function CartView() {
   const [addonCatalog, setAddonCatalog] = useState<HubAddon[]>([]);
   const [fillingCatalog, setFillingCatalog] = useState<HubFilling[]>(
     resolveFillings(undefined),
+  );
+  // Graphic-tier upcharges + USPS rate, and the delivery calendars (USPS
+  // window strings) — both from the catalog; compiled defaults until it lands.
+  const [pricing, setPricing] = useState<BuilderPricing>(
+    resolveBuilderPricing(undefined),
+  );
+  const [deliveryCfg, setDeliveryCfg] = useState<DeliveryConfig>(
+    resolveDeliveryConfig(undefined),
   );
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckoutResult | null>(null);
@@ -265,6 +283,8 @@ export default function CartView() {
       .then((c) => {
         setAddonCatalog(c?.addons ?? []);
         setFillingCatalog(resolveFillings(c?.fillings));
+        setPricing(resolveBuilderPricing(c?.pricing));
+        setDeliveryCfg(resolveDeliveryConfig(c?.delivery));
       })
       .catch(() => {});
   }, []);
@@ -402,17 +422,31 @@ export default function CartView() {
 
   const totalUnits = lines.reduce((s, l) => s + l.qty, 0);
   const unitCents = unitPrice?.unitPriceCents ?? null;
-  const shipCents = unitPrice?.shipPerUnitCents ?? null;
+  // One carrier for the whole order (single-carrier invariant, like the one
+  // address); pre-USPS carts read as FedEx.
+  const carrier = cartCarrier(lines);
+  const shipCents =
+    carrier === "usps"
+      ? pricing.uspsShipPerUnitCents
+      : (unitPrice?.shipPerUnitCents ?? null);
+  // Version-B graphic tiers: Classic default = base price; library/custom
+  // lines carry their upcharge (folded into the piñatas row below).
+  const tierTotalCents = lines.reduce(
+    (s, l) => s + graphicTierCents(l.graphic, pricing) * l.qty,
+    0,
+  );
   const extrasTotalCents = lines.reduce(
     (s, l) => s + (lineAddonCents(l) + lineFillingCents(l)) * l.qty,
     0,
   );
-  // Merchandise (piñatas + fillings + add-ons) and shipping, for the PREVIEW
-  // estimate only — the real discount is the native Shopify code applied to
-  // the draft, so the Shopify invoice is the true total. An order code takes
-  // %/$ off merchandise; a shipping code zeroes shipping.
+  // Merchandise (piñatas + tiers + fillings + add-ons) and shipping, for the
+  // PREVIEW estimate only — the real discount is the native Shopify code
+  // applied to the draft, so the Shopify invoice is the true total. An order
+  // code takes %/$ off merchandise; a shipping code zeroes shipping.
   const merchandiseCents =
-    unitCents !== null ? unitCents * totalUnits + extrasTotalCents : null;
+    unitCents !== null
+      ? unitCents * totalUnits + tierTotalCents + extrasTotalCents
+      : null;
   const shipTotalCents = shipCents !== null ? shipCents * totalUnits : null;
   // One row per applied code. Amount/eligibility need loaded prices; until
   // they arrive (or if the price fetch failed) we still LIST the code — so it
@@ -593,7 +627,11 @@ export default function CartView() {
                 )}
                 <div>
                   <dt>Arrives</dt>
-                  <dd>{formatYmd(l.deliveryDate)}</dd>
+                  <dd>
+                    {carrier === "usps"
+                      ? `${formatWindow(uspsWindow(l.deliveryDate, deliveryCfg))} (USPS window)`
+                      : formatYmd(l.deliveryDate)}
+                  </dd>
                 </div>
                 {l.message && (
                   <div>
@@ -624,6 +662,7 @@ export default function CartView() {
                       filling: l.filling,
                       addons: l.addons ?? [],
                       date: l.deliveryDate,
+                      carrier: l.carrier,
                       address: l.address,
                       editLineId: l.id,
                     });
@@ -682,6 +721,7 @@ export default function CartView() {
               <div className="cart-line-price">
                 {formatCents(
                   (unitCents +
+                    graphicTierCents(l.graphic, pricing) +
                     lineAddonCents(l) +
                     lineFillingCents(l) +
                     (shipCents ?? 0)) *
@@ -817,7 +857,7 @@ export default function CartView() {
                 <span>
                   {totalUnits} piñata{totalUnits === 1 ? "" : "s"}
                 </span>
-                <span>{formatCents(unitCents * totalUnits)}</span>
+                <span>{formatCents(unitCents * totalUnits + tierTotalCents)}</span>
               </div>
               {extrasTotalCents > 0 && (
                 <div className="row">
@@ -841,7 +881,10 @@ export default function CartView() {
                 ) : null,
               )}
               <div className="row">
-                <span>Shipping</span>
+                <span>
+                  Shipping —{" "}
+                  {carrier === "usps" ? "USPS First Class" : "FedEx 2-Day"}
+                </span>
                 <span>{formatCents(shipCents * totalUnits)}</span>
               </div>
               <div className="row total">

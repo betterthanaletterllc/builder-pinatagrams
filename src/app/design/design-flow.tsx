@@ -6,10 +6,14 @@ import {
   addressComplete,
   addressKey,
   CART_EVENT,
+  cartCarrier,
+  CLASSIC_GRAPHIC,
   clearDraft,
   EMPTY_ADDRESS,
   fillingAllowsAddon,
   formatAddress,
+  graphicTier,
+  graphicTierCents,
   loadAddresses,
   loadCart,
   loadDraft,
@@ -29,6 +33,7 @@ import {
   formatCents,
   HUB_URL,
   priceUrl,
+  type BuilderPricing,
   type HubAddon,
   type HubBodyStyle,
   type HubFilling,
@@ -37,8 +42,11 @@ import {
 } from "@/lib/hub";
 import {
   deliveryProblem,
+  formatWindow,
   formatYmd,
   minDeliveryDate,
+  uspsWindow,
+  type Carrier,
   type DeliveryConfig,
 } from "@/lib/delivery";
 import { cdnThumb, clearLibraryState } from "@/lib/library-data";
@@ -102,6 +110,7 @@ export default function DesignFlow({
   addonOptions,
   fillingOptions,
   deliveryCfg,
+  pricing,
 }: {
   style: StyleInfo;
   boxInterior: {
@@ -112,6 +121,7 @@ export default function DesignFlow({
   addonOptions: HubAddon[];
   fillingOptions: HubFilling[];
   deliveryCfg: DeliveryConfig;
+  pricing: BuilderPricing;
 }) {
   // The style can be swapped in place (keeps the design/message/etc.).
   const [styleInfo, setStyleInfo] = useState<StyleInfo>(style);
@@ -127,6 +137,10 @@ export default function DesignFlow({
   // Set when switching fillings dropped add-ons the new one doesn't allow.
   const [addonNotice, setAddonNotice] = useState<string | null>(null);
   const [date, setDate] = useState("");
+  // One carrier per ORDER (one draft = one shipping line): inherited from
+  // the cart when it has lines, switchable on the Delivery step — switching
+  // re-stamps every cart line at add-to-cart.
+  const [carrier, setCarrier] = useState<Carrier>("fedex");
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   // The ONE ship-to address for the whole cart (all piñatas go to it). Set
   // by the first piñata; every piñata after inherits it, so the address
@@ -146,8 +160,8 @@ export default function DesignFlow({
   const [hydrated, setHydrated] = useState(false);
 
   const dateProblem = useMemo(
-    () => deliveryProblem(date, deliveryCfg),
-    [date, deliveryCfg],
+    () => deliveryProblem(date, deliveryCfg, carrier),
+    [date, deliveryCfg, carrier],
   );
 
   // Keep the cart's established address fresh (mount + any cart write, this
@@ -193,11 +207,11 @@ export default function DesignFlow({
     (g: GraphicChoice | null, f: Filling | null, d: string): number => {
       if (!g) return 0; // Graphic
       if (!f) return 2; // through Filling
-      if (deliveryProblem(d, deliveryCfg)) return 4; // through Delivery
+      if (deliveryProblem(d, deliveryCfg, carrier)) return 4; // through Delivery
       // Address already known → Delivery is the last step; else Send-to.
       return hasCartAddress ? 4 : 5;
     },
-    [deliveryCfg, hasCartAddress],
+    [deliveryCfg, hasCartAddress, carrier],
   );
 
   /* --- history-backed navigation ------------------------------------------ */
@@ -264,6 +278,9 @@ export default function DesignFlow({
       setAddress(d.address);
       setEditLineId(d.editLineId ?? null);
     }
+    // Carrier: the draft's own choice wins, else inherit the cart's (one
+    // carrier per order), else the FedEx default.
+    setCarrier(d?.carrier ?? cartCarrier(loadCart()));
     const applyUrl = () => {
       const p = new URLSearchParams(window.location.search);
       const target = SLUG_TO_STEP[p.get("step") ?? "graphic"] ?? "Graphic";
@@ -371,10 +388,11 @@ export default function DesignFlow({
       filling,
       addons,
       date,
+      carrier,
       address,
       editLineId,
     });
-  }, [hydrated, styleInfo.id, graphic, message, filling, addons, date, address, editLineId]);
+  }, [hydrated, styleInfo.id, graphic, message, filling, addons, date, carrier, address, editLineId]);
 
   const stepIndex = STEPS.indexOf(step);
   const reachable = maxStep(graphic, filling, date);
@@ -445,12 +463,22 @@ export default function DesignFlow({
       (s !== "Add-ons" || addonsApplicable),
   );
   const fillingCents = fillingRec?.priceCents ?? 0;
-  const deliveredCents = unitPrice
-    ? unitPrice.unitPriceCents +
-      fillingCents +
-      addonCents +
-      unitPrice.shipPerUnitCents
-    : null;
+  // Version-B tiers: the Classic default rides at the base price; a library
+  // pick or custom design adds its upcharge. Shipping prices by the chosen
+  // carrier. (Checkout re-derives all of this server-side.)
+  const tierCents = graphicTierCents(graphic, pricing);
+  const shipCents =
+    carrier === "usps"
+      ? pricing.uspsShipPerUnitCents
+      : (unitPrice?.shipPerUnitCents ?? null);
+  const deliveredCents =
+    unitPrice && shipCents !== null
+      ? unitPrice.unitPriceCents +
+        tierCents +
+        fillingCents +
+        addonCents +
+        shipCents
+      : null;
 
   // Picking a filling drops add-ons it doesn't allow — visibly, never
   // silently (the checkout enforces the same rule server-side).
@@ -491,7 +519,11 @@ export default function DesignFlow({
             ? ` + ${selectedAddonLabels.join(" + ")}`
             : "")
         : null,
-      !dateProblem && date && stepIndex >= 3 ? formatYmd(date) : null,
+      !dateProblem && date && stepIndex >= 3
+        ? carrier === "usps"
+          ? formatWindow(uspsWindow(date, deliveryCfg))
+          : formatYmd(date)
+        : null,
     ]
       .filter(Boolean)
       .join(" · ") || "building…";
@@ -572,12 +604,17 @@ export default function DesignFlow({
           fillingAllowsAddon(fillingRec, id),
       ),
       deliveryDate: date,
+      carrier,
       address: shipTo,
       qty: existing ? existing.qty : 1,
     };
-    const next = existing
-      ? lines.map((l) => (l.id === existing.id ? line : l))
-      : [...lines, line];
+    // ONE carrier per order (one draft = one shipping line): the choice just
+    // made re-stamps every line, exactly like the single-address collapse.
+    const next = (
+      existing
+        ? lines.map((l) => (l.id === existing.id ? line : l))
+        : [...lines, line]
+    ).map((l) => ({ ...l, carrier }));
     if (!saveCart(next)) {
       setCartError(true);
       return;
@@ -655,17 +692,43 @@ export default function DesignFlow({
   })();
 
 
+  const pickCarrier = (c: Carrier) => {
+    setCarrier(c);
+    track("carrier_selected", { carrier: c });
+  };
+
+  // The Classic branded default: a one-tap pick (no library, no canvas) —
+  // the confirm screen shows it on the box like any other selection.
+  const pickClassic = () => {
+    setGraphic(CLASSIC_GRAPHIC);
+    setEditingDraft(null);
+    track("graphic_picked", { design: CLASSIC_GRAPHIC.design, tier: "classic" });
+  };
+
   const steps = (
     <div>
       {/* Step Two — the box IS the screen; buttons morph with state */}
       {step === "Graphic" && !choosing && (
         <div className="step-panel">
           {!graphic ? (
+            // Version-B tiers: the Classic branded box is included at the
+            // base price; a library pick and a custom design each show
+            // their flat upcharge (hub-controlled, /pricing).
             <div className="choice-cards">
+              <button className="choice-card" onClick={pickClassic}>
+                <span className="choice-title">Classic Piñatagrams</span>
+                <span className="choice-sub">
+                  Our signature confetti box — ready to go
+                </span>
+                <span className="choice-price included">Included</span>
+              </button>
               <button className="choice-card" onClick={() => goView("library")}>
                 <span className="choice-title">Pick a graphic</span>
                 <span className="choice-sub">
                   Browse hundreds of ready-made designs
+                </span>
+                <span className="choice-price plus">
+                  +{formatCents(pricing.graphicLibraryUpchargeCents)}
                 </span>
               </button>
               <button
@@ -679,12 +742,17 @@ export default function DesignFlow({
                 <span className="choice-sub">
                   Add your photos &amp; text on a blank canvas
                 </span>
+                <span className="choice-price plus">
+                  +{formatCents(pricing.graphicCustomUpchargeCents)}
+                </span>
               </button>
             </div>
           ) : (
             // The confirm screen IS the choice screen, with the current
             // pick previewed on the box above: same big cards as the first
             // visit. "Looks good →" lives in the fixed CTA bar below.
+            // Every state offers the ways OUT of the current tier, price
+            // tags included, so switching always shows what it costs.
             <div className="choice-cards">
               {graphic.type === "custom" ? (
                 <>
@@ -696,6 +764,9 @@ export default function DesignFlow({
                     }}
                   >
                     <span className="choice-title">Pick a different graphic</span>
+                    <span className="choice-price plus">
+                      +{formatCents(pricing.graphicLibraryUpchargeCents)}
+                    </span>
                   </button>
                   <button
                     className="choice-card"
@@ -712,6 +783,10 @@ export default function DesignFlow({
                   >
                     <span className="choice-title">Edit this graphic</span>
                   </button>
+                  <button className="choice-card" onClick={pickClassic}>
+                    <span className="choice-title">Use the Classic box</span>
+                    <span className="choice-price included">Included</span>
+                  </button>
                 </>
               ) : (
                 <>
@@ -725,7 +800,16 @@ export default function DesignFlow({
                       goView("library");
                     }}
                   >
-                    <span className="choice-title">Change graphic</span>
+                    <span className="choice-title">
+                      {graphicTier(graphic) === "classic"
+                        ? "Pick a graphic"
+                        : "Change graphic"}
+                    </span>
+                    {graphicTier(graphic) === "classic" && (
+                      <span className="choice-price plus">
+                        +{formatCents(pricing.graphicLibraryUpchargeCents)}
+                      </span>
+                    )}
                   </button>
                   <button
                     className="choice-card"
@@ -735,7 +819,16 @@ export default function DesignFlow({
                     }}
                   >
                     <span className="choice-title">Design your own</span>
+                    <span className="choice-price plus">
+                      +{formatCents(pricing.graphicCustomUpchargeCents)}
+                    </span>
                   </button>
+                  {graphicTier(graphic) === "library" && (
+                    <button className="choice-card" onClick={pickClassic}>
+                      <span className="choice-title">Use the Classic box</span>
+                      <span className="choice-price included">Included</span>
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -959,18 +1052,67 @@ export default function DesignFlow({
 
       {step === "Delivery" && (
         <div className="step-panel delivery-step">
+          {/* One delivery speed per ORDER — the choice re-stamps every
+              piñata in the cart at add-to-cart (one draft, one shipping
+              line). USPS = cheaper, arrives in a window; FedEx = exact day. */}
+          <div className="carrier-cards">
+            <button
+              className={
+                "carrier-card" + (carrier === "fedex" ? " selected" : "")
+              }
+              onClick={() => pickCarrier("fedex")}
+            >
+              <span className="carrier-name">FedEx 2-Day</span>
+              <span className="carrier-desc">Arrives on your exact day</span>
+              <span className="carrier-price">
+                {unitPrice
+                  ? `${formatCents(unitPrice.shipPerUnitCents)} / piñata`
+                  : ""}
+              </span>
+            </button>
+            <button
+              className={
+                "carrier-card" + (carrier === "usps" ? " selected" : "")
+              }
+              onClick={() => pickCarrier("usps")}
+            >
+              <span className="carrier-name">USPS First Class</span>
+              <span className="carrier-desc">
+                Arrives within 2 days of your pick
+              </span>
+              <span className="carrier-price">
+                {formatCents(pricing.uspsShipPerUnitCents)} / piñata
+              </span>
+            </button>
+          </div>
           <p className="note earliest-hint">
-            Soonest arrival{" "}
-            <strong>{formatYmd(minDeliveryDate(deliveryCfg))}</strong> — we need
-            a day to make your piñata plus two FedEx days to fly it there.
+            {carrier === "usps" ? (
+              <>
+                Soonest target day{" "}
+                <strong>
+                  {formatYmd(minDeliveryDate(deliveryCfg, "usps"))}
+                </strong>{" "}
+                — First Class mail takes 3–5 days, so your piñata lands within
+                two mailing days of the day you pick.
+              </>
+            ) : (
+              <>
+                Soonest arrival{" "}
+                <strong>{formatYmd(minDeliveryDate(deliveryCfg))}</strong> — we
+                need a day to make your piñata plus two FedEx days to fly it
+                there.
+              </>
+            )}
           </p>
           <DateCalendar
+            key={carrier}
             value={date}
             onChange={(d) => {
               setDate(d);
-              track("delivery_date_picked", { date: d });
+              track("delivery_date_picked", { date: d, carrier });
             }}
             cfg={deliveryCfg}
+            carrier={carrier}
           />
           {!date ? (
             <p className="note">
@@ -978,6 +1120,12 @@ export default function DesignFlow({
             </p>
           ) : dateProblem ? (
             <div className="notice warn">{dateProblem}</div>
+          ) : carrier === "usps" ? (
+            <div className="notice info">
+              Arrives {formatWindow(uspsWindow(date, deliveryCfg))} — USPS
+              windows run two mailing days either side of{" "}
+              {formatYmd(date)}.
+            </div>
           ) : (
             <div className="notice info">Arrives {formatYmd(date)}.</div>
           )}

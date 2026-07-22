@@ -20,11 +20,27 @@
 export type DeliveryConfig = {
   fulfillmentHolidays: string[]; // "YYYY-MM-DD" — shop closed, nothing ships
   fedexHolidays: string[]; // FedEx doesn't move or deliver
-  uspsHolidays: string[]; // stored for future standard-ship logic
+  uspsHolidays: string[]; // USPS doesn't move or deliver
   fulfillmentWeekdaysOff: number[]; // 0=Sun..6=Sat
   fedexWeekdaysOff: number[];
   maxDaysOut: number;
 };
+
+/**
+ * How the order travels. FedEx 2-Day = the guaranteed exact-day service
+ * (the original builder model). USPS First Class = the lower-cost option:
+ * the customer still picks a target day, but the promise is a WINDOW of
+ * two mailing days either side of it (First Class transit runs 3–5 days).
+ */
+export type Carrier = "fedex" | "usps";
+
+// USPS First Class doesn't deliver on Sundays; holidays come from the hub
+// calendar like FedEx's. A "mailing day" below = a day USPS actually moves.
+const USPS_WEEKDAYS_OFF = [0];
+
+// Transit is quoted 3–5 days; the earliest pickable TARGET sits at the top
+// of that range so the promised ±2-day window brackets the realistic spread.
+const USPS_TRANSIT_DAYS = 5;
 
 // Carrier holidays 2026→2031 (federal set); fulfillment adds 2026-07-03
 // (observed July 4th). Mirrors scripts/seed-delivery.mjs in the hub.
@@ -126,29 +142,54 @@ function nextWorkingDay(
 
 /**
  * Earliest arrival for an order placed on `orderDay`: the next fulfillment
- * working day (make + ship), then the 2nd qualified FedEx delivery day.
+ * working day (make + ship), then the carrier's qualified delivery days —
+ * the 2nd FedEx day (2-Day), or the 5th USPS mailing day (First Class's
+ * slow end, so the promised window brackets the real arrival).
  */
 export function earliestDeliveryDate(
   cfg: DeliveryConfig,
   orderDay: string = shopToday(),
+  carrier: Carrier = "fedex",
 ): string {
   const ship = nextWorkingDay(orderDay, cfg.fulfillmentWeekdaysOff, cfg.fulfillmentHolidays);
   let d = ship;
-  for (let n = 0; n < 2; n++) {
-    d = nextWorkingDay(d, cfg.fedexWeekdaysOff, cfg.fedexHolidays);
+  if (carrier === "usps") {
+    for (let n = 0; n < USPS_TRANSIT_DAYS; n++) {
+      d = nextWorkingDay(d, USPS_WEEKDAYS_OFF, cfg.uspsHolidays);
+    }
+  } else {
+    for (let n = 0; n < 2; n++) {
+      d = nextWorkingDay(d, cfg.fedexWeekdaysOff, cfg.fedexHolidays);
+    }
   }
   return d;
 }
 
-export function minDeliveryDate(cfg: DeliveryConfig): string {
-  return earliestDeliveryDate(cfg);
+export function minDeliveryDate(
+  cfg: DeliveryConfig,
+  carrier: Carrier = "fedex",
+): string {
+  return earliestDeliveryDate(cfg, shopToday(), carrier);
 }
 
 export function maxDeliveryDate(cfg: DeliveryConfig): string {
   return addDays(shopToday(), cfg.maxDaysOut);
 }
 
-function carrierDead(ymd: string, cfg: DeliveryConfig): string | null {
+function carrierDead(
+  ymd: string,
+  cfg: DeliveryConfig,
+  carrier: Carrier,
+): string | null {
+  if (carrier === "usps") {
+    if (USPS_WEEKDAYS_OFF.includes(fromYmd(ymd).getDay())) {
+      return "USPS doesn't deliver on Sundays — pick the day before or after.";
+    }
+    if (cfg.uspsHolidays.includes(ymd)) {
+      return "That's a postal holiday — pick another day.";
+    }
+    return null;
+  }
   if (cfg.fedexWeekdaysOff.includes(fromYmd(ymd).getDay())) {
     return "FedEx doesn't deliver on that day of the week — pick the day before or after.";
   }
@@ -159,13 +200,19 @@ function carrierDead(ymd: string, cfg: DeliveryConfig): string | null {
 }
 
 /** null = fine; otherwise a customer-facing reason the date doesn't work. */
-export function deliveryProblem(ymd: string, cfg: DeliveryConfig): string | null {
+export function deliveryProblem(
+  ymd: string,
+  cfg: DeliveryConfig,
+  carrier: Carrier = "fedex",
+): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "Pick a delivery date.";
-  if (ymd < minDeliveryDate(cfg)) {
-    return `We need a day to make your piñata and two FedEx days to fly it there — ${minDeliveryDate(cfg)} is the soonest.`;
+  if (ymd < minDeliveryDate(cfg, carrier)) {
+    return carrier === "usps"
+      ? `USPS First Class takes 3–5 mailing days — ${minDeliveryDate(cfg, "usps")} is the soonest target for USPS (FedEx 2-Day can get there sooner).`
+      : `We need a day to make your piñata and two FedEx days to fly it there — ${minDeliveryDate(cfg)} is the soonest.`;
   }
   if (ymd > maxDeliveryDate(cfg)) return "That's a bit too far out — pick a closer date.";
-  return carrierDead(ymd, cfg);
+  return carrierDead(ymd, cfg, carrier);
 }
 
 /**
@@ -174,12 +221,58 @@ export function deliveryProblem(ymd: string, cfg: DeliveryConfig): string | null
  * when the cart was built isn't rejected because midnight passed (or a clock
  * skews) in between.
  */
-export function deliveryProblemAtCheckout(ymd: string, cfg: DeliveryConfig): string | null {
+export function deliveryProblemAtCheckout(
+  ymd: string,
+  cfg: DeliveryConfig,
+  carrier: Carrier = "fedex",
+): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "Pick a delivery date.";
-  const graceMin = earliestDeliveryDate(cfg, addDays(shopToday(), -1));
+  const graceMin = earliestDeliveryDate(cfg, addDays(shopToday(), -1), carrier);
   if (ymd < graceMin) {
-    return `That delivery date is too soon now — ${earliestDeliveryDate(cfg)} is the earliest. Pick a new date.`;
+    return `That delivery date is too soon now — ${earliestDeliveryDate(cfg, shopToday(), carrier)} is the earliest. Pick a new date.`;
   }
   if (ymd > maxDeliveryDate(cfg)) return "That's a bit too far out — pick a closer date.";
-  return carrierDead(ymd, cfg);
+  return carrierDead(ymd, cfg, carrier);
+}
+
+/* ---------------------------------------------------------------------------
+ * USPS arrival window — the customer's target date ± two mailing days
+ * (Nathan's model, 2026-07-22). Sundays and postal holidays don't count as
+ * mailing days, so a Monday target reaches back into the prior week.
+ * ------------------------------------------------------------------------- */
+
+function stepMailingDays(
+  from: string,
+  n: number,
+  dir: 1 | -1,
+  cfg: DeliveryConfig,
+): string {
+  let d = from;
+  for (let left = n, guard = 0; left > 0 && guard < 90; guard++) {
+    d = addDays(d, dir);
+    if (
+      !USPS_WEEKDAYS_OFF.includes(fromYmd(d).getDay()) &&
+      !cfg.uspsHolidays.includes(d)
+    ) {
+      left--;
+    }
+  }
+  return d;
+}
+
+export function uspsWindow(
+  ymd: string,
+  cfg: DeliveryConfig,
+): { start: string; end: string } {
+  return {
+    start: stepMailingDays(ymd, 2, -1, cfg),
+    end: stepMailingDays(ymd, 2, 1, cfg),
+  };
+}
+
+/** Compact window label without weekdays, e.g. "Jul 27 – Jul 31". */
+export function formatWindow(w: { start: string; end: string }): string {
+  const short = (ymd: string) =>
+    fromYmd(ymd).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${short(w.start)} – ${short(w.end)}`;
 }

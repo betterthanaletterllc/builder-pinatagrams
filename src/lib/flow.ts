@@ -1,5 +1,6 @@
 import type { DesignDocument } from "./design-document";
-import type { HubFilling, LogoZone } from "./hub";
+import type { BuilderPricing, HubFilling, LogoZone } from "./hub";
+import type { Carrier } from "./delivery";
 
 /**
  * The B2C order flow: body style → graphic (pick or design) → message →
@@ -84,6 +85,48 @@ export type GraphicChoice =
       artSha256?: string | null;
     };
 
+/**
+ * The branded default graphic (version-B tiers, 2026-07-22): the original
+ * Piñatagram™ box art, included at the base price. Assets come straight from
+ * the retail product (handle "pinatagram") — its graphics/front print file,
+ * graphics/message flap card, and featured photo — so Paper prints it exactly
+ * like any library design. The design code "STANDARD" is that product's SKU
+ * and collides with nothing in graphics.json.
+ */
+export const CLASSIC_GRAPHIC: GraphicChoice = {
+  type: "shopify",
+  design: "STANDARD",
+  title: "Classic Piñatagrams",
+  thumb:
+    "https://cdn.shopify.com/s/files/1/1116/8788/files/CLASSIC_STANDARD.png?v=1751310452",
+  art: "https://cdn.shopify.com/s/files/1/1116/8788/files/STANDARD_front.png?v=1728860086",
+  message:
+    "https://cdn.shopify.com/s/files/1/1116/8788/files/STANDARD_message_graphic.svg?v=1695834587",
+};
+
+/** Which price tier a graphic sells at: the Classic default is included in
+ *  the base price; a library pick and a custom design each add a flat
+ *  upcharge (hub /pricing → catalog `pricing`). */
+export type GraphicTier = "classic" | "library" | "custom";
+
+export function graphicTier(g: GraphicChoice | null): GraphicTier | null {
+  if (!g) return null;
+  if (g.type === "custom") return "custom";
+  return g.design === CLASSIC_GRAPHIC.design ? "classic" : "library";
+}
+
+/** The tier's upcharge in cents — the builder's display math AND the
+ *  checkout's server-side pricing both run through this one function. */
+export function graphicTierCents(
+  g: GraphicChoice | null,
+  pricing: BuilderPricing,
+): number {
+  const tier = graphicTier(g);
+  if (tier === "custom") return pricing.graphicCustomUpchargeCents;
+  if (tier === "library") return pricing.graphicLibraryUpchargeCents;
+  return 0;
+}
+
 // Where the order ships. Stored per line for the checkout's grouping, but
 // the whole cart is ONE destination — loadCart() collapses any divergent
 // addresses to a single one (see there). The payer's contact info is
@@ -113,9 +156,20 @@ export type CartLine = {
   // labels + prices from the live catalog at checkout. Absent on old carts.
   addons?: string[];
   deliveryDate: string; // YYYY-MM-DD
+  // How the ORDER ships — one carrier per checkout (one draft = one shipping
+  // line), mirroring the single-address invariant. Stored per line so old
+  // carts parse; addToCart rewrites every line to the latest choice. Absent
+  // (pre-USPS carts) = "fedex".
+  carrier?: Carrier;
   address: DeliveryAddress;
   qty: number;
 };
+
+/** The whole cart's carrier (single-carrier invariant): first line wins,
+ *  pre-USPS carts default to FedEx. */
+export function cartCarrier(lines: CartLine[]): Carrier {
+  return lines[0]?.carrier === "usps" ? "usps" : "fedex";
+}
 
 const CART_KEY = "pinatagrams-builder-cart";
 
@@ -239,6 +293,7 @@ export type FlowDraft = {
   filling: Filling | null;
   addons?: string[];
   date: string;
+  carrier?: Carrier;
   address: DeliveryAddress;
   editLineId?: string | null;
 };

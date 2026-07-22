@@ -1,6 +1,8 @@
 import Link from "next/link";
 import {
   getCatalog,
+  resolveBuilderPricing,
+  type BuilderPricing,
   type HubAddon,
   type HubBodyStyle,
   type HubFilling,
@@ -25,6 +27,7 @@ export default async function DesignPage({
   let addons: HubAddon[] = [];
   let fillings: HubFilling[] = resolveFillings(undefined);
   let deliveryCfg: DeliveryConfig = resolveDeliveryConfig(undefined);
+  let pricing: BuilderPricing = resolveBuilderPricing(undefined);
   let hubDown = false;
   try {
     const catalog = await getCatalog();
@@ -33,6 +36,7 @@ export default async function DesignPage({
     addons = catalog.addons ?? [];
     fillings = resolveFillings(catalog.fillings);
     deliveryCfg = resolveDeliveryConfig(catalog.delivery);
+    pricing = resolveBuilderPricing(catalog.pricing);
   } catch {
     // Hub unreachable — the flow still works; the style is re-validated
     // server-side at order time anyway.
@@ -68,6 +72,7 @@ export default async function DesignPage({
         addonOptions={addons}
         fillingOptions={fillings}
         deliveryCfg={deliveryCfg}
+        pricing={pricing}
       />
     </main>
   );
