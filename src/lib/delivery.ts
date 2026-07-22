@@ -241,6 +241,15 @@ export function deliveryProblemAtCheckout(
  * mailing days, so a Monday target reaches back into the prior week.
  * ------------------------------------------------------------------------- */
 
+/** True when USPS actually delivers on this day (not Sunday, not a postal
+ *  holiday) — the days worth shading inside an arrival window. */
+export function uspsDeliveryDay(ymd: string, cfg: DeliveryConfig): boolean {
+  return (
+    !USPS_WEEKDAYS_OFF.includes(fromYmd(ymd).getDay()) &&
+    !cfg.uspsHolidays.includes(ymd)
+  );
+}
+
 function stepMailingDays(
   from: string,
   n: number,
@@ -250,10 +259,7 @@ function stepMailingDays(
   let d = from;
   for (let left = n, guard = 0; left > 0 && guard < 90; guard++) {
     d = addDays(d, dir);
-    if (
-      !USPS_WEEKDAYS_OFF.includes(fromYmd(d).getDay()) &&
-      !cfg.uspsHolidays.includes(d)
-    ) {
+    if (uspsDeliveryDay(d, cfg)) {
       left--;
     }
   }

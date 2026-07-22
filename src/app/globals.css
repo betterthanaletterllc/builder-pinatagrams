@@ -1486,6 +1486,15 @@ body:has(.bottom-stack) .site-footer {
   cursor: not-allowed;
 }
 
+/* USPS arrival window: the picked day stays full-strength (.selected); the
+   two mailing days either side shade lighter — "it may arrive on these". */
+.cal-day.win {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  opacity: 0.4;
+}
+
 .addr-cards {
   display: grid;
   gap: 8px;

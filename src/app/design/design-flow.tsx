@@ -6,7 +6,6 @@ import {
   addressComplete,
   addressKey,
   CART_EVENT,
-  cartCarrier,
   CLASSIC_GRAPHIC,
   clearDraft,
   EMPTY_ADDRESS,
@@ -278,9 +277,11 @@ export default function DesignFlow({
       setAddress(d.address);
       setEditLineId(d.editLineId ?? null);
     }
-    // Carrier: the draft's own choice wins, else inherit the cart's (one
-    // carrier per order), else the FedEx default.
-    setCarrier(d?.carrier ?? cartCarrier(loadCart()));
+    // Carrier: the draft's own choice survives a refresh; otherwise every
+    // NEW piñata starts on FedEx 2-Day (Nathan's call, 2026-07-22 — no
+    // inheriting the cart's carrier). The one-carrier-per-order invariant
+    // still holds: whatever is selected at add-to-cart re-stamps the cart.
+    setCarrier(d?.carrier ?? "fedex");
     const applyUrl = () => {
       const p = new URLSearchParams(window.location.search);
       const target = SLUG_TO_STEP[p.get("step") ?? "graphic"] ?? "Graphic";
@@ -1065,9 +1066,7 @@ export default function DesignFlow({
               <span className="carrier-name">FedEx 2-Day</span>
               <span className="carrier-desc">Arrives on your exact day</span>
               <span className="carrier-price">
-                {unitPrice
-                  ? `${formatCents(unitPrice.shipPerUnitCents)} / piñata`
-                  : ""}
+                {unitPrice ? formatCents(unitPrice.shipPerUnitCents) : ""}
               </span>
             </button>
             <button
@@ -1081,7 +1080,7 @@ export default function DesignFlow({
                 Arrives within 2 days of your pick
               </span>
               <span className="carrier-price">
-                {formatCents(pricing.uspsShipPerUnitCents)} / piñata
+                {formatCents(pricing.uspsShipPerUnitCents)}
               </span>
             </button>
           </div>

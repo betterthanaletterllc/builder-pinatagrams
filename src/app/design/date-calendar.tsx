@@ -7,6 +7,8 @@ import {
   maxDeliveryDate,
   minDeliveryDate,
   toYmd,
+  uspsDeliveryDay,
+  uspsWindow,
   type Carrier,
   type DeliveryConfig,
 } from "@/lib/delivery";
@@ -62,6 +64,18 @@ export default function DateCalendar({
     ),
   ];
 
+  // USPS: the promised arrival window shades onto the calendar — the picked
+  // day at full strength, the two mailing days either side lighter. Days
+  // USPS can't deliver (Sundays, postal holidays) inside the span stay
+  // unshaded: the piñata can't arrive then.
+  const win = carrier === "usps" && value ? uspsWindow(value, cfg) : null;
+  const inWindow = (ymd: string) =>
+    !!win &&
+    ymd >= win.start &&
+    ymd <= win.end &&
+    ymd !== value &&
+    uspsDeliveryDay(ymd, cfg);
+
   return (
     <div className="cal">
       <div className="cal-head">
@@ -103,6 +117,7 @@ export default function DateCalendar({
               className={
                 "cal-day" +
                 (ymd === value ? " selected" : "") +
+                (inWindow(ymd) ? " win" : "") +
                 (deliveryProblem(ymd, cfg, carrier) ? " off" : "")
               }
               disabled={!!deliveryProblem(ymd, cfg, carrier)}
