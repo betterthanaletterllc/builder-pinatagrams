@@ -348,6 +348,18 @@ export default function DesignFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, graphicMode]);
 
+  // Funnel step-view tracking: fire once each time the customer LANDS on the
+  // Message or Add-ons step — via Continue, a numbered chip, browser
+  // back/forward, or a URL restore. These two steps were the only ones with no
+  // "reached this step" signal (every other step emits its own action event),
+  // so PostHog couldn't measure drop-off into them. Clamping never lands on
+  // Message/Add-ons, so this only fires on genuine navigation.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (step === "Message") track("message_step_viewed");
+    else if (step === "Add-ons") track("addons_step_viewed");
+  }, [hydrated, step]);
+
   // Persist the draft on every meaningful change (only once hydrated —
   // never on the initial commit, which still holds empty state).
   useEffect(() => {
@@ -607,8 +619,16 @@ export default function DesignFlow({
           disabled: !filling,
         };
       case "Add-ons":
-        // Extras are optional — Continue is never gated here.
-        return { label: "Continue →", onClick: () => goStep("Delivery") };
+        // Extras are optional — Continue is never gated here. Mirrors the
+        // Message step's completion event so the funnel has a symmetric
+        // "left this step" signal (with how many extras were chosen).
+        return {
+          label: "Continue →",
+          onClick: () => {
+            track("addons_step_completed", { addon_count: addons.length });
+            goStep("Delivery");
+          },
+        };
       case "Delivery":
         // Address already known → Delivery is the last step, add straight to
         // the cart. First piñata (no address yet) → continue to Send-to.
