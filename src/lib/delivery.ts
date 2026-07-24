@@ -22,15 +22,25 @@ export type DeliveryConfig = {
   fedexHolidays: string[]; // FedEx doesn't move or deliver
   uspsHolidays: string[]; // USPS doesn't move or deliver
   fulfillmentWeekdaysOff: number[]; // 0=Sun..6=Sat
-  fedexWeekdaysOff: number[];
+  fedexWeekdaysOff: number[]; // days FedEx doesn't DELIVER (Sun) — see note below
+  uspsTransitDays: number; // mailing days to the target arrival (First Class ≈ 5)
+  uspsWindowDays: number; // ± mailing days shaded around that target (≈ 2)
   maxDaysOut: number;
 };
+// NOTE: which weekdays count toward FedEx *transit* is deliberately NOT here.
+// Saturday is a valid delivery day but the network doesn't MOVE packages on
+// weekends, so the 2-day clock skips Sat/Sun. That's a fixed network fact, not
+// a per-storefront setting, so it lives as the FEDEX_TRANSIT_WEEKDAYS_OFF
+// constant below (mirrors USPS_WEEKDAYS_OFF). fedexWeekdaysOff above governs
+// only which picked dates are *deliverable* (Saturday stays selectable).
 
 /**
  * How the order travels. FedEx 2-Day = the guaranteed exact-day service
  * (the original builder model). USPS First Class = the lower-cost option:
  * the customer still picks a target day, but the promise is a WINDOW of
- * two mailing days either side of it (First Class transit runs 3–5 days).
+ * cfg.uspsWindowDays mailing days either side of it. Both the target-day
+ * estimate (cfg.uspsTransitDays) and the window width are hub-configurable
+ * because USPS transit drifts — some routes run faster, some slower.
  */
 export type Carrier = "fedex" | "usps";
 
@@ -38,9 +48,13 @@ export type Carrier = "fedex" | "usps";
 // calendar like FedEx's. A "mailing day" below = a day USPS actually moves.
 const USPS_WEEKDAYS_OFF = [0];
 
-// Transit is quoted 3–5 days; the earliest pickable TARGET sits at the top
-// of that range so the promised ±2-day window brackets the realistic spread.
-const USPS_TRANSIT_DAYS = 5;
+// FedEx 2-Day is two *business* days: the network doesn't MOVE packages on
+// weekends, so Sat/Sun don't count toward the 2 transit days. Saturday is
+// still a valid DELIVERY day (cfg.fedexWeekdaysOff = [Sun] only), so a
+// customer can still pick a Saturday — it just can't be reached faster
+// because one falls in the window.
+const FEDEX_TRANSIT_DAYS = 2;
+const FEDEX_TRANSIT_WEEKDAYS_OFF = [0, 6];
 
 // Carrier holidays 2026→2031 (federal set); fulfillment adds 2026-07-03
 // (observed July 4th). Mirrors scripts/seed-delivery.mjs in the hub.
@@ -59,6 +73,8 @@ export const DEFAULT_DELIVERY: DeliveryConfig = {
   uspsHolidays: CARRIER_HOLIDAYS,
   fulfillmentWeekdaysOff: [0],
   fedexWeekdaysOff: [0],
+  uspsTransitDays: 5,
+  uspsWindowDays: 2,
   maxDaysOut: 120,
 };
 
@@ -69,16 +85,19 @@ export function resolveDeliveryConfig(raw: unknown): DeliveryConfig {
     Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : fb;
   const days = (v: unknown, fb: number[]) =>
     Array.isArray(v) ? v.filter((x): x is number => typeof x === "number") : fb;
+  const posInt = (v: unknown, fb: number) =>
+    typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : fb;
+  const nonNegInt = (v: unknown, fb: number) =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : fb;
   return {
     fulfillmentHolidays: dates(r.fulfillmentHolidays, DEFAULT_DELIVERY.fulfillmentHolidays),
     fedexHolidays: dates(r.fedexHolidays, DEFAULT_DELIVERY.fedexHolidays),
     uspsHolidays: dates(r.uspsHolidays, DEFAULT_DELIVERY.uspsHolidays),
     fulfillmentWeekdaysOff: days(r.fulfillmentWeekdaysOff, DEFAULT_DELIVERY.fulfillmentWeekdaysOff),
     fedexWeekdaysOff: days(r.fedexWeekdaysOff, DEFAULT_DELIVERY.fedexWeekdaysOff),
-    maxDaysOut:
-      typeof r.maxDaysOut === "number" && r.maxDaysOut > 0
-        ? r.maxDaysOut
-        : DEFAULT_DELIVERY.maxDaysOut,
+    uspsTransitDays: posInt(r.uspsTransitDays, DEFAULT_DELIVERY.uspsTransitDays),
+    uspsWindowDays: nonNegInt(r.uspsWindowDays, DEFAULT_DELIVERY.uspsWindowDays),
+    maxDaysOut: posInt(r.maxDaysOut, DEFAULT_DELIVERY.maxDaysOut),
   };
 }
 
@@ -154,12 +173,14 @@ export function earliestDeliveryDate(
   const ship = nextWorkingDay(orderDay, cfg.fulfillmentWeekdaysOff, cfg.fulfillmentHolidays);
   let d = ship;
   if (carrier === "usps") {
-    for (let n = 0; n < USPS_TRANSIT_DAYS; n++) {
+    for (let n = 0; n < cfg.uspsTransitDays; n++) {
       d = nextWorkingDay(d, USPS_WEEKDAYS_OFF, cfg.uspsHolidays);
     }
   } else {
-    for (let n = 0; n < 2; n++) {
-      d = nextWorkingDay(d, cfg.fedexWeekdaysOff, cfg.fedexHolidays);
+    // Sat/Sun don't count as transit days (FEDEX_TRANSIT_WEEKDAYS_OFF), even
+    // though Saturday is a valid delivery day per cfg.fedexWeekdaysOff.
+    for (let n = 0; n < FEDEX_TRANSIT_DAYS; n++) {
+      d = nextWorkingDay(d, FEDEX_TRANSIT_WEEKDAYS_OFF, cfg.fedexHolidays);
     }
   }
   return d;
@@ -208,7 +229,7 @@ export function deliveryProblem(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "Pick a delivery date.";
   if (ymd < minDeliveryDate(cfg, carrier)) {
     return carrier === "usps"
-      ? `USPS First Class takes 3–5 mailing days — ${minDeliveryDate(cfg, "usps")} is the soonest target for USPS (FedEx 2-Day can get there sooner).`
+      ? `USPS First Class takes ${uspsSpreadLabel(cfg)} mailing days — ${minDeliveryDate(cfg, "usps")} is the soonest target for USPS (FedEx 2-Day can get there sooner).`
       : `We need a day to make your piñata and two FedEx days to fly it there — ${minDeliveryDate(cfg)} is the soonest.`;
   }
   if (ymd > maxDeliveryDate(cfg)) return "That's a bit too far out — pick a closer date.";
@@ -236,9 +257,10 @@ export function deliveryProblemAtCheckout(
 }
 
 /* ---------------------------------------------------------------------------
- * USPS arrival window — the customer's target date ± two mailing days
- * (Nathan's model, 2026-07-22). Sundays and postal holidays don't count as
- * mailing days, so a Monday target reaches back into the prior week.
+ * USPS arrival window — the customer's target date ± cfg.uspsWindowDays
+ * mailing days (Nathan's model, 2026-07-22). Sundays and postal holidays
+ * don't count as mailing days, so a Monday target reaches back into the prior
+ * week. Widen uspsWindowDays in the hub when transit gets less predictable.
  * ------------------------------------------------------------------------- */
 
 /** True when USPS actually delivers on this day (not Sunday, not a postal
@@ -270,9 +292,10 @@ export function uspsWindow(
   ymd: string,
   cfg: DeliveryConfig,
 ): { start: string; end: string } {
+  const n = cfg.uspsWindowDays;
   return {
-    start: stepMailingDays(ymd, 2, -1, cfg),
-    end: stepMailingDays(ymd, 2, 1, cfg),
+    start: stepMailingDays(ymd, n, -1, cfg),
+    end: stepMailingDays(ymd, n, 1, cfg),
   };
 }
 
@@ -281,4 +304,18 @@ export function formatWindow(w: { start: string; end: string }): string {
   const short = (ymd: string) =>
     fromYmd(ymd).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return `${short(w.start)} – ${short(w.end)}`;
+}
+
+/** Customer-facing transit spread, e.g. "3–5": the quoted fast end is the
+ *  target minus the window (the target sits at the slow end on purpose). */
+export function uspsSpreadLabel(cfg: DeliveryConfig): string {
+  const slow = cfg.uspsTransitDays;
+  const fast = Math.max(1, slow - cfg.uspsWindowDays);
+  return fast === slow ? `${slow}` : `${fast}–${slow}`;
+}
+
+/** "2 mailing days" with the count from the hub config, pluralized. */
+export function uspsWindowLabel(cfg: DeliveryConfig): string {
+  const n = cfg.uspsWindowDays;
+  return `${n} mailing day${n === 1 ? "" : "s"}`;
 }

@@ -44,7 +44,9 @@ import {
   formatWindow,
   formatYmd,
   minDeliveryDate,
+  uspsSpreadLabel,
   uspsWindow,
+  uspsWindowLabel,
   type Carrier,
   type DeliveryConfig,
 } from "@/lib/delivery";
@@ -1118,8 +1120,9 @@ export default function DesignFlow({
                 <strong>
                   {formatYmd(minDeliveryDate(deliveryCfg, "usps"))}
                 </strong>{" "}
-                — First Class mail takes 3–5 days, so your piñata lands within
-                two mailing days of the day you pick.
+                — First Class mail takes {uspsSpreadLabel(deliveryCfg)} days,
+                so your piñata lands within {uspsWindowLabel(deliveryCfg)} of
+                the day you pick.
               </>
             ) : (
               <>
@@ -1149,7 +1152,7 @@ export default function DesignFlow({
           ) : carrier === "usps" ? (
             <div className="notice info">
               Arrives {formatWindow(uspsWindow(date, deliveryCfg))} — USPS
-              windows run two mailing days either side of{" "}
+              windows run {uspsWindowLabel(deliveryCfg)} either side of{" "}
               {formatYmd(date)}.
             </div>
           ) : (

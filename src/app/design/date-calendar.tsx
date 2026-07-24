@@ -65,7 +65,8 @@ export default function DateCalendar({
   ];
 
   // USPS: the promised arrival window shades onto the calendar — the picked
-  // day at full strength, the two mailing days either side lighter. Days
+  // day at full strength, the window's mailing days either side lighter
+  // (cfg.uspsWindowDays each way, hub-tunable). Days
   // USPS can't deliver (Sundays, postal holidays) inside the span stay
   // unshaded: the piñata can't arrive then.
   const win = carrier === "usps" && value ? uspsWindow(value, cfg) : null;
