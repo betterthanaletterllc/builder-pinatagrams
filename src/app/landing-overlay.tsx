@@ -64,8 +64,10 @@ export default function LandingOverlay({
 
   if (!open) return null;
 
-  const dismiss = () => {
-    track("landing_overlay_dismissed");
+  // Both the CTA and any pitch photo dismiss to the body picker underneath;
+  // `via` keeps the two apart in the funnel.
+  const dismiss = (via: "cta" | "photo" = "cta") => {
+    track("landing_overlay_dismissed", { via });
     try {
       sessionStorage.setItem(SEEN_KEY, "1");
     } catch {}
@@ -99,19 +101,31 @@ export default function LandingOverlay({
           <div className="landing-sec" key={line}>
             <p className="landing-line">{line}</p>
             {i < pitchLines.length - 1 && images[i] && (
-              <Image
-                className="landing-photo"
-                src={images[i].url}
-                alt={images[i].label}
-                width={1080}
-                height={1080}
-                sizes="(max-width: 500px) calc(100vw - 40px), 420px"
-                priority={i === 0}
-              />
+              // Tapping the photo is a shortcut into the builder — same as
+              // the CTA. Button (not the bare img) for keyboard + a11y.
+              <button
+                type="button"
+                className="landing-photo-btn"
+                onClick={() => dismiss("photo")}
+                aria-label="Start building — pick a body style"
+              >
+                <Image
+                  className="landing-photo"
+                  src={images[i].url}
+                  alt={images[i].label}
+                  width={1080}
+                  height={1080}
+                  sizes="(max-width: 500px) calc(100vw - 40px), 420px"
+                  priority={i === 0}
+                />
+              </button>
             )}
           </div>
         ))}
-        <button className="btn primary landing-cta" onClick={dismiss}>
+        <button
+          className="btn primary landing-cta"
+          onClick={() => dismiss("cta")}
+        >
           Build My Piñatagram
         </button>
       </div>

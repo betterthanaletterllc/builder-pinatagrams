@@ -1487,7 +1487,8 @@ body:has(.bottom-stack) .site-footer {
 }
 
 /* USPS arrival window: the picked day stays full-strength (.selected); the
-   two mailing days either side shade lighter — "it may arrive on these". */
+   window's mailing days either side shade lighter — "it may arrive on
+   these" (width = uspsWindowDays in the hub delivery config). */
 .cal-day.win {
   background: var(--accent);
   color: #fff;
@@ -1951,6 +1952,19 @@ body:has(.bottom-stack) .site-footer {
   box-shadow: var(--shadow-sm);
 }
 
+/* The photo is a shortcut into the builder — reset the button so it reads
+   as just the image, but keep it tappable (pointer + rounded focus ring). */
+.landing-photo-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* The first shot's transparent background reads oddly against the cream
    page — sit it on white so the box pops like a product card. */
 .landing-sec:first-of-type .landing-photo {
@@ -1986,9 +2000,11 @@ body:has(.bottom-stack) .site-footer {
     flex-direction: column-reverse;
   }
   /* Every caption on ONE line (clamped so the longest —
-     "carrying your personal message," — still fits a column at 900px). */
+     "carrying your personal message," — still fits a column at 900px).
+     One size, regular weight — all four fragments read as plain body. */
   .landing-line {
     font-size: clamp(15px, 1.7vw, 18.5px);
+    font-weight: 400;
     white-space: nowrap;
     margin: 12px 0 0;
   }
@@ -1998,14 +2014,13 @@ body:has(.bottom-stack) .site-footer {
     object-fit: cover;
   }
   /* the closing line ("delivered straight to their door.") has no photo —
-     it spans beneath the tiles, larger and clearly separated so it reads
-     as the sentence's finale, not a caption on the middle photo */
+     it spans beneath the tiles, separated by its top margin so it reads as
+     the sentence's finale. Same size/weight as the captions (per Nathan). */
   .landing-sec:nth-of-type(4) {
     grid-column: 1 / -1;
   }
   .landing-sec:nth-of-type(4) .landing-line {
     white-space: normal;
-    font-size: 21px;
     margin: 26px 0 4px;
   }
   .landing-cta {
