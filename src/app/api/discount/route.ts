@@ -26,8 +26,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ discount: null });
   }
   const raw = (body as { code?: unknown })?.code;
+  // 64 matches checkout's own cap — a code the cart previews must never be
+  // silently truncated into a different code at checkout.
   const code =
-    typeof raw === "string" ? raw.trim().slice(0, 32).toUpperCase() : "";
+    typeof raw === "string" ? raw.trim().slice(0, 64).toUpperCase() : "";
   if (!code) return NextResponse.json({ discount: null });
   try {
     const res = await fetch(

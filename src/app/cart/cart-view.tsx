@@ -505,12 +505,22 @@ export default function CartView() {
   // counting. Shopify recomputes the authoritative invoice total.
   const pricesKnown = merchandiseCents !== null && shipTotalCents !== null;
   const codePreview = discounts.map((d) => {
-    const eligible = pricesKnown && merchandiseCents! >= d.minSubtotalCents;
+    const minOk = pricesKnown && merchandiseCents! >= d.minSubtotalCents;
+    // A capped Shopify free-shipping code ("rates under $X") covers nothing
+    // when this order's shipping meets the cap — flag it like below-minimum
+    // so the customer isn't promised a discount the invoice won't show.
+    const capBlocked =
+      pricesKnown &&
+      d.kind === "shipping" &&
+      d.maxShippingCents != null &&
+      shipTotalCents! >= d.maxShippingCents;
     return {
       d,
       known: pricesKnown,
-      eligible,
-      off: eligible
+      eligible: minOk && !capBlocked,
+      belowMin: pricesKnown && !minOk,
+      capBlocked,
+      off: minOk
         ? discountAmountCents(d, merchandiseCents!, shipTotalCents!)
         : 0,
     };
@@ -995,11 +1005,17 @@ export default function CartView() {
               </button>
             </div>
           ))}
-          {codePreview.map(({ d, eligible, known }) =>
-            known && !eligible ? (
+          {codePreview.map(({ d, belowMin, capBlocked }) =>
+            belowMin ? (
               <p className="note discount-msg" key={d.code + "-min"}>
                 {d.code} needs a {formatCents(d.minSubtotalCents)} minimum — add
                 more to use it.
+              </p>
+            ) : capBlocked ? (
+              <p className="note discount-msg" key={d.code + "-cap"}>
+                {d.code} only covers shipping under{" "}
+                {formatCents(d.maxShippingCents!)} — this order ships for{" "}
+                {formatCents(shipTotalCents!)}.
               </p>
             ) : null,
           )}

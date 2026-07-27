@@ -57,6 +57,9 @@ export type HubDiscount = {
   minSubtotalCents: number; // 0 = no minimum
   // paired order code: ALSO zeroes shipping (one code, product + shipping)
   freeShipping?: boolean;
+  // Shopify-native free-shipping codes can be scoped to "shipping rates
+  // under $X" — CENTS, absent = uncapped (every hub-minted code).
+  maxShippingCents?: number;
 };
 
 /**
@@ -95,13 +98,20 @@ export function discountAmountCents(
   shippingCents: number,
 ): number {
   if (!d || merchandiseCents < d.minSubtotalCents) return 0;
-  if (d.kind === "shipping") return shippingCents; // free shipping
+  // A capped code covers shipping only when the rate is strictly UNDER the
+  // cap — Shopify's own "applies to shipping rates under $X" semantics.
+  const shipCovered =
+    d.maxShippingCents == null || shippingCents < d.maxShippingCents;
+  if (d.kind === "shipping") return shipCovered ? shippingCents : 0;
   const off =
     d.type === "percent"
       ? Math.round((merchandiseCents * d.value) / 100)
       : d.value;
   // paired code: the one code takes the merchandise off AND the shipping
-  return Math.min(off, merchandiseCents) + (d.freeShipping ? shippingCents : 0);
+  return (
+    Math.min(off, merchandiseCents) +
+    (d.freeShipping && shipCovered ? shippingCents : 0)
+  );
 }
 
 /**

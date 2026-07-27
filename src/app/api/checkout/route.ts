@@ -501,14 +501,15 @@ export async function POST(req: Request) {
     : body?.discountCode != null
       ? [body.discountCode]
       : [];
-  // Allow the characters Shopify codes actually use (letters, digits, hyphen,
-  // underscore) up to Shopify's length — a stricter filter than the client's
-  // would silently strip a real code that previewed a discount in the cart.
+  // Allow the characters Shopify codes actually use — the store's legacy
+  // codes include # ("#pinatasearch2016") and Shopify permits spaces — up to
+  // Shopify's length. A stricter filter than the client's would silently
+  // strip a real code that previewed a discount in the cart.
   const discountCodes = [
     ...new Set(
       rawCodes
         .map((c) => str(c, 64).toUpperCase())
-        .filter((c) => /^[A-Z0-9_-]{2,64}$/.test(c)),
+        .filter((c) => /^[A-Z0-9 _#-]{2,64}$/.test(c)),
     ),
   ].slice(0, 2);
 
@@ -521,7 +522,12 @@ export async function POST(req: Request) {
   // draft, so Shopify records its redemption at payment. Describe
   // unreachable → the priced line stands (fail toward charging the real
   // rate, never toward giving shipping away).
-  let shippingRule: { minSubtotalCents: number } | null = null;
+  let shippingRule: {
+    minSubtotalCents: number;
+    // Shopify-native codes can cap the covered rate ("under $X") — null =
+    // uncapped (every hub-minted code).
+    maxShippingCents: number | null;
+  } | null = null;
   for (const code of discountCodes) {
     try {
       const r = await fetch(
@@ -533,11 +539,18 @@ export async function POST(req: Request) {
         kind?: string;
         minSubtotalCents?: number;
         freeShipping?: boolean;
+        maxShippingCents?: number;
       } | null;
       // kind "shipping" OR a paired order code flagged freeShipping — either
       // way the hub says this stack rides free.
       if (d?.kind === "shipping" || d?.freeShipping === true) {
-        shippingRule = { minSubtotalCents: Number(d.minSubtotalCents) || 0 };
+        shippingRule = {
+          minSubtotalCents: Number(d.minSubtotalCents) || 0,
+          maxShippingCents:
+            typeof d.maxShippingCents === "number" && d.maxShippingCents > 0
+              ? d.maxShippingCents
+              : null,
+        };
       }
     } catch {
       // hub blip → no free shipping this order; never throw here
@@ -623,7 +636,11 @@ export async function POST(req: Request) {
       );
     const freeShip =
       shippingRule !== null &&
-      merchandiseCents >= shippingRule.minSubtotalCents;
+      merchandiseCents >= shippingRule.minSubtotalCents &&
+      // capped code: covers this group only when its rate is strictly under
+      // the cap (Shopify's "applies to shipping rates under $X")
+      (shippingRule.maxShippingCents === null ||
+        shipRateCents * units < shippingRule.maxShippingCents);
     return {
       groupKey,
       shipTo: formatAddress(a),
