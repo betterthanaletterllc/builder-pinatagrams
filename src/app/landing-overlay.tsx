@@ -36,12 +36,17 @@ export default function LandingOverlay({
   logo,
   images,
   lines,
+  trust,
 }: {
   logo?: string | null;
   images: { id: string; label: string; url: string }[];
   // Variant override (hub "Builder variants" → landing lines); null = the
   // standard pitch.
   lines?: string[] | null;
+  // Aggregate from the hub reviews API; null (fetch failed) = no trust row.
+  // Ratings are brand-pooled — the scope label always renders WITH the
+  // number, per the API's display contract.
+  trust?: { rating: number; count: number; label: string } | null;
 }) {
   const [open, setOpen] = useState(true);
   const pitchLines = lines && lines.length ? lines : LINES;
@@ -122,6 +127,28 @@ export default function LandingOverlay({
             )}
           </div>
         ))}
+        {trust && (
+          // Compact trust row between the pitch and the CTA: stars, the
+          // pooled aggregate, and its scope label as one visual unit.
+          <p className="landing-trust">
+            <span className="stars" aria-hidden="true">
+              <span className="stars-bg">★★★★★</span>
+              <span
+                className="stars-fill"
+                style={{
+                  width: `${Math.max(0, Math.min(5, trust.rating)) * 20}%`,
+                }}
+              >
+                ★★★★★
+              </span>
+            </span>
+            <span className="landing-trust-num">
+              {trust.rating.toFixed(1)} ·{" "}
+              {trust.count.toLocaleString("en-US")} reviews
+            </span>
+            <span className="landing-trust-scope">{trust.label}</span>
+          </p>
+        )}
         <button
           className="btn primary landing-cta"
           onClick={() => dismiss("cta")}

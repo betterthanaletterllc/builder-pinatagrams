@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
+import Image from "next/image";
 import {
   getCatalog,
+  getReviews,
   HUB_URL,
   priceUrl,
   resolveBuilderPricing,
@@ -39,6 +41,31 @@ async function b2cPrice(): Promise<HubPrice | null> {
   }
 }
 
+/** Star row (e.g. 4.8 → 96%-wide gold overlay on gray glyphs). Decorative —
+ *  the number is always printed beside it, so screen readers skip the stars. */
+function Stars({ rating }: { rating: number }) {
+  const pct = Math.max(0, Math.min(5, rating)) * 20;
+  return (
+    <span className="stars" aria-hidden="true">
+      <span className="stars-bg">★★★★★</span>
+      <span className="stars-fill" style={{ width: `${pct}%` }}>
+        ★★★★★
+      </span>
+    </span>
+  );
+}
+
+// ~200-char preview of a review body, cut at a word break. Plain text in,
+// plain text out — bodies are user-generated and only ever JSX-escaped.
+// Cut on code points, not UTF-16 units, so an emoji at the boundary can't
+// leave a lone surrogate rendering as U+FFFD.
+function clipBody(s: string, max = 200): string {
+  const points = [...s];
+  if (points.length <= max) return s;
+  const cut = points.slice(0, max).join("");
+  return `${(cut.replace(/\s+\S*$/, "") || cut).trimEnd()}…`;
+}
+
 export default async function Home({
   searchParams,
 }: {
@@ -52,9 +79,12 @@ export default async function Home({
       process.env.VERCEL_ENV !== "production"
         ? ((await searchParams).variant ?? null)
         : null;
-    const [catalog, price] = await Promise.all([
+    const [catalog, price, reviews] = await Promise.all([
       getCatalog({ host, previewVariant }),
       b2cPrice(),
+      // Extra headroom so the strip still finds 4 five-star-or-verified
+      // cards after filtering; null on any hiccup → review UI just absent.
+      getReviews({ limit: 12 }),
     ]);
     const variant = resolveVariantProfile(catalog.variant);
     const pricing = resolveBuilderPricing(catalog.pricing);
@@ -73,6 +103,20 @@ export default async function Home({
     const landingImgs = (catalog.landing?.images ?? [])
       .filter((i) => i.url)
       .slice(0, 3);
+    // Compact trust row for the overlay — aggregate + the scope label
+    // (ratings are brand-pooled; the label travels with the number).
+    const trust = reviews
+      ? {
+          rating: reviews.aggregate.rating,
+          count: reviews.aggregate.count,
+          label: reviews.scope.label,
+        }
+      : null;
+    // The home strip shows the strongest social proof first: five-star or
+    // verified, in the API's (newest-first) order.
+    const reviewPicks = reviews
+      ? reviews.reviews.filter((r) => r.rating === 5 || r.verified).slice(0, 4)
+      : [];
     return (
       <main>
         {/* Remembers a non-production ?variant= preview for client surfaces
@@ -89,6 +133,7 @@ export default async function Home({
           logo={catalog.landing?.logo}
           images={landingImgs}
           lines={variant.landingLines}
+          trust={trust}
         />
         <h1 className="visually-hidden">
           Piñatagrams — personalized mini piñatas, delivered
@@ -127,6 +172,67 @@ export default async function Home({
           from={variant.pricing === "tiered"}
           variantParam={previewVariant}
         />
+
+        {/* Social proof from the hub's public reviews API. Server-rendered;
+            a failed fetch (reviews null) simply omits the whole section.
+            Review text is user-generated — JSX-escaped text only. */}
+        {reviews && reviewPicks.length > 0 && (
+          <section className="reviews-strip" aria-label="Customer reviews">
+            <h2 className="reviews-h2">What senders say</h2>
+            <p className="reviews-agg">
+              <Stars rating={reviews.aggregate.rating} />
+              <span className="reviews-agg-num">
+                {reviews.aggregate.rating.toFixed(1)} ·{" "}
+                {reviews.aggregate.count.toLocaleString("en-US")} reviews
+              </span>
+              {/* brand-pooled rating — the scope label stays with the number */}
+              <span className="reviews-agg-scope">{reviews.scope.label}</span>
+            </p>
+            <div className="reviews-grid">
+              {reviewPicks.map((r) => {
+                const photo = (r.media ?? []).find((m) => m.kind === "photo" && m.url);
+                return (
+                  <article className="review-card" key={r.id}>
+                    <div className="review-top">
+                      <Stars rating={r.rating} />
+                      {r.verified && (
+                        <span className="review-badge">Verified buyer</span>
+                      )}
+                    </div>
+                    <div className="review-main">
+                      {photo && (
+                        <Image
+                          className="review-photo"
+                          src={photo.url}
+                          alt={`Customer photo from ${r.name}`}
+                          width={112}
+                          height={112}
+                          sizes="56px"
+                        />
+                      )}
+                      <div className="review-text">
+                        {r.title && (
+                          <strong className="review-title">{r.title}</strong>
+                        )}
+                        <p className="review-body">{clipBody(r.body)}</p>
+                      </div>
+                    </div>
+                    <footer className="review-foot">
+                      <span className="review-name">{r.name}</span>
+                      {/* FTC disclosure — must be visible on incentivized
+                          reviews wherever they render */}
+                      {r.incentivized && (
+                        <span className="review-badge incentivized">
+                          Received a reward for this review
+                        </span>
+                      )}
+                    </footer>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </main>
     );
   } catch {

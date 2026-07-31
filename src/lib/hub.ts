@@ -235,6 +235,61 @@ export async function getCatalog(opts?: {
   return res.json();
 }
 
+/* ---- Reviews (hub /api/public/reviews) -------------------------------- */
+
+// One published review, minimally typed — only the fields the builder
+// renders. Reviews are USER-GENERATED CONTENT: render as escaped text only
+// (default JSX), never as HTML.
+export type HubReview = {
+  id: string;
+  name: string;
+  rating: number; // 1–5
+  title: string | null;
+  body: string;
+  verified: boolean;
+  incentivized: boolean; // true → visible FTC disclosure badge REQUIRED
+  media: { url: string; kind: string }[];
+  createdAt: string;
+};
+
+export type HubReviews = {
+  // Ratings are BRAND-POOLED — the scope label must render in the same
+  // visual unit as any aggregate number (the API's own display contract).
+  scope: { label: string };
+  aggregate: { rating: number; count: number };
+  reviews: HubReview[];
+  asOf: string;
+};
+
+/** Server-side reviews fetch; same base URL + short cache as the catalog.
+ *  Null on ANY failure — review UI is a bonus, the page renders without it. */
+export async function getReviews(opts?: {
+  limit?: number;
+}): Promise<HubReviews | null> {
+  try {
+    const qs = opts?.limit ? `?limit=${opts.limit}` : "";
+    // 4s cap: reviews are optional, so a hung hub must time out into the null
+    // fallback instead of blocking the homepage render.
+    const res = await fetch(`${HUB_URL}/api/public/reviews${qs}`, {
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as HubReviews;
+    if (
+      !j ||
+      typeof j.aggregate?.rating !== "number" ||
+      typeof j.aggregate?.count !== "number" ||
+      typeof j.scope?.label !== "string" ||
+      !Array.isArray(j.reviews)
+    )
+      return null;
+    return j;
+  } catch {
+    return null;
+  }
+}
+
 /** URL builder shared by server and client fetches. */
 export function priceUrl(input: HubPriceInput): string {
   const q = new URLSearchParams({

@@ -2629,3 +2629,185 @@ body:has(.bottom-stack) .site-footer {
   width: 138px;
   padding: 0;
 }
+
+/* ---------- Reviews (hub /api/public/reviews) ---------- */
+
+/* Star row: gray glyphs with a brand-gold overlay clipped to the rating
+   (4.8 → 96% wide). The layers use identical glyphs so the clip lines up;
+   both are aria-hidden — the printed number carries the meaning. */
+.stars {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+.stars-bg {
+  color: var(--line-strong);
+}
+
+.stars-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--highlight);
+  /* thin ink edge so the pale brand yellow holds up on white/cream */
+  -webkit-text-stroke: 0.5px rgba(24, 13, 56, 0.35);
+}
+
+/* Landing overlay: compact trust row between the pitch and the CTA. The
+   scope label sits inside the same block as the number — pooled ratings
+   never render without their scope. */
+.landing-trust {
+  margin: 22px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.landing-trust .stars {
+  font-size: 18px;
+}
+
+.landing-trust-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.landing-trust-scope {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (min-width: 900px) {
+  /* the overlay is a 3-column grid on desktop — the trust row spans it,
+     sitting between the pitch tiles and the CTA */
+  .landing-trust {
+    grid-column: 1 / -1;
+    margin: 18px 0 0;
+  }
+}
+
+/* Home page: "What senders say" strip under the body picker. */
+.reviews-strip {
+  margin-top: 44px;
+}
+
+.reviews-h2 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.reviews-agg {
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.reviews-agg-num {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.reviews-agg-scope {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.reviews-grid {
+  display: grid;
+  /* 1-up on phones, 2-up on tablets, 4-up on the 1100px container */
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.review-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow-sm);
+}
+
+.review-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.review-photo {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.review-title {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.review-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  /* server-side ~200-char clip + a visual clamp so cards stay level */
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.review-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.review-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.review-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  white-space: nowrap;
+}
+
+/* FTC disclosure on incentivized reviews — always visible, never clipped */
+.review-badge.incentivized {
+  background: var(--warn-soft);
+  color: var(--ink);
+  white-space: normal;
+  text-align: left;
+}
