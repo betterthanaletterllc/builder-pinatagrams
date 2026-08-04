@@ -96,7 +96,9 @@ function CartBoxThumb({ line }: { line: CartLine }) {
   const art =
     line.graphic.type === "custom"
       ? line.graphic.preview
-      : (cdnThumb(line.graphic.art ?? line.graphic.thumb, 360) ?? "");
+      : line.graphic.type === "hub"
+        ? (line.graphic.thumb ?? line.graphic.art ?? "")
+        : (cdnThumb(line.graphic.art ?? line.graphic.thumb, 360) ?? "");
   if (!line.boxImageUrl || !line.logoZone) {
     /* eslint-disable-next-line @next/next/no-img-element */
     return <img className="cart-thumb" src={art} alt="" />;

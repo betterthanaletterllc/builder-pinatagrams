@@ -56,6 +56,19 @@ export type DesignAssets = {
 
 export type GraphicChoice =
   | {
+      // a hub-uploaded graphic (admin /catalog → "Hub graphics") — no
+      // Shopify product. art + artSha256 live on the builder's blob store;
+      // checkout re-resolves BOTH by design code from the live catalog (the
+      // client copy is display-only). Prices as a library pick; the gift
+      // message previews AND prints on the standard confetti card.
+      type: "hub";
+      design: string; // H0001-style code
+      title: string;
+      thumb: string | null;
+      art: string | null;
+      artSha256: string | null;
+    }
+  | {
       // an existing front graphic from the Shopify catalog
       type: "shopify";
       design: string; // design code, e.g. "HBD01"
@@ -112,6 +125,8 @@ export type GraphicTier = "classic" | "library" | "custom";
 export function graphicTier(g: GraphicChoice | null): GraphicTier | null {
   if (!g) return null;
   if (g.type === "custom") return "custom";
+  // Hub-uploaded graphics price exactly like Shopify library picks.
+  if (g.type === "hub") return "library";
   return g.design === CLASSIC_GRAPHIC.design ? "classic" : "library";
 }
 

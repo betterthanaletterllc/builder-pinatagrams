@@ -3,6 +3,7 @@ import {
   catalogUrl,
   HUB_URL,
   resolveBuilderPricing,
+  resolveHubGraphics,
   type HubAddon,
   type HubCatalog,
   type HubPrice,
@@ -287,6 +288,12 @@ export async function POST(req: Request) {
   const fillingByLabel = new Map(
     resolveFillings(catalog.fillings).map((f) => [f.label, f]),
   );
+  // Hub-uploaded graphics, by design code. Art + sha are AUTHORITATIVE from
+  // this catalog — the client's copy is display-only, so a tampered cart
+  // can't point the printer at foreign art or dodge the fingerprint.
+  const hubGraphicByDesign = new Map(
+    resolveHubGraphics(catalog.hubGraphics).map((g) => [g.design, g]),
+  );
 
   type CleanLine = {
     title: string;
@@ -367,6 +374,32 @@ export async function POST(req: Request) {
         : design === CLASSIC_GRAPHIC.design
           ? 0
           : pricing.graphicLibraryUpchargeCents;
+    } else if (l.graphic?.type === "hub") {
+      // Hub-uploaded graphic (admin /catalog): re-resolve EVERYTHING by
+      // design code from the live catalog fetched above.
+      design = str(l.graphic.design, 24).toUpperCase();
+      const hub = hubGraphicByDesign.get(design);
+      if (!hub)
+        return bad(
+          `${label}: that graphic is no longer available — edit the piñata and pick another.`,
+        );
+      if (hub.bodyStyles !== "all" && !hub.bodyStyles.includes(style.id))
+        return bad(
+          `${label}: "${hub.title}" isn't offered on the ${style.name} body — swap the body style or the graphic.`,
+        );
+      // The hub validated these at upload; a malformed row here is hub-side
+      // corruption — refuse loudly rather than strand an unprintable order.
+      if (!BLOB_RE.test(hub.art) || !SHA256_RE.test(hub.artSha256)) {
+        console.error(
+          `checkout: hub graphic ${design} has malformed art/sha in the catalog`,
+        );
+        return bad(`${label}: that graphic can't be sold right now — pick another.`);
+      }
+      frontGraphic = hub.art;
+      frontGraphicSha256 = hub.artSha256;
+      title = `${hub.title} — ${style.name}`;
+      // Prices exactly like a Shopify library pick.
+      tierCents = tiered ? pricing.graphicLibraryUpchargeCents : 0;
     } else if (l.graphic?.type === "custom") {
       design = "custom";
       // The flattened print file the editor uploaded to Blob; Paper prints

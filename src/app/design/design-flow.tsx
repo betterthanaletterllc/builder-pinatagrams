@@ -36,6 +36,8 @@ import {
   type HubAddon,
   type HubBodyStyle,
   type HubFilling,
+  type HubGraphicCategory,
+  type HubGraphicEntry,
   type HubPrice,
   type LogoZone,
 } from "@/lib/hub";
@@ -114,6 +116,8 @@ export default function DesignFlow({
   deliveryCfg,
   pricing,
   variant,
+  hubGraphics,
+  hubCategories,
 }: {
   style: StyleInfo;
   boxInterior: {
@@ -126,6 +130,8 @@ export default function DesignFlow({
   deliveryCfg: DeliveryConfig;
   pricing: BuilderPricing;
   variant: VariantProfile;
+  hubGraphics: HubGraphicEntry[];
+  hubCategories: HubGraphicCategory[];
 }) {
   // Variant knobs (hub /pricing → "Builder variants"): tiered shows the
   // Classic/library/custom price ladder; flat is ONE all-in price. USPS
@@ -423,10 +429,14 @@ export default function DesignFlow({
   // Previews composite a CDN-resized variant (~60KB), never the print-res
   // original (multi-MB) — that was a visible delay before the graphic
   // appeared on the box. Checkout still sends the full-res URL to Paper.
+  // Hub graphics have no CDN resizer — their upload-time thumb plays that
+  // role.
   const artUrl = graphic
     ? graphic.type === "custom"
       ? graphic.preview
-      : cdnThumb(graphic.art ?? graphic.thumb, 720)
+      : graphic.type === "hub"
+        ? (graphic.thumb ?? graphic.art)
+        : cdnThumb(graphic.art ?? graphic.thumb, 720)
     : null;
 
   // Matching inside-flap card for the message preview: the library design's
@@ -871,6 +881,9 @@ export default function DesignFlow({
           </p>
           <GraphicLibrary
             restrict={variant.library === "birthday" ? "birthday" : null}
+            hubGraphics={hubGraphics}
+            hubCategories={hubCategories}
+            styleId={styleInfo.id}
             onPick={(g) => {
               setGraphic(g);
               track("graphic_picked", { design: g.design });

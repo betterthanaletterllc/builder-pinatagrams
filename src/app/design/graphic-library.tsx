@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GraphicChoice } from "@/lib/flow";
+import type { HubGraphicCategory, HubGraphicEntry } from "@/lib/hub";
 import {
   cdnThumb,
   EXCLUDED_PREFIXES,
@@ -105,6 +106,9 @@ function Card({
 export default function GraphicLibrary({
   onPick,
   restrict = null,
+  hubGraphics = [],
+  hubCategories = [],
+  styleId,
 }: {
   onPick: (g: GraphicChoice) => void;
   // Variant knob (hub "Builder variants" → library): "birthday" trims the
@@ -112,6 +116,12 @@ export default function GraphicLibrary({
   // storefront-collection extras — and hides the aisle row (search and
   // shelves keep working within the trimmed set).
   restrict?: "birthday" | null;
+  // Hub-uploaded graphics (admin /catalog): public categories render as
+  // shelves up top; private (hidden) ones are search-only. Each entry's
+  // bodyStyles must allow the current body.
+  hubGraphics?: HubGraphicEntry[];
+  hubCategories?: HubGraphicCategory[];
+  styleId: string;
 }) {
   const [graphics, setGraphics] = useState<LibraryGraphic[] | null>(null);
   const [tags, setTags] = useState<TagIndex>({});
@@ -177,8 +187,57 @@ export default function GraphicLibrary({
     saveLibraryState({ q: query, a: aisle, s: sub, y: window.scrollY });
   }, [query, aisle, sub]);
 
+  /* --- hub-uploaded graphics (admin /catalog) ---------------------------- */
+  // Wearable on THIS body; public ones shelve + search, hidden ones (private
+  // categories) surface only through search. Cards show the small thumb; the
+  // full print art + sha ride the pick via hubByDesign.
+  const hubWearable = useMemo(
+    () =>
+      hubGraphics.filter(
+        (h) =>
+          (h.bodyStyles === "all" || h.bodyStyles.includes(styleId)) &&
+          (restrict !== "birthday" || h.category === "birthday"),
+      ),
+    [hubGraphics, styleId, restrict],
+  );
+  const hubByDesign = useMemo(
+    () => new Map(hubWearable.map((h) => [h.design, h])),
+    [hubWearable],
+  );
+  const toCard = (h: HubGraphicEntry): LibraryGraphic => ({
+    design: h.design,
+    title: h.title,
+    thumb: h.thumb,
+    art: h.thumb, // cards render the light thumb, never the print file
+    message: null,
+  });
+  const hubVisible = useMemo(
+    () => hubWearable.filter((h) => !h.hidden).map(toCard),
+    [hubWearable],
+  );
+  const hubHidden = useMemo(
+    () => hubWearable.filter((h) => h.hidden).map(toCard),
+    [hubWearable],
+  );
+  const hubCatLabel = useMemo(
+    () => new Map(hubCategories.map((c) => [c.id, c.label])),
+    [hubCategories],
+  );
+
   const pick = (g: LibraryGraphic) => {
     saveLibraryState({ q: query, a: aisle, s: sub, y: window.scrollY });
+    const hub = hubByDesign.get(g.design);
+    if (hub) {
+      onPick({
+        type: "hub",
+        design: hub.design,
+        title: hub.title,
+        thumb: hub.thumb,
+        art: hub.art,
+        artSha256: hub.artSha256,
+      });
+      return;
+    }
     onPick({
       type: "shopify",
       design: g.design,
@@ -376,6 +435,53 @@ export default function GraphicLibrary({
     });
   }, [graphics, tags, query, inAisle]);
 
+  // Hub graphics in the SEARCH grid (aisles never include them):
+  // - public ones match loosely on title + category label (never the raw
+  //   H-code — it's an internal identifier, and a one-letter "h" query
+  //   would otherwise match every hub graphic);
+  // - HIDDEN ones honor the private contract: they surface only when a
+  //   meaningful chunk (4+ chars) of the query appears in their TITLE —
+  //   the name Nathan shares with the customer — never via category/code.
+  const hubShown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    if (tokens.length === 0 || aisle) return [];
+    const publicHits = hubVisible.filter((g) => {
+      const cat = hubCatLabel.get(hubByDesign.get(g.design)?.category ?? "") ?? "";
+      const hay = `${g.title} ${cat}`.toLowerCase();
+      return tokens.every((tok) => hay.includes(tok));
+    });
+    const hiddenHits =
+      q.length >= 4
+        ? hubHidden.filter((g) => g.title.toLowerCase().includes(q))
+        : [];
+    return [...publicHits, ...hiddenHits];
+  }, [hubVisible, hubHidden, hubByDesign, hubCatLabel, query, aisle]);
+  const gridItems = useMemo(() => [...hubShown, ...shown], [hubShown, shown]);
+
+  // Public hub categories = shelves pinned ABOVE the standard shelves —
+  // freshly uploaded content is usually what's being promoted.
+  const hubShelves = useMemo(() => {
+    if (filtering) return [];
+    return hubCategories
+      .filter((c) => !c.hidden)
+      .map((c) => {
+        const items = hubVisible.filter(
+          (g) => hubByDesign.get(g.design)?.category === c.id,
+        );
+        return {
+          title: c.label,
+          items,
+          total: items.length,
+          seeAll: undefined as string | undefined,
+          // See-all for a hub category = search its label (public hub
+          // matching includes the category label, so the grid shows all).
+          seeAllQuery: c.label,
+        };
+      })
+      .filter((s) => s.items.length > 0);
+  }, [hubCategories, hubVisible, hubByDesign, filtering]);
+
   const shelves = useMemo(() => {
     if (!graphics || filtering) return [];
     const out: {
@@ -538,8 +644,8 @@ export default function GraphicLibrary({
             </div>
           ) : !filtering ? (
             <div className="shelves">
-              {shelves.map((s) => (
-                <section key={s.title} className="shelf">
+              {[...hubShelves, ...shelves].map((s, i) => (
+                <section key={`${i}-${s.title}`} className="shelf">
                   <div className="shelf-head">
                     <h3>{s.title}</h3>
                   </div>
@@ -547,14 +653,29 @@ export default function GraphicLibrary({
                     {s.items.slice(0, PREVIEW).map((g) => (
                       <Card key={g.design} g={g} onPick={pick} eager />
                     ))}
-                    {s.seeAll && s.total > PREVIEW && (
-                      <button
-                        className="library-card see-all"
-                        onClick={() => jumpToOccasion(s.seeAll!)}
-                      >
-                        <span>See all {s.total} →</span>
-                      </button>
-                    )}
+                    {s.total > PREVIEW &&
+                      (() => {
+                        const seeAllQuery = (s as { seeAllQuery?: string }).seeAllQuery;
+                        if (seeAllQuery)
+                          return (
+                            <button
+                              className="library-card see-all"
+                              onClick={() => setQuery(seeAllQuery)}
+                            >
+                              <span>See all {s.total} →</span>
+                            </button>
+                          );
+                        if (s.seeAll)
+                          return (
+                            <button
+                              className="library-card see-all"
+                              onClick={() => jumpToOccasion(s.seeAll!)}
+                            >
+                              <span>See all {s.total} →</span>
+                            </button>
+                          );
+                        return null;
+                      })()}
                   </div>
                 </section>
               ))}
@@ -563,7 +684,7 @@ export default function GraphicLibrary({
                 is in here.
               </p>
             </div>
-          ) : shown.length === 0 ? (
+          ) : gridItems.length === 0 ? (
             <div className="notice info">
               Nothing matches{query ? ` “${query}”` : ""} — try another word,
               a different aisle, or design your own graphic.
@@ -571,11 +692,11 @@ export default function GraphicLibrary({
           ) : (
             <>
               <p className="note">
-                {shown.length} graphic{shown.length === 1 ? "" : "s"}
+                {gridItems.length} graphic{gridItems.length === 1 ? "" : "s"}
                 {filterSummary ? ` · ${filterSummary}` : ""}
               </p>
               <div className="library-grid">
-                {shown.map((g) => (
+                {gridItems.map((g) => (
                   <Card key={g.design} g={g} onPick={pick} />
                 ))}
               </div>

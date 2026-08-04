@@ -3,10 +3,14 @@ import { headers } from "next/headers";
 import {
   getCatalog,
   resolveBuilderPricing,
+  resolveGraphicCategories,
+  resolveHubGraphics,
   type BuilderPricing,
   type HubAddon,
   type HubBodyStyle,
   type HubFilling,
+  type HubGraphicCategory,
+  type HubGraphicEntry,
   type LogoZone,
 } from "@/lib/hub";
 import { resolveFillings } from "@/lib/flow";
@@ -40,6 +44,8 @@ export default async function DesignPage({
   let deliveryCfg: DeliveryConfig = resolveDeliveryConfig(undefined);
   let pricing: BuilderPricing = resolveBuilderPricing(undefined);
   let variant: VariantProfile = DEFAULT_VARIANT;
+  let hubGraphics: HubGraphicEntry[] = [];
+  let hubCategories: HubGraphicCategory[] = [];
   let hubDown = false;
   try {
     const catalog = await getCatalog({ host, previewVariant });
@@ -50,6 +56,8 @@ export default async function DesignPage({
     deliveryCfg = resolveDeliveryConfig(catalog.delivery);
     pricing = resolveBuilderPricing(catalog.pricing);
     variant = resolveVariantProfile(catalog.variant);
+    hubGraphics = resolveHubGraphics(catalog.hubGraphics);
+    hubCategories = resolveGraphicCategories(catalog.graphicCategories);
   } catch {
     // Hub unreachable — the flow still works; the style is re-validated
     // server-side at order time anyway.
@@ -96,6 +104,8 @@ export default async function DesignPage({
         deliveryCfg={deliveryCfg}
         pricing={pricing}
         variant={variant}
+        hubGraphics={hubGraphics}
+        hubCategories={hubCategories}
       />
     </main>
   );
