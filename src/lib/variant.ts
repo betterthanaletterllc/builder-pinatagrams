@@ -18,7 +18,10 @@ export type VariantProfile = {
   name: string;
   pricing: "flat" | "tiered";
   carriers: Carrier[];
-  library: "all" | "birthday";
+  // "none" = folders-only storefront: no Shopify library, just the hub-
+  // graphic folders the hub granted this storefront (already filtered into
+  // the catalog's hubGraphics server-side).
+  library: "all" | "birthday" | "none";
   landingLines: string[] | null;
   // "name" = preview override; "host" = matched a configured hostname;
   // "fallback" = no match. A fallback on a host that isn't the main site is
@@ -59,7 +62,8 @@ export function resolveVariantProfile(raw: unknown): VariantProfile {
         : "default",
     pricing: r.pricing === "tiered" ? "tiered" : "flat",
     carriers,
-    library: r.library === "birthday" ? "birthday" : "all",
+    library:
+      r.library === "birthday" ? "birthday" : r.library === "none" ? "none" : "all",
     landingLines:
       Array.isArray(r.landingLines) && r.landingLines.length
         ? r.landingLines.map(String).slice(0, 4)

@@ -525,12 +525,16 @@ export default function DesignFlow({
 
   // One source for the order-summary strings — the mobile bottom dock and
   // the desktop rail card must never drift apart.
+  // Hub-graphic titles are INTERNAL (hub organization only) — customer
+  // surfaces show a generic name; the box preview shows the actual art.
   const summaryTitle =
     graphic?.type === "custom"
       ? `Your design — ${styleInfo.name}`
-      : graphic
-        ? `${graphic.title} — ${styleInfo.name}`
-        : styleInfo.name;
+      : graphic?.type === "hub"
+        ? `Your graphic — ${styleInfo.name}`
+        : graphic
+          ? `${graphic.title} — ${styleInfo.name}`
+          : styleInfo.name;
   const summaryDetail =
     [
       message
@@ -880,7 +884,7 @@ export default function DesignFlow({
             </button>
           </p>
           <GraphicLibrary
-            restrict={variant.library === "birthday" ? "birthday" : null}
+            restrict={variant.library === "all" ? null : variant.library}
             hubGraphics={hubGraphics}
             hubCategories={hubCategories}
             styleId={styleInfo.id}

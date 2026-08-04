@@ -306,6 +306,9 @@ export async function POST(req: Request) {
     designJson: string;
     filling: string;
     fillingCents: number;
+    // Customer-visible "Graphic" attribute on the invoice — hub-graphic
+    // titles are internal, so their lines show a generic label.
+    graphicAttr: string;
     // Version-B graphic tier upcharge (0 = the Classic branded default).
     tierCents: number;
     addons: HubAddon[];
@@ -356,6 +359,7 @@ export async function POST(req: Request) {
     let frontGraphicSha256 = "";
     let designJson = "";
     let title: string;
+    let graphicAttr: string;
     let tierCents: number;
     if (l.graphic?.type === "shopify") {
       design = str(l.graphic.design, 24).toUpperCase();
@@ -364,6 +368,7 @@ export async function POST(req: Request) {
       if (!ART_RE.test(art)) return bad(`${label}: unrecognized graphic art.`);
       frontGraphic = art;
       title = `${str(l.graphic.title, 120) || design} — ${style.name}`;
+      graphicAttr = title;
       // Tier by design code: the Classic branded default rides free, any
       // other library pick carries the upcharge. Flat variants price every
       // graphic the same. (A tampered cart claiming the Classic code with
@@ -397,7 +402,10 @@ export async function POST(req: Request) {
       }
       frontGraphic = hub.art;
       frontGraphicSha256 = hub.artSha256;
-      title = `${hub.title} — ${style.name}`;
+      // Hub titles are INTERNAL — the invoice shows a generic line; Paper
+      // and support identify the design via _design (the H-code) + hub UI.
+      title = `Piñatagram — ${style.name}`;
+      graphicAttr = "Your selected graphic";
       // Prices exactly like a Shopify library pick.
       tierCents = tiered ? pricing.graphicLibraryUpchargeCents : 0;
     } else if (l.graphic?.type === "custom") {
@@ -425,6 +433,7 @@ export async function POST(req: Request) {
       const sidecar = str(l.graphic.designUrl, 500);
       designJson = BLOB_RE.test(sidecar) ? sidecar : "";
       title = `Custom Piñatagram — ${style.name}`;
+      graphicAttr = "Your custom design";
       tierCents = tiered ? pricing.graphicCustomUpchargeCents : 0;
     } else {
       return bad(`${label}: pick or design a graphic.`);
@@ -441,6 +450,7 @@ export async function POST(req: Request) {
       designJson,
       filling: fillingRec.label,
       fillingCents: fillingRec.priceCents,
+      graphicAttr,
       tierCents,
       addons: addons as HubAddon[],
       deliveryDate: l.deliveryDate,
@@ -596,7 +606,7 @@ export async function POST(req: Request) {
     // is the generic product's, so the graphic is named here.)
     {
       key: "Graphic",
-      value: l.design === "custom" ? "Your custom design" : l.title,
+      value: l.graphicAttr,
     },
     { key: "Body style", value: l.styleName },
     { key: "Filling", value: l.filling },

@@ -674,7 +674,9 @@ export default function CartView() {
               <strong>
                 {l.graphic.type === "custom"
                   ? `Your design — ${l.styleName}`
-                  : `${l.graphic.title} — ${l.styleName}`}
+                  : l.graphic.type === "hub"
+                    ? `Your graphic — ${l.styleName}`
+                    : `${l.graphic.title} — ${l.styleName}`}
               </strong>
               <dl className="cart-detail">
                 <div>

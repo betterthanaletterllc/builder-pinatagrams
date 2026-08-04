@@ -156,8 +156,10 @@ export function resolveBuilderPricing(raw: unknown): BuilderPricing {
 // A graphic uploaded in the hub (admin /catalog → "Hub graphics") — no
 // Shopify product behind it. `art` + `artSha256` live on the BUILDER's blob
 // store (permanent library/ prefix) and ride orders through the same
-// fingerprinted rail as custom designs. `hidden` = its category is private:
-// search-only in the library, never shelved.
+// fingerprinted rail as custom designs. The catalog serves ONLY the folders
+// this storefront may sell (public + granted), so everything here shelves.
+// `title` is INTERNAL (hub organization + order rails) — customers only
+// ever see the art and the folder label.
 export type HubGraphicEntry = {
   design: string; // H0001-style code
   title: string;
@@ -166,10 +168,9 @@ export type HubGraphicEntry = {
   art: string;
   artSha256: string;
   thumb: string;
-  hidden: boolean;
 };
 
-export type HubGraphicCategory = { id: string; label: string; hidden: boolean };
+export type HubGraphicCategory = { id: string; label: string };
 
 /** Parse the catalog's hubGraphics/graphicCategories defensively — absent on
  *  older hub deploys, malformed rows dropped. */
@@ -187,7 +188,6 @@ export function resolveHubGraphics(raw: unknown): HubGraphicEntry[] {
       art: String(g.art ?? ""),
       artSha256: String(g.artSha256 ?? ""),
       thumb: String(g.thumb ?? ""),
-      hidden: g.hidden === true,
     }))
     .filter((g) => g.design && g.title && g.art && g.artSha256);
 }
@@ -198,7 +198,6 @@ export function resolveGraphicCategories(raw: unknown): HubGraphicCategory[] {
     .map((c) => ({
       id: String(c.id ?? ""),
       label: String(c.label ?? ""),
-      hidden: c.hidden === true,
     }))
     .filter((c) => c.id && c.label);
 }

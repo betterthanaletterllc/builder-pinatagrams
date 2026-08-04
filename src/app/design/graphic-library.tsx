@@ -111,11 +111,11 @@ export default function GraphicLibrary({
   styleId,
 }: {
   onPick: (g: GraphicChoice) => void;
-  // Variant knob (hub "Builder variants" → library): "birthday" trims the
-  // whole library to the Birthday set — HBD-coded designs plus the curated
-  // storefront-collection extras — and hides the aisle row (search and
-  // shelves keep working within the trimmed set).
-  restrict?: "birthday" | null;
+  // Variant knob (hub Builder → Storefronts): "birthday" trims the Shopify
+  // library to the Birthday set; "none" drops the Shopify library entirely
+  // (a folders-only storefront — just this site's granted hub folders).
+  // Both hide the aisle row; search and shelves work within what's left.
+  restrict?: "birthday" | "none" | null;
   // Hub-uploaded graphics (admin /catalog): public categories render as
   // shelves up top; private (hidden) ones are search-only. Each entry's
   // bodyStyles must allow the current body.
@@ -158,9 +158,12 @@ export default function GraphicLibrary({
         setFailed(true);
         return;
       }
-      let list = manifest.graphics.filter(
-        (g) => !EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, "")),
-      );
+      let list =
+        restrict === "none"
+          ? []
+          : manifest.graphics.filter(
+              (g) => !EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, "")),
+            );
       if (restrict === "birthday") {
         const extra = new Set(collections?.birthday ?? []);
         list = list.filter(
@@ -188,9 +191,14 @@ export default function GraphicLibrary({
   }, [query, aisle, sub]);
 
   /* --- hub-uploaded graphics (admin /catalog) ---------------------------- */
-  // Wearable on THIS body; public ones shelve + search, hidden ones (private
-  // categories) surface only through search. Cards show the small thumb; the
-  // full print art + sha ride the pick via hubByDesign.
+  // The catalog already served ONLY the folders this storefront may sell
+  // (public + granted), so everything here shelves under its folder label.
+  // Titles are INTERNAL — cards carry the folder label for tooltips/search;
+  // the full print art + sha ride the pick via hubByDesign.
+  const hubCatLabel = useMemo(
+    () => new Map(hubCategories.map((c) => [c.id, c.label])),
+    [hubCategories],
+  );
   const hubWearable = useMemo(
     () =>
       hubGraphics.filter(
@@ -204,24 +212,20 @@ export default function GraphicLibrary({
     () => new Map(hubWearable.map((h) => [h.design, h])),
     [hubWearable],
   );
-  const toCard = (h: HubGraphicEntry): LibraryGraphic => ({
-    design: h.design,
-    title: h.title,
-    thumb: h.thumb,
-    art: h.thumb, // cards render the light thumb, never the print file
-    message: null,
-  });
   const hubVisible = useMemo(
-    () => hubWearable.filter((h) => !h.hidden).map(toCard),
-    [hubWearable],
-  );
-  const hubHidden = useMemo(
-    () => hubWearable.filter((h) => h.hidden).map(toCard),
-    [hubWearable],
-  );
-  const hubCatLabel = useMemo(
-    () => new Map(hubCategories.map((c) => [c.id, c.label])),
-    [hubCategories],
+    () =>
+      hubWearable.map(
+        (h): LibraryGraphic => ({
+          design: h.design,
+          // Customer-safe identity: the folder's label, never the internal
+          // upload title.
+          title: `${hubCatLabel.get(h.category) ?? "Piñatagram"} design`,
+          thumb: h.thumb,
+          art: h.thumb, // cards render the light thumb, never the print file
+          message: null,
+        }),
+      ),
+    [hubWearable, hubCatLabel],
   );
 
   const pick = (g: LibraryGraphic) => {
@@ -435,36 +439,25 @@ export default function GraphicLibrary({
     });
   }, [graphics, tags, query, inAisle]);
 
-  // Hub graphics in the SEARCH grid (aisles never include them):
-  // - public ones match loosely on title + category label (never the raw
-  //   H-code — it's an internal identifier, and a one-letter "h" query
-  //   would otherwise match every hub graphic);
-  // - HIDDEN ones honor the private contract: they surface only when a
-  //   meaningful chunk (4+ chars) of the query appears in their TITLE —
-  //   the name Nathan shares with the customer — never via category/code.
+  // Hub graphics in the SEARCH grid (aisles never include them): match on
+  // the customer-facing card title, which IS the folder label — internal
+  // upload titles and H-codes never participate.
   const hubShown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const tokens = q.split(/\s+/).filter(Boolean);
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (tokens.length === 0 || aisle) return [];
-    const publicHits = hubVisible.filter((g) => {
-      const cat = hubCatLabel.get(hubByDesign.get(g.design)?.category ?? "") ?? "";
-      const hay = `${g.title} ${cat}`.toLowerCase();
+    return hubVisible.filter((g) => {
+      const hay = g.title.toLowerCase();
       return tokens.every((tok) => hay.includes(tok));
     });
-    const hiddenHits =
-      q.length >= 4
-        ? hubHidden.filter((g) => g.title.toLowerCase().includes(q))
-        : [];
-    return [...publicHits, ...hiddenHits];
-  }, [hubVisible, hubHidden, hubByDesign, hubCatLabel, query, aisle]);
+  }, [hubVisible, query, aisle]);
   const gridItems = useMemo(() => [...hubShown, ...shown], [hubShown, shown]);
 
-  // Public hub categories = shelves pinned ABOVE the standard shelves —
-  // freshly uploaded content is usually what's being promoted.
+  // Every served folder = a shelf pinned ABOVE the standard shelves (the
+  // catalog already filtered to what this storefront may sell, so granted
+  // restricted folders shelve here exactly like public ones).
   const hubShelves = useMemo(() => {
     if (filtering) return [];
     return hubCategories
-      .filter((c) => !c.hidden)
       .map((c) => {
         const items = hubVisible.filter(
           (g) => hubByDesign.get(g.design)?.category === c.id,
@@ -679,10 +672,12 @@ export default function GraphicLibrary({
                   </div>
                 </section>
               ))}
-              <p className="note">
-                Or search above — every one of our {graphics.length} graphics
-                is in here.
-              </p>
+              {graphics.length > 0 && (
+                <p className="note">
+                  Or search above — every one of our {graphics.length} graphics
+                  is in here.
+                </p>
+              )}
             </div>
           ) : gridItems.length === 0 ? (
             <div className="notice info">
