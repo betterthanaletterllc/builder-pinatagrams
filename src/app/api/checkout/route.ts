@@ -409,6 +409,12 @@ export async function POST(req: Request) {
       // Prices exactly like a Shopify library pick.
       tierCents = tiered ? pricing.graphicLibraryUpchargeCents : 0;
     } else if (l.graphic?.type === "custom") {
+      // Storefront rule, enforced where the money is: a no-custom variant
+      // refuses custom lines even from a tampered or stale cart.
+      if (!variant.allowCustom)
+        return bad(
+          `${label}: custom designs aren't offered on this store — pick a graphic instead.`,
+        );
       design = "custom";
       // The flattened print file the editor uploaded to Blob; Paper prints
       // from this URL. No placeholder path: an order with unprintable art

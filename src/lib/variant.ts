@@ -22,6 +22,9 @@ export type VariantProfile = {
   // graphic folders the hub granted this storefront (already filtered into
   // the catalog's hubGraphics server-side).
   library: "all" | "birthday" | "none";
+  // false = no design-your-own here: the graphic step opens the picker
+  // directly and checkout refuses custom lines.
+  allowCustom: boolean;
   landingLines: string[] | null;
   // "name" = preview override; "host" = matched a configured hostname;
   // "fallback" = no match. A fallback on a host that isn't the main site is
@@ -35,6 +38,7 @@ export const DEFAULT_VARIANT: VariantProfile = {
   pricing: "flat",
   carriers: ["fedex"],
   library: "all",
+  allowCustom: true,
   landingLines: null,
   resolvedVia: "fallback",
 };
@@ -64,6 +68,7 @@ export function resolveVariantProfile(raw: unknown): VariantProfile {
     carriers,
     library:
       r.library === "birthday" ? "birthday" : r.library === "none" ? "none" : "all",
+    allowCustom: r.allowCustom !== false,
     landingLines:
       Array.isArray(r.landingLines) && r.landingLines.length
         ? r.landingLines.map(String).slice(0, 4)

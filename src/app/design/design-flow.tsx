@@ -364,6 +364,16 @@ export default function DesignFlow({
     return () => ctrl.abort();
   }, []);
 
+  // No-custom storefronts have no choice screen — the library IS the
+  // graphic step. Runs on every visit to the bare step (incl. back-nav),
+  // so the choice cards never flash into view.
+  useEffect(() => {
+    if (!hydrated || variant.allowCustom) return;
+    if (step === "Graphic" && !graphic && graphicMode === null) {
+      goView("library");
+    }
+  }, [hydrated, step, graphic, graphicMode, variant.allowCustom, goView]);
+
   // Mirror gating inputs for the popstate handler (stale-closure-proof).
   const stateRef = useRef({ graphic, filling, date });
   useEffect(() => {
@@ -763,23 +773,25 @@ export default function DesignFlow({
                   </span>
                 )}
               </button>
-              <button
-                className="choice-card"
-                onClick={() => {
-                  setEditingDraft(null);
-                  goView("canvas");
-                }}
-              >
-                <span className="choice-title">Design your own</span>
-                <span className="choice-sub">
-                  Add your photos &amp; text on a blank canvas
-                </span>
-                {tiered && (
-                  <span className="choice-price plus">
-                    +{formatCents(pricing.graphicCustomUpchargeCents)}
+              {variant.allowCustom && (
+                <button
+                  className="choice-card"
+                  onClick={() => {
+                    setEditingDraft(null);
+                    goView("canvas");
+                  }}
+                >
+                  <span className="choice-title">Design your own</span>
+                  <span className="choice-sub">
+                    Add your photos &amp; text on a blank canvas
                   </span>
-                )}
-              </button>
+                  {tiered && (
+                    <span className="choice-price plus">
+                      +{formatCents(pricing.graphicCustomUpchargeCents)}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
           ) : (
             // The confirm screen IS the choice screen, with the current
@@ -849,20 +861,22 @@ export default function DesignFlow({
                       </span>
                     )}
                   </button>
-                  <button
-                    className="choice-card"
-                    onClick={() => {
-                      setEditingDraft(null);
-                      goView("canvas");
-                    }}
-                  >
-                    <span className="choice-title">Design your own</span>
-                    {tiered && (
-                      <span className="choice-price plus">
-                        +{formatCents(pricing.graphicCustomUpchargeCents)}
-                      </span>
-                    )}
-                  </button>
+                  {variant.allowCustom && (
+                    <button
+                      className="choice-card"
+                      onClick={() => {
+                        setEditingDraft(null);
+                        goView("canvas");
+                      }}
+                    >
+                      <span className="choice-title">Design your own</span>
+                      {tiered && (
+                        <span className="choice-price plus">
+                          +{formatCents(pricing.graphicCustomUpchargeCents)}
+                        </span>
+                      )}
+                    </button>
+                  )}
                   {tiered && graphicTier(graphic) === "library" && (
                     <button className="choice-card" onClick={pickClassic}>
                       <span className="choice-title">Use the Classic box</span>
@@ -878,11 +892,15 @@ export default function DesignFlow({
 
       {choosing && graphicMode === "library" && (
         <>
-          <p className="note">
-            <button className="btn mini" onClick={() => goView(null)}>
-              ← Back
-            </button>
-          </p>
+          {/* No-custom storefronts have no choice screen behind this — the
+              auto-open effect would bounce right back in. */}
+          {(variant.allowCustom || graphic) && (
+            <p className="note">
+              <button className="btn mini" onClick={() => goView(null)}>
+                ← Back
+              </button>
+            </p>
+          )}
           <GraphicLibrary
             restrict={variant.library === "all" ? null : variant.library}
             hubGraphics={hubGraphics}
