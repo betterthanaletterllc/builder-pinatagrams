@@ -128,13 +128,16 @@ export default async function Home({
         />
         {/* Full-screen scrollable pitch OVER the builder; "Build my Piñata"
             dismisses to the picker below. NO smash copy — the candy comes
-            out and the piñata gets kept. */}
-        <LandingOverlay
-          logo={catalog.landing?.logo}
-          images={landingImgs}
-          lines={variant.landingLines}
-          trust={trust}
-        />
+            out and the piñata gets kept. Storefronts whose own landing page
+            already pitched (campaign funnels) skip straight to the picker. */}
+        {variant.showLanding && (
+          <LandingOverlay
+            logo={catalog.landing?.logo}
+            images={landingImgs}
+            lines={variant.landingLines}
+            trust={trust}
+          />
+        )}
         <h1 className="visually-hidden">
           Piñatagrams — personalized mini piñatas, delivered
         </h1>

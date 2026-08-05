@@ -25,6 +25,9 @@ export type VariantProfile = {
   // false = no design-your-own here: the graphic step opens the picker
   // directly and checkout refuses custom lines.
   allowCustom: boolean;
+  // false = skip the landing overlay (this storefront's own landing page
+  // already made the pitch — first load = the body picker).
+  showLanding: boolean;
   landingLines: string[] | null;
   // "name" = preview override; "host" = matched a configured hostname;
   // "fallback" = no match. A fallback on a host that isn't the main site is
@@ -39,6 +42,7 @@ export const DEFAULT_VARIANT: VariantProfile = {
   carriers: ["fedex"],
   library: "all",
   allowCustom: true,
+  showLanding: true,
   landingLines: null,
   resolvedVia: "fallback",
 };
@@ -69,6 +73,7 @@ export function resolveVariantProfile(raw: unknown): VariantProfile {
     library:
       r.library === "birthday" ? "birthday" : r.library === "none" ? "none" : "all",
     allowCustom: r.allowCustom !== false,
+    showLanding: r.showLanding !== false,
     landingLines:
       Array.isArray(r.landingLines) && r.landingLines.length
         ? r.landingLines.map(String).slice(0, 4)
