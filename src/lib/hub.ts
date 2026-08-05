@@ -276,14 +276,18 @@ export function catalogUrl(opts?: {
   return `${HUB_URL}/api/public/catalog${qs ? `?${qs}` : ""}`;
 }
 
-/** Server-side catalog fetch; short cache so admin edits land in ~2 minutes. */
+/** Server-side catalog fetch. Deliberately UNCACHED here: the hub's edge
+ *  cache is the one and only cache layer. Stacking Next's data cache on top
+ *  made config edits (folder renames, variant flips) crawl — under sparse
+ *  traffic each stale-while-revalidate layer serves one-visit-old data, so
+ *  every page view advanced only one layer. One layer = edits land in the
+ *  hub cache window (~1–2 min), and a hub blip still degrades to the edge's
+ *  stale copy rather than an error. */
 export async function getCatalog(opts?: {
   host?: string | null;
   previewVariant?: string | null;
 }): Promise<HubCatalog> {
-  const res = await fetch(catalogUrl(opts), {
-    next: { revalidate: 60 },
-  });
+  const res = await fetch(catalogUrl(opts), { cache: "no-store" });
   if (!res.ok) throw new Error(`hub catalog: HTTP ${res.status}`);
   return res.json();
 }

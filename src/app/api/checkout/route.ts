@@ -237,10 +237,13 @@ export async function POST(req: Request) {
       ? body.previewVariant
       : null;
 
-  // Live catalog: styles must exist and be in stock at order time.
+  // Live catalog: styles must exist and be in stock at order time. Money
+  // path = NO builder-side cache — the hub's edge cache is the only layer,
+  // so a config edit (price knob, folder grant, variant flip) can't serve
+  // a stale charge from a second stacked cache.
   const catalogRes = await fetch(
     catalogUrl({ host: reqHost, previewVariant }),
-    { next: { revalidate: 60 } },
+    { cache: "no-store" },
   );
   if (!catalogRes.ok) {
     return NextResponse.json(
@@ -470,9 +473,10 @@ export async function POST(req: Request) {
   }
 
   // Server-side price: single-destination B2C — per-unit product + shipping.
+  // Same no-stacked-cache rule as the catalog: this number becomes a charge.
   const priceRes = await fetch(
     `${HUB_URL}/api/public/price?qty=1&fill=filled&bodyType=standard&graphicType=custom&mode=individual&carrier=standard`,
-    { next: { revalidate: 300 } },
+    { cache: "no-store" },
   );
   if (!priceRes.ok) {
     return NextResponse.json(
