@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import Image from "next/image";
+import Link from "next/link";
 import {
   getCatalog,
   getReviews,
@@ -11,6 +12,7 @@ import {
 import { normalizeHost, resolveVariantProfile } from "@/lib/variant";
 import BuilderPreview from "./builder-preview";
 import LandingOverlay from "./landing-overlay";
+import Stars from "./stars";
 import VariantBoot from "./variant-boot";
 
 // Always render against the live hub — no build-time snapshot yet, and the
@@ -39,20 +41,6 @@ async function b2cPrice(): Promise<HubPrice | null> {
   } catch {
     return null;
   }
-}
-
-/** Star row (e.g. 4.8 → 96%-wide gold overlay on gray glyphs). Decorative —
- *  the number is always printed beside it, so screen readers skip the stars. */
-function Stars({ rating }: { rating: number }) {
-  const pct = Math.max(0, Math.min(5, rating)) * 20;
-  return (
-    <span className="stars" aria-hidden="true">
-      <span className="stars-bg">★★★★★</span>
-      <span className="stars-fill" style={{ width: `${pct}%` }}>
-        ★★★★★
-      </span>
-    </span>
-  );
 }
 
 // ~200-char preview of a review body, cut at a word break. Plain text in,
@@ -234,6 +222,13 @@ export default async function Home({
                 );
               })}
             </div>
+            {/* click-through to the full explore surface (/reviews) */}
+            <p className="reviews-all-row">
+              <Link className="reviews-all" href="/reviews">
+                See all {reviews.aggregate.count.toLocaleString("en-US")}{" "}
+                reviews
+              </Link>
+            </p>
           </section>
         )}
       </main>

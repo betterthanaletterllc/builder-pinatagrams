@@ -305,8 +305,12 @@ export type HubReview = {
   body: string;
   verified: boolean;
   incentivized: boolean; // true → visible FTC disclosure badge REQUIRED
+  reply: string | null; // merchant reply — shop-authored, customer-safe
   media: { url: string; kind: string }[];
   createdAt: string;
+  // Provenance for the pooled corpus: what this reviewer actually bought.
+  // Render nothing when null — never a generic product name.
+  purchased: { title: string; bodyStyleId: string | null } | null;
 };
 
 export type HubReviews = {
@@ -319,12 +323,18 @@ export type HubReviews = {
 };
 
 /** Server-side reviews fetch; same base URL + short cache as the catalog.
- *  Null on ANY failure — review UI is a bonus, the page renders without it. */
+ *  Null on ANY failure — review UI is a bonus, the page renders without it.
+ *  `offset` pages through the newest-first corpus (hub caps limit at 100);
+ *  aggregate/scope always describe the WHOLE corpus, not the page. */
 export async function getReviews(opts?: {
   limit?: number;
+  offset?: number;
 }): Promise<HubReviews | null> {
   try {
-    const qs = opts?.limit ? `?limit=${opts.limit}` : "";
+    const q = new URLSearchParams();
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    if (opts?.offset) q.set("offset", String(opts.offset));
+    const qs = q.size ? `?${q}` : "";
     // 4s cap: reviews are optional, so a hung hub must time out into the null
     // fallback instead of blocking the homepage render.
     const res = await fetch(`${HUB_URL}/api/public/reviews${qs}`, {
