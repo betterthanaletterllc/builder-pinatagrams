@@ -244,6 +244,9 @@ export default function DesignFlow({
 
   const goStep = useCallback(
     (s: Step) => {
+      // The body-style switcher is transient chrome, not a step: navigating
+      // anywhere while it's open means "keep this body" — collapse it.
+      setSwitcherOpen(false);
       setStepState(s);
       setGraphicModeState(null);
       writeUrl(s, null, true);
@@ -253,6 +256,7 @@ export default function DesignFlow({
 
   const goView = useCallback(
     (v: "library" | "canvas" | null) => {
+      setSwitcherOpen(false);
       setGraphicModeState(v);
       setStepState("Graphic");
       writeUrl("Graphic", v, true);
@@ -331,6 +335,7 @@ export default function DesignFlow({
       let clamped = STEPS[Math.max(0, idx)];
       // Back/forward through history skips over a hidden Add-ons step.
       if (clamped === "Add-ons" && !addonsApplyTo(s.filling)) clamped = "Filling";
+      setSwitcherOpen(false);
       setStepState(clamped);
       const view = p.get("view");
       setGraphicModeState(
