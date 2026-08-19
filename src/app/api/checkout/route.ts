@@ -709,7 +709,22 @@ export async function POST(req: Request) {
         // Forensics: which storefront sold this, under which profile shape,
         // priced from which catalog snapshot — orders self-document their
         // config epoch (a mid-test knob edit is visible per order).
-        note: `builder @ ${reqHost || "unknown-host"} · variant ${variant.name} (${variant.pricing}/${variant.carriers.join("+")}) · catalog ${catalog.asOf}`,
+        //
+        // ⚠ NEVER put this on the order NOTE. Paper falls back to the order
+        // note when a line carries no `message` attribute (findItemMessage in
+        // apps/paper/src/features/orders/utils.ts), so a note here gets
+        // PRINTED as the recipient's message on no-message piñatas. Order
+        // custom attributes are outside that fallback and still survive the
+        // draft → order completion (metafields on a draft order do not).
+        // Underscore keys keep them out of customer-facing surfaces.
+        customAttributes: [
+          { key: "_builderHost", value: reqHost || "unknown-host" },
+          {
+            key: "_builderVariant",
+            value: `${variant.name} (${variant.pricing}/${variant.carriers.join("+")})`,
+          },
+          { key: "_builderCatalog", value: catalog.asOf },
+        ],
         shippingAddress: {
           firstName,
           lastName,
