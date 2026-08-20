@@ -2408,12 +2408,27 @@ body:has(.bottom-stack) .site-footer {
     margin: 0;
   }
 
+  /* The summary card below is absolutely placed, so it contributes ZERO
+     layout height and nothing downstream reserves room for it — left
+     unchecked it hangs straight over the footer (it overhung the grid by
+     ~174px and landed 54px inside the footer, occluding the policy links).
+     Padding on the GRID is the right lever: it sits outside the grid rows,
+     so it pushes the footer clear WITHOUT changing the row height that the
+     left panel centers against. Sized for the tallest card — a two-line
+     title (~207px) plus its 12px offset — on top of the ~120px main/footer
+     gap that already exists. If the card ever gains a row, re-measure:
+     clearance is (this value + that gap) - (12 + card height). */
+  .flow-grid:has(.desk-summary) {
+    padding-bottom: 140px;
+  }
+
   .desk-summary {
     /* Absolutely placed just under the preview inside the sticky rail, so it
        rides along under the piñata when scrolling BUT doesn't add to the
        rail's layout height — that keeps the grid row height equal to the
        preview alone, so the left selection panel centers against the actual
-       preview (not preview + this card). */
+       preview (not preview + this card). The grid's padding-bottom above is
+       what keeps that zero-height trick from colliding with the footer. */
     position: absolute;
     top: calc(100% + 12px);
     left: 0;
