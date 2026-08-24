@@ -7,6 +7,7 @@ import "./globals.css";
 import logo from "../../public/pinatagrams-logo.png";
 import CartLink from "./cart-link";
 import Analytics from "./analytics";
+import DiscountCapture from "./discount-capture";
 
 // Brand fonts per design-system/colors_and_type.css: Arbotek Ultra for
 // display/hero titles, Poppins for headings + body.
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body className={`${poppins.variable} ${arbotek.variable}`}>
         <Analytics />
+        <DiscountCapture />
         <header className="topbar">
           <div className="topbar-inner">
             <a href="/" className="brand-wrap">

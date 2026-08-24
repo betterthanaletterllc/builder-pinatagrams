@@ -27,13 +27,16 @@ import {
   addressKey,
   cartCarrier,
   clearPendingOrder,
+  discountParamCode,
   EMPTY_ADDRESS,
   graphicTierCents,
   loadCart,
+  loadDiscountCodes,
   loadPendingOrder,
   rememberAddress,
   resolveFillings,
   saveCart,
+  saveDiscountCodes,
   saveDraft,
   savePendingOrder,
   type CartLine,
@@ -51,15 +54,6 @@ import {
 import { track, trackBeginCheckout } from "@/lib/analytics";
 
 const MAX_QTY = 25;
-const DISCOUNT_KEY = "pinatagrams-builder-discount";
-
-// Up to two codes stack (one order + one free-shipping). Persist just the code
-// strings (re-resolved on load) as a JSON array; a bare legacy string is read
-// as a single code so pre-stacking carts still restore their discount.
-const persistCodes = (codes: string[]) => {
-  if (codes.length) localStorage.setItem(DISCOUNT_KEY, JSON.stringify(codes));
-  else localStorage.removeItem(DISCOUNT_KEY);
-};
 
 // The whole cart ships to ONE address (one order, one invoice). Editing it
 // here rewrites every line.
@@ -250,22 +244,15 @@ export default function CartView() {
     // Restore a previously applied code (survives a cart refresh). If it no
     // longer resolves (deleted/deactivated since), self-heal: clear the
     // field + storage so a dead code can't sit there looking applied.
-    const saved = localStorage.getItem(DISCOUNT_KEY);
-    if (saved) {
-      // New format is a JSON array (starts "["); anything else is a legacy
-      // bare code string (pre-stacking) — treat it literally so a digit- or
-      // keyword-like code can't be mangled by JSON.parse (e.g. "1E2" -> 100).
-      let codes: string[];
-      if (saved.startsWith("[")) {
-        try {
-          const parsed = JSON.parse(saved);
-          codes = Array.isArray(parsed) ? parsed.map(String) : [];
-        } catch {
-          codes = [];
-        }
-      } else {
-        codes = [saved];
-      }
+    // A ?discount=CODE riding the URL (QR/marketing link straight to the
+    // cart) merges in FIRST — read here directly because this child effect
+    // runs before the layout's capture effect can stash it.
+    const fromUrl = discountParamCode();
+    const codes = [
+      ...(fromUrl ? [fromUrl] : []),
+      ...loadDiscountCodes().filter((c) => c !== fromUrl),
+    ];
+    if (codes.length) {
       Promise.all(codes.slice(0, 2).map((c) => resolveDiscount(c))).then((rs) => {
         // If the shopper already applied/removed a code while this resolved,
         // theirs wins — don't overwrite it with the restored set.
@@ -278,7 +265,7 @@ export default function CartView() {
             !!d && !seen.has(d.kind) && !!seen.add(d.kind),
         );
         setDiscounts(live);
-        persistCodes(live.map((d) => d.code));
+        saveDiscountCodes(live.map((d) => d.code));
       });
     }
     fetch(
@@ -409,7 +396,7 @@ export default function CartView() {
     userTouched.current = true;
     const next = [...discounts, d];
     setDiscounts(next);
-    persistCodes(next.map((x) => x.code));
+    saveDiscountCodes(next.map((x) => x.code));
     setCodeInput("");
   };
 
@@ -417,7 +404,7 @@ export default function CartView() {
     userTouched.current = true;
     const next = discounts.filter((d) => d.code !== code);
     setDiscounts(next);
-    persistCodes(next.map((d) => d.code));
+    saveDiscountCodes(next.map((d) => d.code));
     setDiscountMsg(null);
   };
 
@@ -614,7 +601,7 @@ export default function CartView() {
               (d) => !(d.kind === "order" && d.type === "fixed"),
             );
             setDiscounts(kept);
-            persistCodes(kept.map((d) => d.code));
+            saveDiscountCodes(kept.map((d) => d.code));
             setDiscountMsg(
               `${fixed.map((d) => d.code).join(", ")} applied to the order(s) already created.`,
             );

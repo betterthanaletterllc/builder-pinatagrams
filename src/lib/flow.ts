@@ -236,6 +236,59 @@ export function newLineId(): string {
 }
 
 /* ---------------------------------------------------------------------------
+ * Applied discount codes — persist so a code survives until checkout. The
+ * cart re-resolves these against the hub on load (dead codes self-heal out).
+ * Marketing/QR links land with ?discount=CODE; captureDiscountParam stashes
+ * it here so the cart applies it whenever the shopper gets there.
+ * ------------------------------------------------------------------------- */
+
+const DISCOUNT_KEY = "pinatagrams-builder-discount";
+
+/** Saved code strings. New format is a JSON array (starts "["); anything
+ *  else is a legacy bare code string (pre-stacking) — treated literally so a
+ *  digit- or keyword-like code can't be mangled by JSON.parse ("1E2" → 100). */
+export function loadDiscountCodes(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem(DISCOUNT_KEY);
+    if (!saved) return [];
+    if (!saved.startsWith("[")) return [saved];
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDiscountCodes(codes: string[]): void {
+  try {
+    if (codes.length) localStorage.setItem(DISCOUNT_KEY, JSON.stringify(codes));
+    else localStorage.removeItem(DISCOUNT_KEY);
+  } catch {}
+}
+
+/** The ?discount=CODE riding the current URL, normalized exactly like the
+ *  cart's own input (trimmed, upper-cased, capped at checkout's 64-char
+ *  limit so it can't truncate into a different code), or null. */
+export function discountParamCode(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = new URLSearchParams(window.location.search).get("discount");
+  const code = raw?.trim().slice(0, 64).toUpperCase();
+  return code || null;
+}
+
+/** Stash the ?discount= code so it's still there when the shopper reaches
+ *  the cart. Newest first: the cart keeps one code per kind and the first
+ *  wins, so a freshly scanned code beats an older saved one of its kind. */
+export function captureDiscountParam(): void {
+  const code = discountParamCode();
+  if (!code) return;
+  saveDiscountCodes(
+    [code, ...loadDiscountCodes().filter((c) => c !== code)].slice(0, 2),
+  );
+}
+
+/* ---------------------------------------------------------------------------
  * Pending order — a Shopify draft created at checkout but NOT yet paid. The
  * cart is NOT cleared on checkout, so hitting "back" from the hosted invoice
  * lands the customer on their cart intact; this record just adds a "Resume
