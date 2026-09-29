@@ -932,7 +932,10 @@ export default function CartView() {
         {pendings.length === 0 && <p>Nothing here yet.</p>}
         {!storageOk && pendings.length === 0 && (
           <p className="note">
-            Added a piñata and it isn&apos;t here? {STORAGE_PROBLEM_COPY.blocked}
+            Added a piñata and it isn&apos;t here? Your browser is blocking
+            storage, so the cart can&apos;t carry it between pages — turn off
+            private browsing (or open this page in Safari or Chrome) and try
+            again.
           </p>
         )}
         <Link className={"btn" + (pendings.length ? "" : " primary")} href="/">
