@@ -15,6 +15,7 @@ import {
   addressKey,
   CART_EVENT,
   cartCarrier,
+  cartSaveProblem,
   CLASSIC_GRAPHIC,
   clearDraft,
   EMPTY_ADDRESS,
@@ -29,6 +30,7 @@ import {
   rememberAddress,
   saveCart,
   saveDraft,
+  STORAGE_PROBLEM_COPY,
   type CartLine,
   type DeliveryAddress,
   type DesignAssets,
@@ -1315,11 +1317,14 @@ export default function DesignFlow({
       : [...lines, line];
     const next = switching ? merged.map((l) => ({ ...l, carrier })) : merged;
     if (!saveCart(next)) {
-      // Said beside THIS button, on whichever step it was tapped.
+      // Said beside THIS button, on whichever step it was tapped. A blocked
+      // browser (private mode) is not a design that's "too large".
       setCtaMsg(
-        graphic.type === "custom"
-          ? "This design is too large to save — try fewer or smaller photos."
-          : "Your cart is too full to add this piñata — custom designs with photos take the most room; remove one from your cart and try again.",
+        cartSaveProblem() === "blocked"
+          ? STORAGE_PROBLEM_COPY.blocked
+          : graphic.type === "custom"
+            ? "This design is too large to save — try fewer or smaller photos."
+            : STORAGE_PROBLEM_COPY.full,
       );
       return;
     }
@@ -1461,7 +1466,9 @@ export default function DesignFlow({
     const lines = loadCart();
     if (!saveCart(lines.map((l) => ({ ...l, address: changingAddr })))) {
       setCtaMsg(
-        "We couldn't save that address — your cart storage is full. Try removing a custom design from your cart.",
+        cartSaveProblem() === "blocked"
+          ? STORAGE_PROBLEM_COPY.blocked
+          : "We couldn't save that address — your cart storage is full. Try removing a custom design from your cart.",
       );
       return;
     }
