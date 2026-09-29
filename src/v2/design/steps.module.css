@@ -481,7 +481,7 @@
 
 .street.street :global(.ffield input:focus) {
   outline: 2px solid var(--pg-peri-dark);
-  outline-offset: 1px;
+  outline-offset: 2px;
   border-color: var(--pg-peri-dark);
 }
 
@@ -653,8 +653,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
-  padding: 0 4px 0 12px;
+  min-height: 44px;
+  padding: 0 0 0 12px;
   border-radius: var(--pg-r-pill);
   background: var(--pg-success-tint);
   color: var(--pg-success-text);
@@ -669,8 +669,8 @@
 .codeChip button {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border: 0;
   border-radius: 50%;
   background: transparent;

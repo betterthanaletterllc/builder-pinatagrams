@@ -378,7 +378,7 @@
 
 .input:focus {
   outline: 2px solid var(--pg-peri-dark);
-  outline-offset: 1px;
+  outline-offset: 2px;
   border-color: var(--pg-peri-dark);
 }
 
