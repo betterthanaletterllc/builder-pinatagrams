@@ -70,6 +70,10 @@ export default async function DesignPageV2({
   const strips = occasionStrips(variant);
   const hubList = hubStrip(hubGraphics);
   const linked = designParam ? resolveDesign(designParam, variant, hubGraphics) : null;
+  // A linked design brings its own occasion: the strip and the card's
+  // starters follow it — also over a piñata already in progress, so a
+  // Halloween ad never lands on the Birthday chip and birthday starters.
+  const designOccasion = linked ? occasionForDesign(linked, strips) : null;
   const graphic = linked ?? defaultGraphic(variant, strips, explicitOccasion, hubList);
   // The filmstrip opens on the asked-for occasion, else the design's own,
   // else the first chip (Birthday — the #1 occasion).
@@ -91,7 +95,7 @@ export default async function DesignPageV2({
     graphic,
     graphicSource: linked ? "deeplink" : "default",
     occasion,
-    occasionSource: explicitOccasion ? "deeplink" : "default",
+    occasionSource: explicitOccasion || designOccasion ? "deeplink" : "default",
     filling: filling?.label ?? "Candy",
     fillingAuto: true,
   };

@@ -7,8 +7,10 @@ import s from "./sheet.module.css";
 /**
  * Sheet = a native <dialog> opened with showModal(): the browser supplies
  * the focus trap, Esc-to-close, inertness of the page behind and the top
- * layer. Bottom sheet under 768px, centered panel above. Callers keep ONE
- * sheet state for the whole flow, so sheets never stack.
+ * layer. Under 768px it slides up from the bottom edge — `full` sheets
+ * (browsing a set of options) take the whole screen; above 768px it's a
+ * centered panel. Callers keep ONE sheet state for the whole flow, so sheets
+ * never stack.
  *
  * Children mount only while open — the library and editor chunks load on
  * intent, never with the page.
@@ -20,6 +22,7 @@ export default function Sheet({
   children,
   footer,
   wide = false,
+  full = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -27,6 +30,7 @@ export default function Sheet({
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  full?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -50,17 +54,35 @@ export default function Sheet({
     const root = document.documentElement;
     const prevOverflow = root.style.overflow;
     root.style.overflow = "hidden";
+    // A full-screen sheet looks like a page, so the phone's Back (the iOS
+    // edge swipe, which has no close-watcher) must close it — not leave the
+    // step or the site. It gets its own history entry (same URL); Back pops
+    // it, and any other way of closing takes the entry back off.
+    let entry = false;
+    const onPop = () => {
+      if (entry && !window.history.state?.pgSheet) {
+        entry = false;
+        onCloseRef.current();
+      }
+    };
+    if (full) {
+      window.history.pushState({ ...window.history.state, pgSheet: true }, "");
+      entry = true;
+      window.addEventListener("popstate", onPop);
+    }
     return () => {
+      window.removeEventListener("popstate", onPop);
+      if (entry && window.history.state?.pgSheet) window.history.back();
       root.style.overflow = prevOverflow;
       if (d.open) d.close();
       opener?.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, full]);
 
   return (
     <dialog
       ref={ref}
-      className={`${s.sheet}${wide ? ` ${s.wide}` : ""}`}
+      className={`${s.sheet}${wide ? ` ${s.wide}` : ""}${full ? ` ${s.full}` : ""}`}
       aria-labelledby={titleId}
       // Esc (native cancel → close) and backdrop taps report back up so the
       // caller's state stays the single source of truth.

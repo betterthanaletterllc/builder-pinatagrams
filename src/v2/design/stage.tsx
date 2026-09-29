@@ -26,9 +26,9 @@ export function messageCardFor(g: GraphicChoice | null): string | null {
 /**
  * The Stage: the real box photo with the chosen art composited on it
  * (BoxPreview, shared with v1), on every step. The Card step opens the box
- * to show the message printed inside the lid. Step 1 adds the body chip
- * ("Googly · Change") and the zoom control across the top — the label at
- * the bottom stays clear.
+ * to show the message printed inside the lid. Step 1 adds a band UNDER the
+ * photo — the body chip ("Googly · Change") and the zoom control — so
+ * nothing ever sits on the piñata or the box.
  */
 export default function Stage({
   step,
@@ -57,60 +57,72 @@ export default function Stage({
   // Session replay: the gift message printed on the flap is masked, and a
   // shopper's own design (their photos) is never recorded.
   const privateArt = graphic?.type === "custom";
+  const showBody = !loading && step === "design" && !!style && !!onBody;
+  const showZoom = !loading && step === "design" && !!graphic && !!onZoom;
   return (
-    <div className={`${f.stage}${privateArt ? " ph-no-capture" : ""}`} data-step={step}>
-      {loading ? (
-        <Skeleton width="62%" height="78%" radius={16} />
-      ) : style ? (
-        <div className={f.stageBox} data-mode={mode} data-ph-mask>
-          <BoxPreview
-            // A new body resets the preview's image-fallback state.
-            key={style.id}
-            styleName={style.name}
-            boxImageUrl={style.boxImageUrl}
-            logoZone={style.logoZone}
-            artUrl={previewArt(graphic)}
-            message={message}
-            filling={filling}
-            deliveryDate={null}
-            mode={mode}
-            variant="bare"
-            interiorUrl={box?.interiorUrl}
-            messageZone={box?.messageZone}
-            messageCard={messageCardFor(graphic)}
-            messagePadding={box?.messageCardPadding}
-            pinataSrc={style.cutoutUrl ?? `/pinatas/${style.id}.png`}
-            pinataFallback={style.imageUrl}
-            pinataZone={style.pinataZone ?? null}
-          />
-        </div>
-      ) : (
-        <div className={f.stageEmpty}>{empty}</div>
-      )}
-
-      {!loading && step === "design" && style && onBody && (
-        <button type="button" className={f.bodyChip} onClick={onBody} aria-haspopup="dialog">
-          <span className={f.srOnly}>Piñata style: </span>
-          <span className={f.bodyChipArt} aria-hidden="true">
-            <Image
-              src={style.cutoutUrl ?? `/pinatas/${style.id}.png`}
-              alt=""
-              width={64}
-              height={64}
-              sizes="32px"
+    <div
+      className={`${f.stage}${privateArt ? " ph-no-capture" : ""}`}
+      data-step={step}
+      data-bar={showBody || showZoom || undefined}
+    >
+      <div className={f.stageView}>
+        {loading ? (
+          <Skeleton width="62%" height="78%" radius={16} />
+        ) : style ? (
+          <div className={f.stageBox} data-mode={mode} data-ph-mask>
+            <BoxPreview
+              // A new body resets the preview's image-fallback state.
+              key={style.id}
+              styleName={style.name}
+              boxImageUrl={style.boxImageUrl}
+              logoZone={style.logoZone}
+              artUrl={previewArt(graphic)}
+              message={message}
+              filling={filling}
+              deliveryDate={null}
+              mode={mode}
+              variant="bare"
+              interiorUrl={box?.interiorUrl}
+              messageZone={box?.messageZone}
+              messageCard={messageCardFor(graphic)}
+              messagePadding={box?.messageCardPadding}
+              pinataSrc={style.cutoutUrl ?? `/pinatas/${style.id}.png`}
+              pinataFallback={style.imageUrl}
+              pinataZone={style.pinataZone ?? null}
             />
-          </span>
-          <strong>{style.name}</strong>
-          <span aria-hidden="true">·</span>
-          <span className={f.bodyChipChange}>Change</span>
-        </button>
-      )}
-      {!loading && step === "design" && graphic && onZoom && (
-        <button type="button" className={f.zoomBtn} onClick={onZoom} aria-haspopup="dialog">
-          <ZoomIn size={18} />
-          <span className={f.zoomMobile}>Zoom in on the label</span>
-          <span className={f.zoomDesk}>8 × 3.9 in label · Zoom</span>
-        </button>
+          </div>
+        ) : (
+          <div className={f.stageEmpty}>{empty}</div>
+        )}
+      </div>
+
+      {(showBody || showZoom) && (
+        <div className={f.stageBar}>
+          {showBody && style && (
+            <button type="button" className={f.bodyChip} onClick={onBody} aria-haspopup="dialog">
+              <span className={f.srOnly}>Piñata style: </span>
+              <span className={f.bodyChipArt} aria-hidden="true">
+                <Image
+                  src={style.cutoutUrl ?? `/pinatas/${style.id}.png`}
+                  alt=""
+                  width={64}
+                  height={64}
+                  sizes="32px"
+                />
+              </span>
+              <strong>{style.name}</strong>
+              <span aria-hidden="true">·</span>
+              <span className={f.bodyChipChange}>Change</span>
+            </button>
+          )}
+          {showZoom && (
+            <button type="button" className={f.zoomBtn} onClick={onZoom} aria-haspopup="dialog">
+              <ZoomIn size={18} />
+              <span className={f.zoomMobile}>Zoom</span>
+              <span className={f.zoomDesk}>8 × 3.9 in label · Zoom</span>
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

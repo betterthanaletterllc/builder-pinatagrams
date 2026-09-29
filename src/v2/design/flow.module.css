@@ -57,8 +57,10 @@
   cursor: pointer;
 }
 
-.iconBtn:hover {
-  background: var(--pg-tint);
+@media (hover: hover) {
+  .iconBtn:hover {
+    background: var(--pg-tint);
+  }
 }
 
 .iconBtn:focus-visible,
@@ -154,8 +156,10 @@
   cursor: default;
 }
 
-.stepBtn:not(:disabled):hover {
-  color: var(--pg-navy);
+@media (hover: hover) {
+  .stepBtn:not(:disabled):hover {
+    color: var(--pg-navy);
+  }
 }
 
 .stepBtn[aria-current="step"] {
@@ -190,8 +194,29 @@
   width: 100%;
 }
 
+/* Phones: the Stage column dissolves into the layout (display: contents), so
+   Step 1's Stage can stay pinned under the header while the designs scroll
+   beneath it — a pick always shows on the box. The strip above scrolls away. */
 .stageCol {
+  display: contents;
+}
+
+.stageCol > ul {
+  margin: 8px 16px 0;
+}
+
+/* An opaque page-coloured frame: options scrolling under the pinned Stage
+   never show around its rounded corners. */
+.stagePin {
   padding: 8px 16px 0;
+  background: var(--pg-page);
+}
+
+.stagePin[data-step="design"] {
+  position: sticky;
+  top: var(--pg-header-h, 56px);
+  z-index: 20;
+  padding-bottom: 8px;
 }
 
 .panel {
@@ -210,18 +235,20 @@
 
 .stage {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
   height: 38svh;
   min-height: 220px;
   overflow: hidden;
   border-radius: var(--pg-r-stage);
   background: var(--pg-white);
   view-transition-name: pg-stage;
-  /* The box sizes itself from the Stage's width AND height (cqw/cqh), so it
-     scales to fit. (A percentage height here never resolved: the frame
-     took the full width and the overflow cropped the label off.) */
-  container-type: size;
+}
+
+/* Step 1: the photo plus the band under it (body chip + zoom). */
+.stage[data-step="design"] {
+  height: calc(32svh + 56px);
+  min-height: 250px;
 }
 
 .stage[data-step="card"] {
@@ -236,6 +263,19 @@
 .stage[data-step="deliver"] {
   height: 24svh;
   min-height: 160px;
+}
+
+/* The photo area. The box sizes itself from THIS box's width and height
+   (cqw/cqh), so it scales to fit. (A percentage height never resolved here:
+   the frame took the full width and the overflow cropped the label off.) */
+.stageView {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  container-type: size;
 }
 
 /* The closed-box photo is square: as large as fits both ways. The label at
@@ -277,28 +317,35 @@
   border-radius: 0;
 }
 
+/* Step 1's band under the photo: nothing ever sits on the piñata or box. */
+.stageBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 6px;
+}
+
 .bodyChip {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  /* leaves the top-right corner to the zoom button */
-  max-width: calc(100% - 82px);
+  min-width: 0;
   min-height: 44px;
   padding: 0 14px 0 6px;
   border: 1px solid var(--pg-line-strong);
   border-radius: var(--pg-r-pill);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--pg-white);
   color: var(--pg-navy);
   font: 500 14px/1.2 var(--pg-font);
   cursor: pointer;
 }
 
-.bodyChip:hover {
-  border-color: var(--pg-navy);
+@media (hover: hover) {
+  .bodyChip:hover {
+    border-color: var(--pg-navy);
+  }
 }
 
 .bodyChipArt {
@@ -331,41 +378,27 @@
   text-underline-offset: 2px;
 }
 
-/* Top-right, off the label: the bottom of the box is what's being chosen.
-   Phones: a round icon button (its name is visually hidden); desktop: a
-   pill with the label size. */
+/* Phones: "Zoom"; desktop: the label size too. */
 .zoomBtn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 2;
-  display: inline-grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
   border: 1px solid var(--pg-line-strong);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.94);
+  border-radius: var(--pg-r-pill);
+  background: var(--pg-white);
   color: var(--pg-text-2);
   font: 500 14px/1 var(--pg-font);
   cursor: pointer;
 }
 
-.zoomBtn:hover {
-  color: var(--pg-navy);
-  border-color: var(--pg-navy);
-}
-
-.zoomMobile {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
+@media (hover: hover) {
+  .zoomBtn:hover {
+    color: var(--pg-navy);
+    border-color: var(--pg-navy);
+  }
 }
 
 .zoomDesk {
@@ -563,6 +596,7 @@ button.barPrice {
     margin: 0 auto;
   }
 
+  /* the whole column is the sticky one here (it already fills the screen) */
   .stageCol {
     position: sticky;
     top: var(--pg-header-h);
@@ -571,6 +605,21 @@ button.barPrice {
     gap: 12px;
     height: calc(100svh - var(--pg-header-h));
     padding: 24px;
+  }
+
+  .stageCol > ul {
+    margin: 0;
+  }
+
+  .stagePin,
+  .stagePin[data-step="design"] {
+    position: static;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    background: none;
   }
 
   .stage,
@@ -593,16 +642,8 @@ button.barPrice {
     transform: none;
   }
 
-  .bodyChip {
-    max-width: calc(100% - 260px);
-  }
-
-  .zoomBtn {
-    display: inline-flex;
-    gap: 6px;
-    width: auto;
-    padding: 0 14px;
-    border-radius: var(--pg-r-pill);
+  .stageBar {
+    padding: 4px 12px 12px;
   }
 
   .zoomMobile {

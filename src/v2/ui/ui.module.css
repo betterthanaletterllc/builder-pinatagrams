@@ -45,8 +45,10 @@
   color: #fff;
 }
 
-.primary:hover {
-  background: var(--pg-navy-hover);
+@media (hover: hover) {
+  .primary:hover {
+    background: var(--pg-navy-hover);
+  }
 }
 
 .secondary {
@@ -55,8 +57,10 @@
   border-color: var(--pg-navy);
 }
 
-.secondary:hover {
-  background: var(--pg-tint);
+@media (hover: hover) {
+  .secondary:hover {
+    background: var(--pg-tint);
+  }
 }
 
 .link {
@@ -72,8 +76,10 @@
   text-underline-offset: 3px;
 }
 
-.link:hover {
-  color: var(--pg-navy);
+@media (hover: hover) {
+  .link:hover {
+    color: var(--pg-navy);
+  }
 }
 
 .lg {
@@ -147,8 +153,10 @@
   inset: -5px 0;
 }
 
-.chip:hover {
-  border-color: var(--pg-navy);
+@media (hover: hover) {
+  .chip:hover {
+    border-color: var(--pg-navy);
+  }
 }
 
 .chip[aria-pressed="true"] {
@@ -183,8 +191,10 @@
     background-color 0.15s ease;
 }
 
-.option:hover {
-  border-color: var(--pg-navy);
+@media (hover: hover) {
+  .option:hover {
+    border-color: var(--pg-navy);
+  }
 }
 
 /* the one offer that must never be missed (Double Candy): heavier edge */
@@ -218,8 +228,10 @@
   border-style: dashed;
 }
 
-.option[data-disabled="true"]:hover {
-  border-color: var(--pg-line-strong);
+@media (hover: hover) {
+  .option[data-disabled="true"]:hover {
+    border-color: var(--pg-line-strong);
+  }
 }
 
 .optionInput {

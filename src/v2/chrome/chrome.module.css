@@ -55,8 +55,10 @@
   cursor: pointer;
 }
 
-.cart:hover {
-  background: var(--pg-tint);
+@media (hover: hover) {
+  .cart:hover {
+    background: var(--pg-tint);
+  }
 }
 
 .count {
@@ -105,8 +107,10 @@
   border-radius: 2px;
 }
 
-.footer a:hover {
-  color: var(--pg-navy);
+@media (hover: hover) {
+  .footer a:hover {
+    color: var(--pg-navy);
+  }
 }
 
 .legal {
@@ -119,6 +123,30 @@
   display: inline-flex;
   align-items: center;
   min-height: 44px;
+}
+
+/* The /design journey on a phone: a compact footer under the sticky bar, so
+   at the very end of the page the last options still show beneath Step 1's
+   pinned Stage instead of sliding under it. */
+@media (max-width: 1023px) {
+  :global(body:has([data-pg-journey])) .footer {
+    margin-top: 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  :global(body:has([data-pg-journey])) .footInner {
+    gap: 2px 16px;
+  }
+
+  :global(body:has([data-pg-journey])) .legal {
+    gap: 0 14px;
+  }
+
+  :global(body:has([data-pg-journey])) .legal a {
+    min-height: 32px;
+  }
 }
 
 /* --- pending payment banner ------------------------------------------------ */

@@ -66,6 +66,7 @@ export function BodySheet({
       open={open}
       onClose={onClose}
       title="Choose your piñata"
+      full
       footer={
         <Button block onClick={onClose}>
           Done
@@ -185,7 +186,7 @@ export function LibrarySheet({
   onPick: (g: GraphicChoice) => void;
 }) {
   return (
-    <Sheet open={open} onClose={onClose} title="All designs" wide>
+    <Sheet open={open} onClose={onClose} title="All designs" wide full>
       <div className={s.library}>
         <GraphicLibrary
           restrict={restrict}

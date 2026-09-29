@@ -29,8 +29,13 @@
   background: rgba(24, 13, 56, 0.5);
 }
 
+/* Up from the bottom edge, like a native sheet. */
 .sheet[open] {
-  animation: slideUp 0.22s ease-out;
+  animation: slideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sheet[open]::backdrop {
+  animation: backdropIn 0.32s ease-out;
 }
 
 .head {
@@ -74,8 +79,10 @@
   cursor: pointer;
 }
 
-.close:hover {
-  background: var(--pg-tint);
+@media (hover: hover) {
+  .close:hover {
+    background: var(--pg-tint);
+  }
 }
 
 .close:focus-visible {
@@ -102,6 +109,23 @@
   /* the library: as tall as the phone allows */
   max-height: 96svh;
   height: 96svh;
+}
+
+/* Browsing a set of options (piñata styles, the library): the whole screen
+   on a phone. */
+.full {
+  inset: 0;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+
+.full .head {
+  padding-top: calc(8px + env(safe-area-inset-top));
+}
+
+.full .grip {
+  display: none;
 }
 
 @media (min-width: 768px) {
@@ -131,8 +155,13 @@
 
 @keyframes slideUp {
   from {
-    transform: translateY(24px);
-    opacity: 0.4;
+    transform: translateY(100%);
+  }
+}
+
+@keyframes backdropIn {
+  from {
+    opacity: 0;
   }
 }
 
@@ -144,7 +173,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sheet[open] {
+  .sheet[open],
+  .sheet[open]::backdrop {
     animation: none;
   }
 }

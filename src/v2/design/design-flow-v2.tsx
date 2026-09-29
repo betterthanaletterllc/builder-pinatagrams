@@ -173,6 +173,7 @@ export default function DesignFlowV2(data: FlowData) {
   const { region: announceRegion, announce } = useAnnouncer();
   const h1Ref = useRef<HTMLHeadingElement>(null);
   const stepRef = useRef(step);
+  const viewRef = useRef(view);
   const draftRef = useRef(draft);
   const stepStart = useRef(0);
   const focusPending = useRef(false);
@@ -184,6 +185,9 @@ export default function DesignFlowV2(data: FlowData) {
   useEffect(() => {
     stepRef.current = step;
   }, [step]);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
@@ -374,6 +378,9 @@ export default function DesignFlowV2(data: FlowData) {
       const url = new URL(window.location.href);
       const target = parseStep(url.searchParams.get("step")) ?? "design";
       const wantsEditor = url.searchParams.get("view") === "editor";
+      // Same step, same view: only a full-screen sheet's own history entry
+      // came off (ui/sheet) — the sheet closes itself; stay put, no scroll.
+      if (target === stepRef.current && wantsEditor === (viewRef.current === "editor")) return;
       const d = draftRef.current;
       if (!d && target !== "deliver") {
         // Back from the order review into the design steps = a new piñata.
@@ -1032,7 +1039,7 @@ export default function DesignFlowV2(data: FlowData) {
       const empty = !message;
       cta = {
         label: empty ? "Continue without a message" : STEPS.card.next,
-        short: empty ? "Skip message" : STEPS.card.nextShort,
+        short: empty ? "Skip" : STEPS.card.nextShort,
         onClick: () => {
           trackV2("message_step_completed", {
             has_message: !!draft.msgBody.trim(),
@@ -1054,7 +1061,7 @@ export default function DesignFlowV2(data: FlowData) {
         ? { label: "Save changes", onClick: saveChanges }
         : someoneElse
           ? { label: "Check out my order first", short: "Check out order", onClick: payOrderFirst, busy }
-          : { label: STEPS.deliver.next, onClick: pay, busy };
+          : { label: STEPS.deliver.next, short: STEPS.deliver.nextShort, onClick: pay, busy };
     }
   }
 
@@ -1316,7 +1323,7 @@ export default function DesignFlowV2(data: FlowData) {
   const otherLines = cart.filter((l) => l.id !== draft?.editLineId).length;
 
   return (
-    <main className={f.flow}>
+    <main className={f.flow} data-pg-journey>
       <FlowHeader
         step={step}
         maxReachable={maxReachable}
@@ -1367,17 +1374,20 @@ export default function DesignFlowV2(data: FlowData) {
                 )}
               </ul>
             )}
-            <Stage
-              step={step}
-              style={stageStyle}
-              graphic={stageGraphic}
-              message={draft ? message : ""}
-              filling={draft?.filling ?? null}
-              box={data.box}
-              loading={loading}
-              onBody={draft ? () => setSheet({ kind: "body" }) : undefined}
-              onZoom={draft ? () => setSheet({ kind: "zoom" }) : undefined}
-            />
+            {/* Phones pin Step 1's Stage under the header (see .stagePin). */}
+            <div className={f.stagePin} data-step={step}>
+              <Stage
+                step={step}
+                style={stageStyle}
+                graphic={stageGraphic}
+                message={draft ? message : ""}
+                filling={draft?.filling ?? null}
+                box={data.box}
+                loading={loading}
+                onBody={draft ? () => setSheet({ kind: "body" }) : undefined}
+                onZoom={draft ? () => setSheet({ kind: "zoom" }) : undefined}
+              />
+            </div>
           </div>
 
           <div className={f.panel}>

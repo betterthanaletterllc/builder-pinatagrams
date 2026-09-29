@@ -33,7 +33,8 @@ export const STEPS: Record<
     title: "When and where",
     name: "Deliver & pay",
     next: "Continue to payment",
-    nextShort: "Continue to payment",
+    // the phone bar's total must stay readable beside it
+    nextShort: "Checkout",
   },
 };
 

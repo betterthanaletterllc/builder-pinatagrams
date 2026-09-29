@@ -29,11 +29,13 @@
   padding: 16px 16px 8px;
 }
 
+/* Each fact leads with its own icon, so no separator dots — a dot on a
+   wrapped line would start the line. */
 .promise {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 14px;
+  gap: 4px 18px;
   margin: 0 0 20px;
   padding: 10px 14px;
   border-radius: var(--pg-r-card);
@@ -46,15 +48,6 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.promise li + li::before {
-  content: "";
-  width: 4px;
-  height: 4px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: var(--pg-muted);
 }
 
 .promise strong {
@@ -172,9 +165,11 @@
   text-decoration: none;
 }
 
-.more:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+@media (hover: hover) {
+  .more:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
 
 .more:focus-visible,
@@ -232,8 +227,10 @@
   object-fit: cover;
 }
 
-.designTile:hover {
-  border-color: var(--pg-navy);
+@media (hover: hover) {
+  .designTile:hover {
+    border-color: var(--pg-navy);
+  }
 }
 
 .bodyGrid {
@@ -256,9 +253,11 @@
   text-decoration: none;
 }
 
-.bodyCard:hover {
-  border-color: var(--pg-line-strong);
-  background: var(--pg-white);
+@media (hover: hover) {
+  .bodyCard:hover {
+    border-color: var(--pg-line-strong);
+    background: var(--pg-white);
+  }
 }
 
 .bodyArt {

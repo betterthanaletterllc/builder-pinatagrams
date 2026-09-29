@@ -126,8 +126,10 @@
   object-fit: cover;
 }
 
-.tile:hover {
-  border-color: var(--pg-navy);
+@media (hover: hover) {
+  .tile:hover {
+    border-color: var(--pg-navy);
+  }
 }
 
 .tile[data-selected="true"] {
@@ -138,6 +140,16 @@
 .tile:has(input:focus-visible) {
   outline: 2px solid var(--pg-peri-dark);
   outline-offset: 4px;
+}
+
+/* Phones pin the Stage over Step 1 (flow.module.css .stagePin): a tile or
+   chip reached by keyboard scrolls clear of it, not under it. */
+@media (max-width: 1023px) {
+  .tile,
+  .tile input,
+  .occasions > * {
+    scroll-margin-top: calc(32svh + 64px);
+  }
 }
 
 @supports not selector(:has(*)) {
@@ -207,8 +219,10 @@
   cursor: pointer;
 }
 
-.linkBtn:hover {
-  color: var(--pg-navy);
+@media (hover: hover) {
+  .linkBtn:hover {
+    color: var(--pg-navy);
+  }
 }
 
 .linkBtn:focus-visible {
@@ -739,8 +753,10 @@
   cursor: pointer;
 }
 
-.bodyOption:hover {
-  border-color: var(--pg-navy);
+@media (hover: hover) {
+  .bodyOption:hover {
+    border-color: var(--pg-navy);
+  }
 }
 
 .bodyOption[data-selected="true"] {

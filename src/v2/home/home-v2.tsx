@@ -19,7 +19,7 @@ import { cutoffTonight, soonest } from "../lib/dates";
 import { b2cPrice, requestContext, trustFrom } from "../lib/server";
 import { clipText, PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import { ButtonLink, ChipLink } from "../ui/controls";
-import { Check, ChevronRight, Star, Truck, Users } from "../ui/icons";
+import { Check, ChevronRight, Star, Tag, Truck, Users } from "../ui/icons";
 import Stars from "../ui/stars";
 import s from "./home.module.css";
 
@@ -92,7 +92,7 @@ export default async function HomeV2({
     : [];
   const pitch =
     variant.landingLines?.[0] ??
-    `An ${PINATA_HEIGHT_IN}-inch piñata packed with candy, your design on the box and your message inside the lid — delivered to their door.`;
+    `A ${PINATA_HEIGHT_IN}-inch piñata packed with candy, your design on the box and your message inside the lid — delivered to their door.`;
 
   return (
     <main className={s.home}>
@@ -114,6 +114,7 @@ export default async function HomeV2({
             </li>
             {priceText && (
               <li>
+                <Tag size={16} />
                 <strong>{priceText}</strong>
               </li>
             )}
