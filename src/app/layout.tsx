@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Image from "next/image";
+import { headers } from "next/headers";
 import { Poppins } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import logo from "../../public/pinatagrams-logo.png";
+import { flowFromHeaders } from "@/lib/flow-version";
+import SiteFooterV2 from "@/v2/chrome/site-footer";
+import SiteHeaderV2 from "@/v2/chrome/site-header";
+import v2Theme from "@/v2/ui/theme.module.css";
 import CartLink from "./cart-link";
 import Analytics from "./analytics";
 import DiscountCapture from "./discount-capture";
@@ -42,50 +47,68 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Which journey this request gets (src/middleware.ts → x-pg-flow). v2
+  // (builder2) swaps the site chrome for its own header/footer and scopes
+  // its design tokens to <body>; client code reads body[data-flow].
+  const flow = flowFromHeaders(await headers());
+  const v2 = flow === "v2";
   return (
-    <html lang="en">
-      <body className={`${poppins.variable} ${arbotek.variable}`}>
+    <html lang="en" className={v2 ? v2Theme.html : undefined}>
+      <body
+        className={`${poppins.variable} ${arbotek.variable}${
+          v2 ? ` ${v2Theme.theme} ${v2Theme.body}` : ""
+        }`}
+        data-flow={flow}
+      >
         <Analytics />
         <DiscountCapture />
-        <header className="topbar">
-          <div className="topbar-inner">
-            <a href="/" className="brand-wrap">
-              <Image
-                src={logo}
-                alt="Piñatagrams"
-                className="brand-logo"
-                priority
-              />
-            </a>
-            <CartLink />
-          </div>
-        </header>
+        {v2 ? (
+          <SiteHeaderV2 />
+        ) : (
+          <header className="topbar">
+            <div className="topbar-inner">
+              <a href="/" className="brand-wrap">
+                <Image
+                  src={logo}
+                  alt="Piñatagrams"
+                  className="brand-logo"
+                  priority
+                />
+              </a>
+              <CartLink />
+            </div>
+          </header>
+        )}
         {children}
-        <footer className="site-footer">
-          <div className="footer-inner">
-            <span>
-              © {new Date().getFullYear()} Better Than A Letter LLC ·{" "}
-              <a href="https://www.pinatagrams.com">pinatagrams.com</a>
-            </span>
-            <nav className="footer-links" aria-label="Legal">
-              <a href="https://www.pinatagrams.com/policies/terms-of-service">
-                Terms of Service
-              </a>
-              <a href="/terms">Upload Terms</a>
-              <a href="https://www.pinatagrams.com/policies/privacy-policy">
-                Privacy
-              </a>
-              <a href="https://www.pinatagrams.com/policies/refund-policy">
-                Refunds
-              </a>
-              <a href="https://www.pinatagrams.com/policies/shipping-policy">
-                Shipping
-              </a>
-              <a href="mailto:nathan@pinatagrams.com">Contact</a>
-            </nav>
-          </div>
-        </footer>
+        {v2 ? (
+          <SiteFooterV2 />
+        ) : (
+          <footer className="site-footer">
+            <div className="footer-inner">
+              <span>
+                © {new Date().getFullYear()} Better Than A Letter LLC ·{" "}
+                <a href="https://www.pinatagrams.com">pinatagrams.com</a>
+              </span>
+              <nav className="footer-links" aria-label="Legal">
+                <a href="https://www.pinatagrams.com/policies/terms-of-service">
+                  Terms of Service
+                </a>
+                <a href="/terms">Upload Terms</a>
+                <a href="https://www.pinatagrams.com/policies/privacy-policy">
+                  Privacy
+                </a>
+                <a href="https://www.pinatagrams.com/policies/refund-policy">
+                  Refunds
+                </a>
+                <a href="https://www.pinatagrams.com/policies/shipping-policy">
+                  Shipping
+                </a>
+                <a href="mailto:nathan@pinatagrams.com">Contact</a>
+              </nav>
+            </div>
+          </footer>
+        )}
       </body>
     </html>
   );

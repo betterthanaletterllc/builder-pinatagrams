@@ -1,0 +1,190 @@
+/* v2 site chrome: header (logo + cart), footer, pending-payment banner. */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(250, 248, 246, 0.94);
+  backdrop-filter: saturate(1.4) blur(8px);
+  box-shadow: var(--pg-shadow-top);
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1200px;
+  height: var(--pg-header-h);
+  margin: 0 auto;
+  padding: 0 12px 0 16px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  border-radius: 8px;
+}
+
+.brand:focus-visible,
+.cart:focus-visible,
+.footer a:focus-visible,
+.pending a:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+.logo {
+  display: block;
+  width: auto;
+  height: 38px;
+}
+
+.cart {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pg-navy);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cart:hover {
+  background: var(--pg-tint);
+}
+
+.count {
+  position: absolute;
+  top: 3px;
+  right: 1px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--pg-r-pill);
+  background: var(--pg-navy);
+  color: #fff;
+  font: 600 12px/1 var(--pg-font);
+  box-shadow: 0 0 0 2px var(--pg-page);
+}
+
+.footer {
+  margin-top: 48px;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--pg-line);
+  background: var(--pg-page);
+  color: var(--pg-text-2);
+  font: 400 14px/1.6 var(--pg-font);
+}
+
+.footInner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.footInner p {
+  margin: 0;
+}
+
+.footer a {
+  color: var(--pg-text-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  border-radius: 2px;
+}
+
+.footer a:hover {
+  color: var(--pg-navy);
+}
+
+.legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.legal a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+/* --- pending payment banner ------------------------------------------------ */
+
+.pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 12px 16px 0;
+  padding: 12px 16px;
+  border-radius: var(--pg-r-card);
+  background: #fdf6dc;
+  color: var(--pg-navy);
+  font: 400 15px/1.45 var(--pg-font);
+}
+
+.pending p {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1 1 220px;
+  margin: 0;
+}
+
+.pending svg {
+  flex: none;
+  color: #9a6b00;
+}
+
+.pendingActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  align-items: center;
+}
+
+.pending a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--pg-navy);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pending a.resume {
+  padding: 0 18px;
+  border-radius: var(--pg-r-pill);
+  background: var(--pg-navy);
+  color: #fff;
+  text-decoration: none;
+}
+
+@media (min-width: 1024px) {
+  .inner {
+    padding: 0 24px;
+  }
+
+  .logo {
+    height: 44px;
+  }
+
+  .pending {
+    max-width: 1168px;
+    margin: 16px auto 0;
+  }
+}
