@@ -3078,3 +3078,420 @@ a.pager-btn:hover {
 .lb-nav.next {
   right: 10px;
 }
+
+/* === cart (agent A2) === */
+
+/* Button modifiers the cart uses (ghost = quiet secondary; sm = compact). */
+.btn.ghost {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.btn.ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.btn.sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.cart-grid .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cart-grid .btn:disabled,
+.mobile-checkout-bar .btn:disabled,
+.pending-order .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Line layout: thumb | details | price, with the controls on their own row
+   under the details — so the title keeps its width on phones instead of
+   being squeezed into a narrow column beside the controls. */
+.cart-grid .cart-line {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "thumb info price"
+    "thumb actions actions";
+  column-gap: 14px;
+  row-gap: 8px;
+  align-items: start;
+}
+
+.cart-grid .cart-line > .cart-thumb {
+  grid-area: thumb;
+}
+
+.cart-grid .cart-line > .cart-line-info {
+  grid-area: info;
+}
+
+.cart-grid .cart-line > .cart-line-price {
+  grid-area: price;
+}
+
+.cart-grid .cart-line > .cart-line-actions {
+  grid-area: actions;
+}
+
+.cart-line-title {
+  display: block;
+  line-height: 1.3;
+}
+
+.cart-line-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.qty-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.qty-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.qty-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.qty-btn:disabled {
+  color: var(--lavender);
+  cursor: not-allowed;
+}
+
+.qty-stepper .qty {
+  min-width: 28px;
+}
+
+.link-btn.cart-remove {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* A line checkout can't take as-is (stale date, server lineErrors): ringed,
+   with the reason and the fix right under its details. Navy text on the
+   soft warning tint — the coral carries the signal, the text stays legible. */
+.cart-grid .cart-line.has-issue {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+.line-issue {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.line-issue .link-btn {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.line-issue:focus,
+.cart-panel .notice.checkout-msg:focus,
+.carrier-choice:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cart-detail .cart-date-bad {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* Waiting-for-payment orders (their piñatas aren't in the cart below). */
+.pending-lines {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.pending-lines li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.cart-thumb.mini {
+  width: 56px;
+  height: 42px;
+  border-radius: 6px;
+}
+
+.cart-thumb.mini.box-composite {
+  height: auto;
+}
+
+.pending-to {
+  margin-top: 6px;
+}
+
+.pending-warn {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.pending-order .pending-actions .btn {
+  margin-top: 0;
+}
+
+.pending-order.expired {
+  border-color: var(--line-strong);
+  background: var(--card);
+}
+
+.cart-section-h {
+  font-size: 16px;
+  margin: 20px 0 10px;
+}
+
+.storage-note {
+  margin: 0 0 12px;
+}
+
+/* Ship-to editor: real labels above real inputs (the floating-label .ffield
+   styles belong to the flow's Send-to step and don't fit this panel). */
+.addr-edit.cart-addr {
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.cart-addr .cart-field,
+.cart-addr .addr-edit-actions {
+  grid-column: 1 / -1;
+}
+
+.cart-addr .cart-field.f-province,
+.cart-addr .cart-field.f-zip {
+  grid-column: auto;
+}
+
+.cart-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.cart-field input,
+.cart-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  /* 16px: below it iOS Safari zooms the page on focus */
+  font-size: 16px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--ink);
+}
+
+.cart-field input:focus,
+.cart-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.cart-field.invalid input,
+.cart-field.invalid select {
+  border: 2px solid var(--warn);
+  padding: 9px 11px;
+}
+
+.cart-field-error {
+  display: flex;
+  gap: 6px;
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.cart-field-error::before {
+  content: "!";
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--warn);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.ship-to:focus {
+  outline: none;
+}
+
+.ship-to-hint a {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+/* One-carrier choice when lines disagree (never re-stamped silently). */
+.notice.carrier-choice p {
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+
+.notice.carrier-choice .row {
+  flex-wrap: wrap;
+}
+
+.notice.carrier-choice .note {
+  margin: 8px 0 0;
+}
+
+/* Discounts: the manual field hides behind "Have a code?"; applied codes
+   (typed or from a ?discount= link) always show as chips. */
+.discount-toggle {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.discount-entry .in {
+  flex: 1;
+  min-width: 0;
+}
+
+.discount-applied.dead {
+  flex-wrap: wrap;
+}
+
+.dead-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Checkout feedback right under the button that was pressed. */
+.cart-panel .notice.checkout-msg {
+  margin: -6px 0 12px;
+  border-left: 3px solid var(--warn);
+  color: var(--ink);
+}
+
+.cart-panel .notice.checkout-msg.info {
+  border-left-color: var(--accent);
+}
+
+.secure-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+@media (max-width: 900px) {
+  /* …and on phones, right above the sticky bar's button. */
+  .mobile-checkout-bar.has-msg {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .mcb-msg {
+    flex: 1 0 100%;
+    max-height: 30vh;
+    overflow: auto;
+    padding: 8px 10px;
+    border-left: 3px solid var(--warn);
+    border-radius: 6px;
+    background: var(--warn-soft);
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .mcb-msg.info {
+    border-left-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .mcb-msg:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .cart-grid:has(~ .mobile-checkout-bar.has-msg) {
+    padding-bottom: 160px;
+  }
+}
+
+@media (max-width: 600px) {
+  .cart-grid .cart-line {
+    grid-template-columns: 88px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "thumb info info"
+      "actions actions price";
+    column-gap: 10px;
+  }
+  .cart-grid .cart-line > .cart-thumb {
+    width: 88px;
+  }
+  .cart-grid .cart-line > img.cart-thumb {
+    height: 66px;
+  }
+  .cart-grid .cart-line > .cart-thumb.box-composite {
+    height: auto;
+  }
+  .cart-grid .cart-line > .cart-line-price {
+    align-self: center;
+  }
+  /* thumb-sized tap targets */
+  .qty-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .pending-order .pending-actions .btn {
+    flex: 1 1 100%;
+    text-align: center;
+    padding: 11px 14px;
+  }
+}
