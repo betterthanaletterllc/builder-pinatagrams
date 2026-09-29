@@ -49,6 +49,33 @@ export type OrderPrefs = {
 const DRAFT_KEY = "pinatagrams-v2-draft";
 const PARKED_KEY = "pinatagrams-v2-parked";
 const ORDER_KEY = "pinatagrams-v2-order";
+const PRESET_KEY = "pinatagrams-v2-preset";
+
+/**
+ * Deep-link bookkeeping. The landing URL keeps its params (the ad's utm_*
+ * must stay for attribution), so a refresh would re-apply the preset over
+ * the shopper's changes. Remember which link was already applied: the same
+ * link again restores the draft; a NEW link applies its preset.
+ */
+export function presetSignature(url: URL): string {
+  return ["design", "occasion", "style", "utm_content"]
+    .map((k) => url.searchParams.get(k) ?? "")
+    .join("|");
+}
+
+export function presetConsumed(sig: string): boolean {
+  try {
+    return sessionStorage.getItem(PRESET_KEY) === sig;
+  } catch {
+    return false;
+  }
+}
+
+export function markPresetConsumed(sig: string): void {
+  try {
+    sessionStorage.setItem(PRESET_KEY, sig);
+  } catch {}
+}
 
 export function draftFromPreset(p: Preset): DraftV2 {
   return {
@@ -68,6 +95,26 @@ export function draftFromPreset(p: Preset): DraftV2 {
     dateSoonest: false,
     editLineId: null,
   };
+}
+
+/**
+ * A deep link arriving while a piñata is already in progress changes only
+ * what the link asked for (body / design / occasion); the message, filling
+ * and date the shopper already chose survive — nothing typed is lost.
+ */
+export function applyPreset(
+  base: DraftV2 | null,
+  p: Preset,
+  fillingFor: (d: DraftV2, g: GraphicChoice) => { filling: string; fillingAuto: boolean },
+): DraftV2 {
+  if (!base) return draftFromPreset(p);
+  let next: DraftV2 = { ...base };
+  if (p.styleSource === "deeplink") next.styleId = p.styleId;
+  if (p.graphicSource === "deeplink") {
+    next = { ...next, graphic: p.graphic, graphicSource: "deeplink", ...fillingFor(next, p.graphic) };
+  }
+  if (p.occasionSource === "deeplink") next.occasion = p.occasion;
+  return next;
 }
 
 /** Edit mode: a cart line back into a draft (the saved message is split

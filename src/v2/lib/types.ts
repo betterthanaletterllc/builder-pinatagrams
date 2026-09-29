@@ -60,6 +60,7 @@ export type Preset = {
   graphic: GraphicChoice;
   graphicSource: "default" | "deeplink";
   occasion: OccasionId | null;
+  occasionSource: "deeplink" | "default";
   filling: string;
   fillingAuto: boolean;
 };

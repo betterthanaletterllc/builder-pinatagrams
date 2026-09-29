@@ -7,7 +7,12 @@ import { Bag } from "../ui/icons";
 import c from "./chrome.module.css";
 
 /** Live piñata count (this tab via CART_EVENT, other tabs via "storage").
- *  0 on the server render; hydrates to the real count immediately. */
+ *  0 on the server render; hydrates to the real count immediately.
+ *
+ *  Both v2 headers (site + flow) render this instead of v1's <CartLink/>, so
+ *  builder2's shared "was the pending order paid?" check belongs on this
+ *  mount too: checkPendingOrders() from lib/checkout-client (MERGE NOTE — it
+ *  lands with the checkout workstream; call it in the effect below). */
 export function useCartCount(): number {
   const [n, setN] = useState(0);
   useEffect(() => {

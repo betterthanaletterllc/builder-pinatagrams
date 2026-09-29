@@ -38,6 +38,30 @@ export function merchCents(p: Piece, ctx: PriceCtx): number | null {
   return ctx.unitPrice.unitPriceCents + tier + filling + addons;
 }
 
+/** One piñata, itemised the way the invoice itemises it: the piñata line
+ *  (base + tier + filling) and each add-on as its own line. */
+export function pieceBreakdown(
+  p: Piece,
+  ctx: PriceCtx,
+): {
+  base: number | null;
+  tier: number;
+  filling: number;
+  addons: { id: string; label: string; cents: number }[];
+} {
+  const tier = ctx.tiered ? graphicTierCents(p.graphic, ctx.pricing) : 0;
+  const filling = ctx.fillings.find((f) => f.label === p.filling)?.priceCents ?? 0;
+  return {
+    base: ctx.unitPrice ? ctx.unitPrice.unitPriceCents + tier + filling : null,
+    tier,
+    filling,
+    addons: p.addons.flatMap((id) => {
+      const a = ctx.addons.find((x) => x.id === id);
+      return a ? [{ id: a.id, label: a.label, cents: a.priceCents }] : [];
+    }),
+  };
+}
+
 /** Per-piñata shipping for a carrier; null carrier on a two-carrier store =
  *  the CHEAPEST option (the honest "From" price before a carrier is picked). */
 export function shipCents(carrier: Carrier | null, ctx: PriceCtx): number | null {

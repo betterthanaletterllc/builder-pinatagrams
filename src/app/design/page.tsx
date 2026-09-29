@@ -21,6 +21,8 @@ import {
   resolveVariantProfile,
   type VariantProfile,
 } from "@/lib/variant";
+import { flowFromHeaders } from "@/lib/flow-version";
+import DesignPageV2 from "@/v2/design/design-page-v2";
 import VariantBoot from "../variant-boot";
 import DesignFlow from "./design-flow";
 
@@ -31,6 +33,15 @@ export default async function DesignPage({
 }: {
   searchParams: Promise<{ style?: string; variant?: string }>;
 }) {
+  // builder2 (flow v2): the four-step journey in src/v2. It resolves its own
+  // defaults, so a missing or unknown ?style= never dead-ends there.
+  if (flowFromHeaders(await headers()) === "v2") {
+    return (
+      <DesignPageV2
+        searchParams={(await searchParams) as Record<string, string | string[] | undefined>}
+      />
+    );
+  }
   const { style, variant: variantParam } = await searchParams;
   const host = normalizeHost((await headers()).get("host"));
   const previewVariant =

@@ -1,0 +1,854 @@
+/* v2 step content: Design (occasions + filmstrip), Card, Inside, Deliver &
+ * pay (carrier, date, recipient, summary, code), plus the sheets' bodies.
+ * Local classes only; shared v1 components embedded here (DateCalendar,
+ * AddressLine1) are restyled through :global() UNDER a local wrapper, so the
+ * same components elsewhere in v1 keep their look. */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.block {
+  margin-top: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font: 600 12px/1.2 var(--pg-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pg-muted);
+}
+
+.h2 {
+  margin: 0 0 10px;
+  font: 600 22px/1.3 var(--pg-font);
+  letter-spacing: 0;
+  color: var(--pg-navy);
+}
+
+.legendReset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.muted {
+  color: var(--pg-muted);
+}
+
+.small {
+  margin: 8px 0 0;
+  font: 400 14px/1.5 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+/* --- promise line (Step 1) ------------------------------------------------- */
+
+.promise {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 12px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--pg-r-card);
+  background: var(--pg-cream);
+  list-style: none;
+  font: 500 14px/1.4 var(--pg-font);
+}
+
+.promise li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.promise li + li::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--pg-muted);
+}
+
+.promise strong {
+  font-weight: 600;
+}
+
+.star {
+  color: #c98f00;
+}
+
+/* --- Step 1: occasions + filmstrip ------------------------------------------- */
+
+.occasions {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.occasions::-webkit-scrollbar {
+  display: none;
+}
+
+.strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.tile {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 2.05 / 1;
+  border: 1px solid var(--pg-line);
+  border-radius: var(--pg-r-tile);
+  background: var(--pg-white);
+  cursor: pointer;
+}
+
+.tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile:hover {
+  border-color: var(--pg-navy);
+}
+
+.tile[data-selected="true"] {
+  border-color: var(--pg-peri);
+  box-shadow: 0 0 0 2px var(--pg-peri);
+}
+
+.tile:has(input:focus-visible) {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 4px;
+}
+
+@supports not selector(:has(*)) {
+  .tile:focus-within {
+    outline: 2px solid var(--pg-peri-dark);
+    outline-offset: 4px;
+  }
+}
+
+.tileCheck {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--pg-peri);
+  color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.tile[data-selected="true"] .tileCheck {
+  display: grid;
+  animation: pop 0.2s ease-out;
+}
+
+.tier {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 2px 7px;
+  border-radius: var(--pg-r-pill);
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--pg-navy);
+  font: 600 12px/1.3 var(--pg-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.tier[data-included="true"] {
+  color: var(--pg-success-text);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 16px;
+  margin-top: 8px;
+}
+
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--pg-peri-dark);
+  font: 600 15px/1.2 var(--pg-font);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.linkBtn:hover {
+  color: var(--pg-navy);
+}
+
+.linkBtn:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+/* --- Step 2: the card ------------------------------------------------------------ */
+
+.cardPreview {
+  margin: 0 0 20px;
+  padding: 12px;
+  border-radius: var(--pg-r-card);
+  background: var(--pg-cream);
+}
+
+.note {
+  min-height: 96px;
+  padding: 14px 16px;
+  border: 1px solid rgba(24, 13, 56, 0.1);
+  border-radius: 8px;
+  background: #fffdf8;
+  font: italic 400 17px/1.5 var(--pg-font);
+  color: var(--pg-navy);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notePlaceholder {
+  color: var(--pg-muted);
+}
+
+.fields {
+  display: grid;
+  gap: 16px;
+}
+
+.fieldPair {
+  display: grid;
+  gap: 16px;
+}
+
+.counter {
+  margin: -8px 0 0;
+  font: 500 14px/1.4 var(--pg-font);
+  color: var(--pg-muted);
+  text-align: right;
+}
+
+.counter[data-low="true"] {
+  color: var(--pg-error-text);
+}
+
+.starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin-top: 6px;
+}
+
+.starter {
+  height: auto;
+  min-height: 36px;
+  padding: 8px 14px;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.3;
+}
+
+/* --- Step 3: inside ------------------------------------------------------------------ */
+
+.options {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+/* --- Step 4: deliver & pay ------------------------------------------------------------ */
+
+.section {
+  margin-top: 28px;
+}
+
+.section:first-of-type {
+  margin-top: 0;
+}
+
+.twoUp {
+  display: grid;
+  gap: 10px;
+}
+
+.assure {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 0;
+  font: 500 14px/1.5 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.assure svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--pg-success);
+}
+
+.assure[data-tone="window"] svg {
+  color: var(--pg-peri-dark);
+}
+
+.calendar {
+  margin-top: 12px;
+}
+
+.calendar :global(.cal) {
+  max-width: 380px;
+  padding: 12px;
+  border: 1px solid var(--pg-line);
+  border-radius: var(--pg-r-card);
+  background: var(--pg-white);
+  box-shadow: none;
+}
+
+.calendar :global(.cal-head strong) {
+  font: 600 16px/1.2 var(--pg-font);
+}
+
+.calendar :global(.cal-head .btn) {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.calendar :global(.cal-head .btn:focus-visible),
+.calendar :global(.cal .cal-day:focus-visible) {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 1px;
+}
+
+.calendar :global(.cal .cal-day) {
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.calendar :global(.cal .cal-day.selected) {
+  background: var(--pg-navy);
+  color: #fff;
+}
+
+/* USPS window: identifiable without colour alone — a 2px #4a62c4 ring
+   (5.5:1 against white, past the 3:1 non-text minimum) and navy numbers on
+   a light tint (14:1); the legend below names both marks. */
+.calendar :global(.cal .cal-day.win) {
+  opacity: 1;
+  background: #e3e8fc;
+  color: var(--pg-navy);
+  box-shadow: inset 0 0 0 2px var(--pg-peri-dark);
+  font-weight: 600;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font: 400 14px/1.4 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.swatchTarget {
+  background: var(--pg-navy);
+}
+
+.swatchWindow {
+  background: #e3e8fc;
+  box-shadow: inset 0 0 0 2px var(--pg-peri-dark);
+}
+
+.recipientCard {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--pg-line-strong);
+  border-radius: var(--pg-r-card);
+  background: var(--pg-white);
+  font: 400 15px/1.5 var(--pg-font);
+}
+
+.recipientCard p {
+  margin: 0;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.addrRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.addrCity {
+  grid-column: 1 / -1;
+}
+
+/* AddressLine1 (shared, address-search.tsx) renders a floating-label
+   .ffield; inside the v2 form it reads like every other v2 field: static
+   label above, 48px input, v2 focus + error rings. Doubled class = enough
+   specificity to beat globals.css's floating-label states. */
+.street.street :global(.ffield) {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+  margin: 0;
+}
+
+.street.street :global(.ffield label) {
+  position: static;
+  transform: none;
+  color: var(--pg-navy);
+  font: 600 14px/1.25 var(--pg-font);
+  pointer-events: auto;
+}
+
+.street.street :global(.ffield input) {
+  min-height: 48px;
+  padding: 11px 14px;
+  border: 1px solid #8a8499;
+  border-radius: var(--pg-r-card);
+  color: var(--pg-navy);
+  font: 400 16px/1.4 var(--pg-font);
+  scroll-margin-bottom: 110px;
+}
+
+.street.street :global(.ffield input:focus) {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 1px;
+  border-color: var(--pg-peri-dark);
+}
+
+.street.street :global(.ffield input[aria-invalid="true"]) {
+  border-color: var(--pg-error-text);
+  box-shadow: inset 0 0 0 1px var(--pg-error-text);
+}
+
+.street.street :global(.addr-sug) {
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.street.street :global(.addr-sug:focus-visible) {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: -2px;
+}
+
+.streetError {
+  margin: 6px 0 0;
+}
+
+/* --- order summary ---------------------------------------------------------------- */
+
+.summary {
+  margin: 0;
+  padding: 4px 16px 12px;
+  border: 1px solid var(--pg-line-strong);
+  border-radius: var(--pg-r-card);
+  background: var(--pg-white);
+}
+
+.lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--pg-line);
+}
+
+.line[data-problem="true"] .lineTitle {
+  color: var(--pg-error-text);
+}
+
+.lineInfo {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  font: 400 14px/1.45 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.lineTag {
+  font: 600 12px/1.2 var(--pg-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pg-muted);
+}
+
+.lineTitle {
+  font: 600 15px/1.35 var(--pg-font);
+  color: var(--pg-navy);
+}
+
+.linePrice {
+  font: 600 15px/1.35 var(--pg-font);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.lineActions {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+  margin-top: 2px;
+}
+
+.lineError {
+  grid-column: 2 / -1;
+  margin-top: 6px;
+}
+
+.confirm {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--pg-error-tint);
+  font: 500 14px/1.4 var(--pg-font);
+}
+
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  font: 400 15px/1.4 var(--pg-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.kv > :first-child {
+  color: var(--pg-text-2);
+}
+
+.kvDiscount > :last-child {
+  color: var(--pg-success-text);
+}
+
+.total {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pg-line);
+  font: 600 18px/1.3 var(--pg-font);
+}
+
+.total > :first-child {
+  color: var(--pg-navy);
+}
+
+.tax {
+  margin: 4px 0 0;
+  font: 400 14px/1.4 var(--pg-font);
+  color: var(--pg-muted);
+  text-align: right;
+}
+
+.codes {
+  margin-top: 12px;
+}
+
+.codeForm {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-top: 8px;
+}
+
+.codeForm > div {
+  flex: 1;
+}
+
+.codeChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.codeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 4px 0 12px;
+  border-radius: var(--pg-r-pill);
+  background: var(--pg-success-tint);
+  color: var(--pg-success-text);
+  font: 600 14px/1.2 var(--pg-font);
+}
+
+.codeChip[data-dim="true"] {
+  background: #f0edf3;
+  color: var(--pg-text-2);
+}
+
+.codeChip button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.codeChip button:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 0;
+}
+
+.moreLinks {
+  display: grid;
+  gap: 2px;
+  margin-top: 16px;
+}
+
+.dryRun pre {
+  max-height: 260px;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dryRun ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.dryRun summary {
+  margin-top: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* --- sheets ------------------------------------------------------------------------ */
+
+.sheetGroup + .sheetGroup {
+  margin-top: 20px;
+}
+
+.bodyGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.bodyOption {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 6px 6px 10px;
+  border: 1px solid var(--pg-line);
+  border-radius: var(--pg-r-card);
+  background: var(--pg-white);
+  font: 500 14px/1.25 var(--pg-font);
+  text-align: center;
+  cursor: pointer;
+}
+
+.bodyOption:hover {
+  border-color: var(--pg-navy);
+}
+
+.bodyOption[data-selected="true"] {
+  border-color: var(--pg-peri);
+  box-shadow: inset 0 0 0 1px var(--pg-peri);
+  background: var(--pg-tint);
+}
+
+.bodyOption[data-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.bodyOption:has(input:focus-visible) {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+.bodyOption[data-selected="true"] .tileCheck {
+  display: grid;
+  top: 6px;
+  right: 6px;
+}
+
+.bodyArt {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  background: var(--pg-cream);
+}
+
+.bodyArt img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zoomArt {
+  overflow: hidden;
+  aspect-ratio: 2.05 / 1;
+  border: 1px solid var(--pg-line);
+  border-radius: 8px;
+  background: var(--pg-white);
+}
+
+.zoomArt img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zoomCaption {
+  margin: 10px 0 0;
+  font: 500 15px/1.5 var(--pg-font);
+  color: var(--pg-text-2);
+  text-align: center;
+}
+
+.library {
+  /* the shared GraphicLibrary brings its own (v1) look; give it room */
+  min-height: 60svh;
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.4);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (min-width: 640px) {
+  .twoUp {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .fieldPair {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .addrRow {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr);
+  }
+
+  .addrCity {
+    grid-column: auto;
+  }
+
+  .bodyGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .occasions {
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    gap: 0 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile[data-selected="true"] .tileCheck {
+    animation: none;
+  }
+}

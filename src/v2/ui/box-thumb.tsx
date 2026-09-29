@@ -36,7 +36,8 @@ export default function BoxThumb({
   const art = previewArt(graphic, 240);
   return (
     <span
-      className={`${s.thumb} ${className ?? ""}`}
+      // a shopper's own design (their photos) is never session-recorded
+      className={`${s.thumb} ${graphic?.type === "custom" ? "ph-no-capture" : ""} ${className ?? ""}`}
       style={{ width: size, height: size }}
       aria-hidden="true"
     >

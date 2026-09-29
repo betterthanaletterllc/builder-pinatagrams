@@ -4,6 +4,7 @@ import type {
   ButtonHTMLAttributes,
   ChangeEvent,
   ReactNode,
+  Ref,
 } from "react";
 import { Check, Spinner } from "./icons";
 import u from "./ui.module.css";
@@ -141,11 +142,15 @@ export function OptionCard({
   description,
   aside,
   media,
+  mediaSize,
   badge,
   disabled,
   disabledReason,
   describedBy,
   className,
+  inputRef,
+  inputId,
+  prominent,
 }: {
   type?: "radio" | "checkbox";
   name: string;
@@ -156,19 +161,28 @@ export function OptionCard({
   description?: ReactNode;
   aside?: ReactNode;
   media?: ReactNode;
+  /** Media square in px (default 56). */
+  mediaSize?: number;
   badge?: string;
   disabled?: boolean;
   disabledReason?: string;
   describedBy?: string;
   className?: string;
+  inputRef?: Ref<HTMLInputElement>;
+  /** id on the real input (so a validation pass can focus it). */
+  inputId?: string;
+  /** A heavier edge for the one offer that must never be missed. */
+  prominent?: boolean;
 }) {
   return (
     <label
-      className={`${u.option} ${className ?? ""}`}
+      className={`${u.option} ${prominent ? u.prominent : ""} ${className ?? ""}`}
       data-selected={checked}
       data-disabled={disabled || undefined}
     >
       <input
+        ref={inputRef}
+        id={inputId}
         className={u.optionInput}
         type={type}
         name={name}
@@ -181,7 +195,14 @@ export function OptionCard({
       <span className={`${u.mark} ${type === "checkbox" ? u.markBox : ""}`} aria-hidden="true">
         {type === "checkbox" && checked && <Check size={14} />}
       </span>
-      {media && <span className={u.optionMedia}>{media}</span>}
+      {media && (
+        <span
+          className={u.optionMedia}
+          style={mediaSize ? { width: mediaSize, height: mediaSize } : undefined}
+        >
+          {media}
+        </span>
+      )}
       <span className={u.optionBody}>
         <span className={u.optionTitle}>
           {title}
