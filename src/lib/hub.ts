@@ -9,6 +9,25 @@
 export const HUB_URL =
   process.env.NEXT_PUBLIC_HUB_URL ?? "https://admin.betterthanaletter.com";
 
+// Every hub read is time-boxed: a hung hub must degrade (fallback data, a
+// "—" price, no discount preview), never hang a page render or a tap.
+export const HUB_TIMEOUT_MS = 3000;
+const DISCOUNT_TIMEOUT_MS = 5000; // client → our /api/discount proxy → hub
+
+/** An abort signal that fires after `ms` — AbortSignal.timeout where it
+ *  exists, a timer elsewhere (older iOS Safari lacks it, and a throw there
+ *  would read as "no discount" forever). */
+export function hubTimeout(ms = HUB_TIMEOUT_MS): AbortSignal | undefined {
+  try {
+    if (typeof AbortSignal.timeout === "function") return AbortSignal.timeout(ms);
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), ms);
+    return ctrl.signal;
+  } catch {
+    return undefined;
+  }
+}
+
 export type LogoZone = { x: number; y: number; w: number; h: number };
 
 export type HubBodyStyle = {
@@ -78,6 +97,7 @@ export async function resolveDiscount(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: clean }),
+      signal: hubTimeout(DISCOUNT_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const j = await res.json();
@@ -236,6 +256,11 @@ export type HubCatalog = {
   // absent or partial blocks fall back to the compiled defaults.
   delivery?: unknown;
   asOf: string;
+  // Set by getCatalog (never by the hub) when the live fetch failed and this
+  // is the last copy that succeeded on this server instance. Fine to RENDER
+  // (checkout re-prices from the hub itself); anything authoritative must
+  // not rely on it.
+  stale?: { reason: string; fetchedAt: string };
 };
 
 export type HubPriceInput = {
@@ -276,20 +301,88 @@ export function catalogUrl(opts?: {
   return `${HUB_URL}/api/public/catalog${qs ? `?${qs}` : ""}`;
 }
 
+// Last catalog that fetched OK, per catalog URL (= per host / previewed
+// variant), in this server instance's memory. NOT a cache layer — it's only
+// read when the live fetch fails — so c97a4bf's one-cache-layer rule
+// stands: every render still asks the hub first.
+const lastGoodCatalog = new Map<string, { catalog: HubCatalog; at: number }>();
+const LAST_GOOD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const LAST_GOOD_MAX_KEYS = 32; // a handful of hosts; bounded regardless
+
 /** Server-side catalog fetch. Deliberately UNCACHED here: the hub's edge
  *  cache is the one and only cache layer. Stacking Next's data cache on top
  *  made config edits (folder renames, variant flips) crawl — under sparse
  *  traffic each stale-while-revalidate layer serves one-visit-old data, so
  *  every page view advanced only one layer. One layer = edits land in the
  *  hub cache window (~1–2 min), and a hub blip still degrades to the edge's
- *  stale copy rather than an error. */
+ *  stale copy rather than an error.
+ *
+ *  Capped at HUB_TIMEOUT_MS. When the hub is slow or down, the last copy
+ *  this instance fetched for the same host is returned instead, marked
+ *  `stale` (≤ 24h old); with no such copy it throws, as before. */
 export async function getCatalog(opts?: {
   host?: string | null;
   previewVariant?: string | null;
 }): Promise<HubCatalog> {
-  const res = await fetch(catalogUrl(opts), { cache: "no-store" });
-  if (!res.ok) throw new Error(`hub catalog: HTTP ${res.status}`);
-  return res.json();
+  const url = catalogUrl(opts);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: hubTimeout() });
+    if (!res.ok) throw new Error(`hub catalog: HTTP ${res.status}`);
+    const catalog = (await res.json()) as HubCatalog;
+    if (!Array.isArray(catalog?.bodyStyles)) {
+      throw new Error("hub catalog: malformed response");
+    }
+    lastGoodCatalog.delete(url); // re-insert = most recent last
+    lastGoodCatalog.set(url, { catalog, at: Date.now() });
+    if (lastGoodCatalog.size > LAST_GOOD_MAX_KEYS) {
+      lastGoodCatalog.delete(lastGoodCatalog.keys().next().value!);
+    }
+    return catalog;
+  } catch (err) {
+    const good = lastGoodCatalog.get(url);
+    if (!good || Date.now() - good.at > LAST_GOOD_MAX_AGE_MS) throw err;
+    const reason =
+      err instanceof Error
+        ? err.name === "TimeoutError" || err.name === "AbortError"
+          ? `hub catalog: timed out after ${HUB_TIMEOUT_MS}ms`
+          : err.message
+        : String(err);
+    const fetchedAt = new Date(good.at).toISOString();
+    console.warn(`[hub] ${reason}; serving the last-known-good catalog from ${fetchedAt}`);
+    return { ...good.catalog, stale: { reason, fetchedAt } };
+  }
+}
+
+/** Server- or client-side price quote, time-boxed like every hub read.
+ *  Null on any failure — callers show "—" and retry, never block the flow.
+ *  Prices are display-only everywhere but checkout, which re-prices. */
+export async function fetchHubPrice(
+  input: HubPriceInput,
+  init?: { signal?: AbortSignal },
+): Promise<HubPrice | null> {
+  try {
+    const signal = init?.signal
+      ? anySignal([init.signal, hubTimeout()])
+      : hubTimeout();
+    const res = await fetch(priceUrl(input), { cache: "no-store", signal });
+    if (!res.ok) return null;
+    const p = (await res.json()) as HubPrice;
+    return Number.isFinite(p?.unitPriceCents) ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Abort when ANY of the signals does (AbortSignal.any where supported). */
+function anySignal(signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
+  const live = signals.filter((s): s is AbortSignal => !!s);
+  if (typeof AbortSignal.any === "function") return AbortSignal.any(live);
+  const ctrl = new AbortController();
+  for (const s of live) {
+    if (s.aborted) ctrl.abort();
+    else s.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  return ctrl.signal;
 }
 
 /* ---- Reviews (hub /api/public/reviews) -------------------------------- */

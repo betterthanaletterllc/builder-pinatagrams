@@ -15,12 +15,18 @@
   --card: #ffffff;
   --line: rgba(24, 13, 56, 0.12);
   --line-strong: rgba(24, 13, 56, 0.25);
-  --accent: #627ae3; /* periwinkle — interactive */
+  --accent: #627ae3; /* periwinkle — borders, rings, selection (not text) */
+  /* periwinkle-dark — accent TEXT and any fill under white text: 5.48:1
+     (white on --accent is 3.88:1, under WCAG AA's 4.5) */
   --accent-hover: #4a62c4;
+  --accent-press: #3d52ab; /* primary buttons' hover — a step darker */
   --accent-soft: rgba(98, 122, 227, 0.12);
   --highlight: #f6de6b;
-  --good: #55a871;
-  --warn: #d4623d; /* coral-dark: readable warning/error text on light bg */
+  /* success TEXT: 5.25:1 on white (brand green #55a871 is 2.9:1) */
+  --good: #2f7a4a;
+  /* error/warning TEXT: 6.1:1 on white, 5.6:1 on --warn-soft (coral-dark
+     #d4623d was 3.7:1) */
+  --warn: #a8401f;
   --warn-soft: #fdf3d8;
   --shadow-sm: 0 2px 8px rgba(24, 13, 56, 0.08);
   --shadow-md: 0 4px 20px rgba(24, 13, 56, 0.12);
@@ -36,6 +42,39 @@ body {
     sans-serif;
 }
 
+/* Keyboard focus: one 2px periwinkle-dark ring on everything (5.5:1 on
+   white, 4.5:1 on cream), distinct from the hover looks — which are all
+   behind (hover: hover), so they never stick on a tap. */
+:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+}
+
+/* The flow's fixed bottom bars never hide a focused field: scrolling it into
+   view (focus, keyboard nav) leaves room for them. */
+@media (max-width: 1023px) {
+  html:has(.bottom-stack) {
+    scroll-padding-bottom: calc(170px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 900px) {
+  html:has(.mobile-checkout-bar) {
+    scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .topbar {
   background: var(--card);
   border-bottom: 1px solid var(--line);
@@ -44,7 +83,9 @@ body {
 .topbar-inner {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 14px 20px;
+  /* viewport-fit=cover: keep clear of a landscape phone's notch */
+  padding: 14px max(20px, env(safe-area-inset-right)) 14px
+    max(20px, env(safe-area-inset-left));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -60,6 +101,7 @@ body {
 }
 
 .cart-link {
+  position: relative;
   font-weight: 600;
   font-size: 15px;
   color: var(--ink);
@@ -69,9 +111,19 @@ body {
   border-radius: 999px;
 }
 
-.cart-link:hover {
-  border-color: var(--accent);
-  color: var(--accent-hover);
+/* ~38px pill, 44px+ target: an invisible hit area around it (keeps the
+   header height) */
+.cart-link::after {
+  content: "";
+  position: absolute;
+  inset: -4px -2px;
+}
+
+@media (hover: hover) {
+  .cart-link:hover {
+    border-color: var(--accent);
+    color: var(--accent-hover);
+  }
 }
 
 .brand-logo {
@@ -92,7 +144,8 @@ body {
 main {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 24px 20px 80px;
+  padding: 24px max(20px, env(safe-area-inset-right)) 80px
+    max(20px, env(safe-area-inset-left));
 }
 
 h1 {
@@ -142,15 +195,15 @@ h1 {
   color: var(--ink);
 }
 
-a.style-card:hover,
-a.style-card:focus-visible {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-  outline: none;
-}
+@media (hover: hover) {
+  a.style-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
 
-.style-card:hover {
-  border-color: var(--accent);
+  .style-card:hover {
+    border-color: var(--accent);
+  }
 }
 
 .style-card.selected {
@@ -186,7 +239,7 @@ a.style-card:focus-visible {
 .style-card .style-price {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-hover);
   margin-top: 2px;
 }
 
@@ -320,7 +373,7 @@ a.style-card:focus-visible {
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--accent);
+  color: var(--accent-hover);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -402,14 +455,16 @@ a.style-card:focus-visible {
 }
 
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: #fff;
 }
 
-.btn.primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+@media (hover: hover) {
+  .btn.primary:hover {
+    background: var(--accent-press);
+    border-color: var(--accent-press);
+  }
 }
 
 .btn.block {
@@ -421,6 +476,19 @@ a.style-card:focus-visible {
 .btn.danger {
   color: var(--warn);
   padding: 4px 8px;
+}
+
+/* Touch screens: the small buttons grow to 44px targets (Apple HIG) —
+   same look, more room for a thumb. */
+@media (pointer: coarse) {
+  .btn.mini,
+  .btn.danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 /* --- design editor (canvas-first) ------------------------------------------ */
@@ -457,8 +525,19 @@ a.style-card:focus-visible {
 }
 
 .seg-btn.on {
-  background: var(--accent);
+  background: var(--accent-hover);
   color: #fff;
+}
+
+/* .seg clips its children (overflow: hidden) — draw the ring inside */
+.seg-btn:focus-visible {
+  outline-offset: -4px;
+}
+
+@media (pointer: coarse) {
+  .seg-btn {
+    min-height: 44px;
+  }
 }
 
 .editor-canvas-col {
@@ -510,7 +589,8 @@ a.style-card:focus-visible {
   display: flex;
   gap: 10px;
   align-items: flex-end;
-  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  padding: 12px max(14px, env(safe-area-inset-right))
+    calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
 }
 
 .edit-sheet textarea {
@@ -552,8 +632,10 @@ a.style-card:focus-visible {
   font-family: inherit;
 }
 
-.tmpl-card:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .tmpl-card:hover {
+    border-color: var(--accent);
+  }
 }
 
 .tmpl-label {
@@ -607,6 +689,17 @@ a.style-card:focus-visible {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+/* the row scrolls (clips) — keep the ring inside the thumb */
+.tmpl-switch-btn:focus-visible {
+  outline-offset: -4px;
+}
+
+@media (pointer: coarse) {
+  .tmpl-switch-btn {
+    min-height: 44px;
+  }
+}
+
 /* empty box: a big friendly ＋ over the exact slot area */
 .slot-add {
   position: absolute;
@@ -623,8 +716,10 @@ a.style-card:focus-visible {
   font-family: inherit;
 }
 
-.slot-add:hover {
-  background: rgba(255, 255, 255, 0.75);
+@media (hover: hover) {
+  .slot-add:hover {
+    background: rgba(255, 255, 255, 0.75);
+  }
 }
 
 .slot-plus {
@@ -634,7 +729,8 @@ a.style-card:focus-visible {
 }
 
 .slot-hint {
-  font-size: clamp(8px, 1.6vw, 12px);
+  /* floored at a readable 11px (it bottomed out at 8px on phones) */
+  font-size: clamp(11px, 1.6vw, 12px);
   font-weight: 600;
 }
 
@@ -676,9 +772,11 @@ a.style-card:focus-visible {
   cursor: pointer;
 }
 
-.slot-chips button:hover {
-  border-color: var(--accent);
-  color: var(--accent-hover);
+@media (hover: hover) {
+  .slot-chips button:hover {
+    border-color: var(--accent);
+    color: var(--accent-hover);
+  }
 }
 
 /* Low-resolution photo warning: a badge pinned inside the slot + a note. */
@@ -765,13 +863,14 @@ a.style-card:focus-visible {
 /* the flow pages pin a CTA/dock stack to the viewport bottom — give the
    footer clearance so its links are reachable there too */
 body:has(.bottom-stack) .site-footer {
-  padding-bottom: 170px;
+  padding-bottom: calc(170px + env(safe-area-inset-bottom));
 }
 
 .footer-inner {
   max-width: 980px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 16px max(16px, env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
@@ -786,9 +885,11 @@ body:has(.bottom-stack) .site-footer {
   text-decoration: none;
 }
 
-.footer-inner a:hover {
-  color: var(--accent-hover);
-  text-decoration: underline;
+@media (hover: hover) {
+  .footer-inner a:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+  }
 }
 
 .footer-links {
@@ -807,7 +908,7 @@ body:has(.bottom-stack) .site-footer {
   margin-left: 6px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-hover);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
@@ -835,6 +936,8 @@ body:has(.bottom-stack) .site-footer {
 .ffield input:focus {
   outline: none;
   border-color: var(--accent);
+  /* border + ring = a 2px focus edge (a 1px color change alone was faint) */
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .ffield label {
@@ -892,10 +995,16 @@ body:has(.bottom-stack) .site-footer {
   border-bottom: none;
 }
 
-.addr-sug:hover,
+@media (hover: hover) {
+  .addr-sug:hover {
+    background: #eef1fd;
+  }
+}
+
+/* the list clips (overflow: hidden) — ring inside the row */
 .addr-sug:focus-visible {
   background: #eef1fd;
-  outline: none;
+  outline-offset: -2px;
 }
 
 /* (confirm page reuses .choice-cards — same tiles as the first visit) */
@@ -986,12 +1095,27 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .swatch {
+  position: relative;
   width: 22px;
   height: 22px;
   border-radius: 50%;
   border: 2px solid var(--line-strong);
   cursor: pointer;
   padding: 0;
+}
+
+/* Touch: each color keeps its 26px look but answers a 44px square (the
+   hit area is measured from inside the 2px border: 22 + 2×11), spaced so
+   neighbouring targets meet without overlapping (gap 8 + 2×5 = 2×9). */
+@media (pointer: coarse) {
+  .context-bar .swatch {
+    margin-inline: 5px;
+  }
+  .context-bar .swatch::after {
+    content: "";
+    position: absolute;
+    inset: -11px;
+  }
 }
 
 .swatch.active {
@@ -1022,6 +1146,7 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .chip {
+  position: relative;
   border: 1px solid var(--line-strong);
   background: var(--card);
   color: var(--muted);
@@ -1031,6 +1156,19 @@ body:has(.bottom-stack) .site-footer {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
+}
+
+/* 34px pill (30px sub-chips), 44px target: an invisible hit area centered
+   on the chip keeps the rows as compact as they look. Scrolling chip rows
+   pad themselves to contain it (≤600px block below). */
+.chip::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
 }
 
 .chip.active {
@@ -1089,8 +1227,10 @@ body:has(.bottom-stack) .site-footer {
   box-shadow: var(--shadow-sm);
 }
 
-.choice-card:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .choice-card:hover {
+    border-color: var(--accent);
+  }
 }
 
 .choice-title {
@@ -1120,7 +1260,7 @@ body:has(.bottom-stack) .site-footer {
   color: var(--ok, #1a7f37);
 }
 .choice-price.plus {
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 /* Delivery-step carrier chooser: two side-by-side option cards. */
@@ -1141,8 +1281,10 @@ body:has(.bottom-stack) .site-footer {
   font-family: inherit;
   box-shadow: var(--shadow-sm);
 }
-.carrier-card:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .carrier-card:hover {
+    border-color: var(--accent);
+  }
 }
 .carrier-card.selected {
   border-color: var(--accent);
@@ -1167,7 +1309,7 @@ body:has(.bottom-stack) .site-footer {
   margin-top: 5px;
   font-size: 13px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 .ship-to-note {
@@ -1234,6 +1376,11 @@ body:has(.bottom-stack) .site-footer {
   display: flex;
   flex-direction: column;
   box-shadow: 0 -2px 12px rgba(24, 13, 56, 0.1);
+  /* notched phones: the stack's last bar (dock or CTA) clears the home
+     indicator; the white fill runs on underneath it */
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  background: var(--card);
 }
 
 .cta-bar {
@@ -1247,6 +1394,7 @@ body:has(.bottom-stack) .site-footer {
 .cta-btn {
   width: 100%;
   max-width: 620px;
+  min-height: 44px; /* the step's Continue — was 39px */
   text-align: center;
 }
 
@@ -1310,6 +1458,7 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .dock-toggle {
+  position: relative;
   flex: none;
   width: 30px;
   height: 30px;
@@ -1320,6 +1469,13 @@ body:has(.bottom-stack) .site-footer {
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+}
+
+/* 30px button, 44px target (28px inside the border + 2×8) */
+.dock-toggle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
 }
 
 /* collapsed: one slim tappable strip */
@@ -1355,7 +1511,7 @@ body:has(.bottom-stack) .site-footer {
 
 .has-dock {
   /* clearance for the fixed CTA bar + dock */
-  padding-bottom: 160px;
+  padding-bottom: calc(160px + env(safe-area-inset-bottom));
 }
 
 /* message step: box + text box + continue, one screen */
@@ -1471,12 +1627,21 @@ body:has(.bottom-stack) .site-footer {
   cursor: pointer;
 }
 
-.cal-day:hover:not(:disabled) {
-  background: var(--accent-soft);
+@media (pointer: coarse) {
+  .cal-day {
+    min-height: 44px;
+  }
+}
+
+@media (hover: hover) {
+  /* (not the picked day — its white number would wash out) */
+  .cal-day:hover:not(:disabled):not(.selected) {
+    background: var(--accent-soft);
+  }
 }
 
 .cal-day.selected {
-  background: var(--accent);
+  background: var(--accent-hover);
   color: #fff;
   font-weight: 700;
 }
@@ -1488,12 +1653,14 @@ body:has(.bottom-stack) .site-footer {
 
 /* USPS arrival window: the picked day stays full-strength (.selected); the
    window's mailing days either side shade lighter — "it may arrive on
-   these" (width = uspsWindowDays in the hub delivery config). */
+   these" (width = uspsWindowDays in the hub delivery config). Light tint +
+   periwinkle outline (3.9:1 against the calendar — the shape reads) with
+   navy numbers (14.9:1); it was white on 40% periwinkle, 1.6:1. */
 .cal-day.win {
-  background: var(--accent);
-  color: #fff;
+  background: #e3e8fc;
+  color: var(--ink);
   font-weight: 600;
-  opacity: 0.4;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .addr-cards {
@@ -1514,8 +1681,10 @@ body:has(.bottom-stack) .site-footer {
   cursor: pointer;
 }
 
-.addr-card:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .addr-card:hover {
+    border-color: var(--accent);
+  }
 }
 
 .addr-card.selected {
@@ -1564,8 +1733,10 @@ body:has(.bottom-stack) .site-footer {
   width: 100%;
 }
 
-.filling-bar:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .filling-bar:hover {
+    border-color: var(--accent);
+  }
 }
 
 .filling-bar.selected {
@@ -1618,7 +1789,7 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .filling-body .filling-price.plus {
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 .addon-note {
@@ -1663,8 +1834,10 @@ body:has(.bottom-stack) .site-footer {
   border-bottom: none;
 }
 
-.addon-row:hover:not(.blocked) .addon-label {
-  color: var(--accent-hover);
+@media (hover: hover) {
+  .addon-row:hover:not(.blocked) .addon-label {
+    color: var(--accent-hover);
+  }
 }
 
 .addon-row.selected .addon-label {
@@ -1690,7 +1863,7 @@ body:has(.bottom-stack) .site-footer {
 
 .addon-price {
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-hover);
   white-space: nowrap;
 }
 
@@ -1844,11 +2017,11 @@ body:has(.bottom-stack) .site-footer {
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
-.library-card:hover,
-.library-card:focus-visible {
-  transform: scale(1.04);
-  box-shadow: 0 0 0 3px var(--accent);
-  outline: none;
+@media (hover: hover) {
+  .library-card:hover {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 3px var(--accent);
+  }
 }
 
 .library-card img {
@@ -1878,9 +2051,10 @@ body:has(.bottom-stack) .site-footer {
   line-height: 1.25;
 }
 
-.library-card.see-all:hover,
-.library-card.see-all:focus-visible {
-  background: #e3e8fc;
+@media (hover: hover) {
+  .library-card.see-all:hover {
+    background: #e3e8fc;
+  }
 }
 
 .price-from {
@@ -1902,7 +2076,8 @@ body:has(.bottom-stack) .site-footer {
 .landing-scroll {
   max-width: 460px;
   margin: 0 auto;
-  padding: 30px 20px calc(44px + env(safe-area-inset-bottom));
+  padding: 30px max(20px, env(safe-area-inset-right))
+    calc(44px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2073,7 +2248,8 @@ body:has(.bottom-stack) .site-footer {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px max(16px, env(safe-area-inset-right))
+      calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
     background: #fff;
     border-top: 1px solid var(--line-strong);
     box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.07);
@@ -2090,7 +2266,7 @@ body:has(.bottom-stack) .site-footer {
   }
   /* clearance so the last cart content isn't hidden under the bar */
   .cart-grid {
-    padding-bottom: 88px;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
   /* per-line ship-to is redundant with the sidebar ship-to once stacked
      (the parent selector out-specifies `.cart-detail > div { display:flex }`) */
@@ -2103,7 +2279,8 @@ body:has(.bottom-stack) .site-footer {
 
 @media (max-width: 600px) {
   main {
-    padding: 16px 14px 60px;
+    padding: 16px max(14px, env(safe-area-inset-right)) 60px
+      max(14px, env(safe-area-inset-left));
   }
   h1 {
     font-size: 26px;
@@ -2141,15 +2318,40 @@ body:has(.bottom-stack) .site-footer {
   .shelf-row .library-card {
     flex: 0 0 130px;
   }
+  /* Two across on phones: 3-up made 110x54px tiles — too small to judge a
+     2.05:1 label with words on it. */
   .library-grid {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 6px 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
   }
   .facet-label {
     min-width: 100%;
   }
   .facet-row {
     row-gap: 4px;
+  }
+  /* Aisle + sub-chip rows: one sideways-scrolling row each (the seven
+     aisles wrapped into three rows), fading out at the right edge so the
+     cut-off chip reads as "more this way". */
+  .facet-scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* a scroller clips both axes: pad it to hold the chips' 44px hit
+       areas, and cancel the padding with margin so the row stays put */
+    padding-block: 7px;
+    margin-block: -7px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+  .facet-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  /* trailing room (+ the 8px gap = the 28px fade) so the last chip can
+     scroll fully clear of it */
+  .facet-scroll::after {
+    content: "";
+    flex: 0 0 20px;
   }
   .choice-card {
     padding: 20px 16px;
@@ -2177,7 +2379,10 @@ body:has(.bottom-stack) .site-footer {
   .chips {
     flex-wrap: nowrap;
     overflow-x: auto;
-    padding-bottom: 4px;
+    /* 4px of scrollbar room, plus 5px each side to hold the chips' 44px
+       hit areas inside the scroller; margins cancel it (was 4px 0 20px) */
+    padding: 5px 0 9px;
+    margin: -1px 0 15px;
   }
   .chip {
     flex: 0 0 auto;
@@ -2839,8 +3044,10 @@ body:has(.bottom-stack) .site-footer {
   text-decoration: none;
 }
 
-.reviews-back:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .reviews-back:hover {
+    text-decoration: underline;
+  }
 }
 
 /* Masonry-style wall: multicol packs full-length cards without the tall
@@ -2913,8 +3120,10 @@ body:has(.bottom-stack) .site-footer {
   cursor: pointer;
 }
 
-.review-thumb:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .review-thumb:hover {
+    border-color: var(--accent);
+  }
 }
 
 .review-thumb-media {
@@ -2953,9 +3162,11 @@ body:has(.bottom-stack) .site-footer {
   text-decoration: none;
 }
 
-.reviews-all:hover {
-  border-color: var(--accent);
-  color: var(--accent-hover);
+@media (hover: hover) {
+  .reviews-all:hover {
+    border-color: var(--accent);
+    color: var(--accent-hover);
+  }
 }
 
 /* newest-first pager under the wall */
@@ -2978,9 +3189,11 @@ body:has(.bottom-stack) .site-footer {
   text-decoration: none;
 }
 
-a.pager-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent-hover);
+@media (hover: hover) {
+  a.pager-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent-hover);
+  }
 }
 
 .pager-btn.disabled {
@@ -3054,9 +3267,11 @@ a.pager-btn:hover {
   line-height: 1;
 }
 
-.lb-close:hover,
-.lb-nav:hover {
-  background: rgba(243, 231, 228, 0.3);
+@media (hover: hover) {
+  .lb-close:hover,
+  .lb-nav:hover {
+    background: rgba(243, 231, 228, 0.3);
+  }
 }
 
 .lb-close {

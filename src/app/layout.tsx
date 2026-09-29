@@ -1,9 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Image from "next/image";
 import { Poppins } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
+// The design-system master wordmark. Its <Image> passes sizes= for the
+// rendered slot (.brand-logo: 44px tall, 34px on phones → ~82/64px wide) —
+// without it Next preloads a 3840px-wide file for a 70-80px logo.
 import logo from "../../public/pinatagrams-logo.png";
 import CartLink from "./cart-link";
 import Analytics from "./analytics";
@@ -17,10 +20,20 @@ const poppins = Poppins({
   variable: "--font-poppins",
 });
 
+// Arbotek styles only a few display elements — not worth preloading 116 KB
+// of OTF on every page; they swap in when it arrives.
 const arbotek = localFont({
   src: "../fonts/arbotek-ultra.otf",
   variable: "--font-arbotek",
+  preload: false,
+  display: "swap",
 });
+
+export const viewport: Viewport = {
+  themeColor: "#f3e7e4",
+  // Lets the env(safe-area-inset-*) paddings take effect on notched phones.
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://builder.pinatagrams.com"),
@@ -56,6 +69,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 alt="Piñatagrams"
                 className="brand-logo"
                 priority
+                sizes="(max-width: 600px) 64px, 82px"
               />
             </a>
             <CartLink />
