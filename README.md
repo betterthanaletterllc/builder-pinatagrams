@@ -47,7 +47,8 @@ Server pieces added with the overhaul:
   the daily `GET /api/cron/ensure-webhooks`), trimmed to non-personal fields.
   Needs `read_orders` on the Shopify app. The HMAC is checked against
   `SHOPIFY_CLIENT_SECRET` (or `SHOPIFY_WEBHOOK_SECRET` for a hand-made admin
-  webhook); `GET` on the same path says whether the subscription exists.
+  webhook); `GET` on the same path says whether the subscription exists (and
+  creates it if missing, once per instance).
 - Analytics (GA4, Meta pixel, PostHog) only run in production on
   `*.pinatagrams.com`; PostHog loads lazily.
 

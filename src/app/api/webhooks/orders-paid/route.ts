@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { POSTHOG_HOST, POSTHOG_KEY } from "@/lib/analytics-config";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { ordersPaidWebhookStatus } from "@/lib/webhooks";
+import { ensureOrdersPaidWebhookOnce, ordersPaidWebhookStatus } from "@/lib/webhooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +25,8 @@ export const dynamic = "force-dynamic";
  * Settings → Notifications is signed with the key shown there instead — put
  * it in SHOPIFY_WEBHOOK_SECRET; either key is accepted. Without a secret the
  * route refuses every call rather than trusting unsigned payloads.
- * `GET` answers whether the subscription exists (read-only, rate-limited).
+ * `GET` answers whether the subscription exists (rate-limited; its first
+ * call on an instance also creates the subscription if it's missing).
  *
  * Only orders tagged `builder` are forwarded. Nothing personal leaves this
  * route: no names, emails, addresses or messages — just counts, money and
@@ -77,14 +78,19 @@ const money = (v: string | undefined): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
-/** Is Shopify's orders/paid subscribed to this route? Read-only. */
+/** Is Shopify's orders/paid subscribed to this route? The first look on each
+ *  instance also subscribes it if it's missing (idempotent, same as the
+ *  cron) — so a deploy can be checked, and fixed, from a browser. */
 export async function GET(req: Request) {
   if (!rateLimit(`webhook-status:${clientIp(req)}`, 5, 60_000)) {
     return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
-  return NextResponse.json(await ordersPaidWebhookStatus(), {
-    headers: { "Cache-Control": "no-store" },
-  });
+  const ensured = await ensureOrdersPaidWebhookOnce();
+  const status = await ordersPaidWebhookStatus();
+  return NextResponse.json(
+    { ...status, ...(ensured.status === "error" ? { error: ensured.reason } : {}) },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function POST(req: Request) {
