@@ -79,7 +79,7 @@ import {
   type OrderPrefs,
 } from "../lib/draft";
 import { composeMessage, type CardParts } from "../lib/message";
-import type { OccasionId } from "../lib/occasions";
+import { libraryViewFor, occasionDef, type OccasionId } from "../lib/occasions";
 import { computeOrder, designName, type OrderPiece } from "../lib/order";
 import { deliveredCents, priceRows, type PriceCtx } from "../lib/pricing";
 import { graphicReady, resolveRestore } from "../lib/restore";
@@ -116,7 +116,7 @@ import st from "./steps.module.css";
 type SheetState =
   | { kind: "body" }
   | { kind: "zoom" }
-  | { kind: "library" }
+  | { kind: "library"; occasion: OccasionId | null }
   | { kind: "price" }
   | { kind: "lineDate"; lineId: string }
   /** Switching carrier with piñatas already in the order: confirm first. */
@@ -132,10 +132,14 @@ type Nav = {
 };
 
 type Problem = {
-  kind: "carrier" | "date" | "design" | "line" | "address" | "email";
+  kind: "message" | "carrier" | "date" | "design" | "line" | "address" | "email";
   message: string;
   focus: () => void;
 };
+
+/** The card's message box (Step 2) — focused when it's still empty. */
+const MESSAGE_ID = "pg-message";
+const MESSAGE_REQUIRED = "Write a message — it's printed on the inside flap of the box.";
 
 const EMPTY_PREFS: OrderPrefs = {
   carrier: null,
@@ -175,6 +179,7 @@ export default function DesignFlowV2(data: FlowData) {
   useSyncExternalStore(subscribeDesignSaves, designSavesVersion, () => 0);
   const [addonNotice, setAddonNotice] = useState<string | null>(null);
   const [cardNotice, setCardNotice] = useState<string | null>(null);
+  const [messageError, setMessageError] = useState<string | null>(null);
   const [carrierNotice, setCarrierNotice] = useState<Carrier | null>(null);
   const [discounts, setDiscounts] = useState<HubDiscount[]>([]);
   const [submitted, setSubmitted] = useState(false);
@@ -247,7 +252,9 @@ export default function DesignFlowV2(data: FlowData) {
           ? "failed"
           : "saving"
       : null;
-  const maxReachable = draft ? (graphicReady(draft.graphic) ? 3 : 0) : 3;
+  // A design that's still saving holds you on Step 1; an empty card holds
+  // you on Step 2 (every piñata carries a message).
+  const maxReachable = draft ? (graphicReady(draft.graphic) ? (message.trim() ? 3 : 1) : 0) : 3;
   const editing = !!draft?.editLineId;
   const loading = !hydrated && (data.requestedStep !== "design" || !!data.editLineId);
 
@@ -408,7 +415,14 @@ export default function DesignFlowV2(data: FlowData) {
         navigate("design", { via: "back", history: "replace", animate });
         return;
       }
-      const clamped = d && !graphicReady(d.graphic) ? "design" : target;
+      const clamped =
+        d && !graphicReady(d.graphic)
+          ? "design"
+          : d &&
+              STEPS[target].index > STEPS.card.index &&
+              !composeMessage({ to: d.msgTo, body: d.msgBody, from: d.msgFrom }).trim()
+            ? "card"
+            : target;
       navigate(clamped, {
         via: "back",
         history: clamped === target ? "none" : "replace",
@@ -653,6 +667,8 @@ export default function DesignFlowV2(data: FlowData) {
     trackV2("delivery_date_picked", { soonest: true, carrier });
   };
 
+  const clearDate = () => patch({ date: "", dateSoonest: false });
+
   const pickDate = (ymd: string) => {
     if (!carrier) return;
     patch({ date: ymd, dateSoonest: false });
@@ -784,6 +800,10 @@ export default function DesignFlowV2(data: FlowData) {
   /** Everything standing between the shopper and payment, in page order. */
   const problems = (): Problem[] => {
     const out: Problem[] = [];
+    // the card comes first: it's an earlier step
+    if (draft && !message.trim()) {
+      out.push({ kind: "message", message: MESSAGE_REQUIRED, focus: needMessage });
+    }
     if (!carrier) {
       out.push({ kind: "carrier", message: "Choose how it travels.", focus: byId(CARRIER_IDS.fedex) });
     }
@@ -1058,8 +1078,18 @@ export default function DesignFlowV2(data: FlowData) {
     lastAnnounced.current = { step, text: priceText };
   }, [hydrated, priceText, step, announce]);
 
+  /** The card can't be skipped: back to it, with the box marked. */
+  const needMessage = () => {
+    setMessageError(MESSAGE_REQUIRED);
+    if (stepRef.current !== "card") navigate("card", { via: "chip", history: "push" });
+    requestAnimationFrame(() => document.getElementById(MESSAGE_ID)?.focus());
+    announce(MESSAGE_REQUIRED);
+  };
+
   const explainNotReady = () => {
-    if (saveStatus === "saving") {
+    if (draft && graphicReady(draft.graphic) && !message.trim()) {
+      needMessage();
+    } else if (saveStatus === "saving") {
       showToast("Your design is still saving — one moment.");
     } else {
       document.getElementById("pg-retry-save")?.focus();
@@ -1078,11 +1108,14 @@ export default function DesignFlowV2(data: FlowData) {
         onClick: () => (ready ? navigate("card", { via: "continue", history: "push" }) : explainNotReady()),
       };
     } else if (step === "card" && draft) {
-      const empty = !message;
+      const empty = !message.trim();
       cta = {
-        label: empty ? "Continue without a message" : STEPS.card.next,
-        short: empty ? "Skip" : STEPS.card.nextShort,
+        label: STEPS.card.next,
+        short: STEPS.card.nextShort,
+        // every piñata carries a message — there's no skipping the card
+        notReady: empty,
         onClick: () => {
+          if (empty) return needMessage();
           trackV2("message_step_completed", {
             has_message: !!draft.msgBody.trim(),
             has_from: !!draft.msgFrom.trim(),
@@ -1243,10 +1276,10 @@ export default function DesignFlowV2(data: FlowData) {
           trackV2("occasion_selected", { occasion: id });
         }}
         onPick={(g) => pickGraphic(g, "filmstrip")}
-        onSeeAll={() => {
+        onSeeAll={(occasion) => {
           libraryScroll.current = window.scrollY;
-          setSheet({ kind: "library" });
-          trackV2("graphic_library_opened");
+          setSheet({ kind: "library", occasion });
+          trackV2("graphic_library_opened", { scope: occasion ?? "all" });
         }}
         onLibraryIntent={() => void loadLibrary()}
         onMakeOwn={() => openEditor(false)}
@@ -1261,14 +1294,16 @@ export default function DesignFlowV2(data: FlowData) {
         occasion={draft.occasion}
         notice={cardNotice}
         onNotice={setCardNotice}
-        onParts={(p, o) =>
+        error={messageError}
+        onParts={(p, o) => {
+          if (composeMessage(p).trim()) setMessageError(null);
           patch({
             msgTo: p.to,
             msgBody: p.body,
             msgFrom: p.from,
             starterUsed: draft.starterUsed || !!o?.starter,
-          })
-        }
+          });
+        }}
       />
     );
   } else if (step === "inside" && draft) {
@@ -1310,6 +1345,7 @@ export default function DesignFlowV2(data: FlowData) {
             : null
         }
         onSoonest={pickSoonest}
+        onClearDate={clearDate}
         onDate={pickDate}
         recipient={{
           cartAddress: cartAddressOk ? cartAddress : null,
@@ -1525,6 +1561,14 @@ export default function DesignFlowV2(data: FlowData) {
               setSheet(null);
               requestAnimationFrame(() => window.scrollTo(0, libraryScroll.current));
             }}
+            title={
+              sheet?.kind === "library" && sheet.occasion
+                ? `${occasionDef(sheet.occasion).label} designs`
+                : "All designs"
+            }
+            initialView={
+              sheet?.kind === "library" ? libraryViewFor(sheet.occasion) : undefined
+            }
           />
           <PriceSheet
             open={!!priceSheet}

@@ -154,7 +154,7 @@ export function ZoomSheet({
         ? (graphic.thumb ?? graphic.art)
         : cdnThumb(graphic.art ?? graphic.thumb, 1400);
   return (
-    <Sheet open={open} onClose={onClose} title="Your label, up close">
+    <Sheet open={open} onClose={onClose} title="Your label, up close" tall>
       {art && (
         <div className={`${s.zoomArt}${graphic?.type === "custom" ? " ph-no-capture" : ""}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -176,6 +176,8 @@ export function LibrarySheet({
   hubCategories,
   styleId,
   onPick,
+  title = "All designs",
+  initialView,
 }: {
   open: boolean;
   onClose: () => void;
@@ -184,9 +186,12 @@ export function LibrarySheet({
   hubCategories: HubGraphicCategory[];
   styleId: string;
   onPick: (g: GraphicChoice) => void;
+  title?: string;
+  /** Open on an occasion's aisle (or everything) — see libraryViewFor. */
+  initialView?: { aisle: string | null; sub: string | null };
 }) {
   return (
-    <Sheet open={open} onClose={onClose} title="All designs" wide full>
+    <Sheet open={open} onClose={onClose} title={title} wide full>
       <div className={s.library}>
         <GraphicLibrary
           restrict={restrict}
@@ -194,6 +199,7 @@ export function LibrarySheet({
           hubCategories={hubCategories}
           styleId={styleId}
           onPick={onPick}
+          initialView={initialView}
         />
       </div>
     </Sheet>

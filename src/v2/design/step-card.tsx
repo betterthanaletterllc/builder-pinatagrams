@@ -12,10 +12,11 @@ import s from "./steps.module.css";
 /**
  * Step 2 · Card — "Write the card". One message box; the live preview is
  * the Stage itself (the words on the box's inside flap), so there's no
- * second preview here. A single line reminds them to sign it — there are
- * no separate To / From fields. The message is held to checkout's
- * 300-character cap: a change that would overflow is refused (with a note)
- * instead of being cut silently at checkout.
+ * second preview here. A single line reminds them to say who it's from —
+ * there are no separate To / From fields. The message is required (the flow
+ * won't move on without one) and held to checkout's 300-character cap: a
+ * change that would overflow is refused (with a note) instead of being cut
+ * silently at checkout.
  */
 const StepCard = forwardRef<
   HTMLHeadingElement,
@@ -25,8 +26,10 @@ const StepCard = forwardRef<
     onParts: (p: CardParts, opts?: { starter?: boolean }) => void;
     notice: string | null;
     onNotice: (msg: string | null) => void;
+    /** Shown on the box when they try to move on with it empty. */
+    error?: string | null;
   }
->(function StepCard({ parts, occasion, onParts, notice, onNotice }, h1Ref) {
+>(function StepCard({ parts, occasion, onParts, notice, onNotice, error }, h1Ref) {
   const counterId = useId();
   const hintId = useId();
   const composed = composeMessage(parts);
@@ -75,16 +78,21 @@ const StepCard = forwardRef<
 
       <div className={s.fields}>
         <TextArea
+          id="pg-message"
           label="Message"
           value={parts.body}
           rows={5}
-          aria-describedby={`${hintId} ${counterId}`}
+          error={error}
+          // (spread after the field's own ids, so the error id goes in too)
+          aria-describedby={[error ? "pg-message-error" : null, hintId, counterId]
+            .filter(Boolean)
+            .join(" ")}
           placeholder="Say something they'll keep."
           onChange={(e) => change(e.target.value)}
         />
         <div className={s.cardMeta}>
           <p id={hintId} className={s.signHint}>
-            <Pencil size={15} /> Sign it so they know who it&apos;s from.
+            <Pencil size={15} /> Don&apos;t forget to say who this is from.
           </p>
           <p id={counterId} className={s.counter} data-low={left <= 20}>
             {left} character{left === 1 ? "" : "s"} left

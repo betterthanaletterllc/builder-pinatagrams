@@ -2765,6 +2765,36 @@ body:has(.bottom-stack) .site-footer {
   object-fit: contain;
 }
 
+/* A style with no box photo yet (hub catalog): the piñata over its label,
+   in the same square the photo would fill. */
+.box-composite.box-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4%;
+  aspect-ratio: 1 / 1;
+  padding: 4%;
+}
+
+.box-fallback-pinata {
+  display: block;
+  height: 56%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 10px rgba(24, 13, 56, 0.22));
+}
+
+.box-fallback-art {
+  display: block;
+  width: 78%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(24, 13, 56, 0.12);
+}
+
 .box-art-placeholder {
   position: absolute;
   border: 2px dashed var(--accent);

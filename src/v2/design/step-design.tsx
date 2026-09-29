@@ -40,8 +40,9 @@ function tileName(g: GraphicChoice, categories: HubGraphicCategory[], hub: HubGr
  * Step 1 · Design — "Pick your design". Occasion chips filter a filmstrip of
  * best sellers (radio tiles: tapping swaps the art on the Stage at once, no
  * confirm screen). Tiered stores lead with the Classic ("Included") and
- * label every other tile with its upcharge at the moment of choice. The
- * full library and the editor are one tap away.
+ * label every other tile with its upcharge at the moment of choice. "Make
+ * your own" is a tile too — always second. Under the grid: the whole
+ * occasion in the library, and the whole library.
  */
 const StepDesign = forwardRef<
   HTMLHeadingElement,
@@ -59,7 +60,8 @@ const StepDesign = forwardRef<
     allowCustom: boolean;
     onOccasion: (id: OccasionId) => void;
     onPick: (g: GraphicChoice) => void;
-    onSeeAll: () => void;
+    /** The library, opened on the chosen occasion — or on everything. */
+    onSeeAll: (occasion: OccasionId | null) => void;
     onLibraryIntent: () => void;
     onMakeOwn: () => void;
     banner?: ReactNode;
@@ -81,9 +83,32 @@ const StepDesign = forwardRef<
   // The current pick is always visible and selected, even if it came from
   // the library, a deep link or the editor.
   if (!tiles.some((t) => sameGraphic(t, p.graphic))) tiles = [p.graphic, ...tiles];
-  tiles = tiles.slice(0, STRIP_MAX);
+  // one slot goes to the "Make your own" tile (second), so the grid stays full rows
+  tiles = tiles.slice(0, p.allowCustom ? STRIP_MAX - 1 : STRIP_MAX);
 
   const stripLabel = active ? `${active.label} designs` : "Designs";
+  const ownCents = p.tiered ? p.pricing.graphicCustomUpchargeCents : 0;
+  const makeOwn = p.allowCustom ? (
+    <button
+      key="make-own"
+      type="button"
+      className={`${s.tile} ${s.makeOwn}`}
+      onClick={p.onMakeOwn}
+      data-priced={(ownCents > 0 && p.graphic.type !== "custom") || undefined}
+    >
+      <span className={s.makeOwnInner}>
+        {p.graphic.type === "custom" ? <Pencil size={14} /> : <Sparkle size={14} />}
+        <span className={s.makeOwnLabel}>
+          {p.graphic.type === "custom" ? "Edit your design" : "Make your own"}
+        </span>
+      </span>
+      {ownCents > 0 && p.graphic.type !== "custom" && (
+        <span className={s.tier} data-included={false}>
+          +{formatCents(ownCents)}
+        </span>
+      )}
+    </button>
+  ) : null;
 
   return (
     <div>
@@ -102,12 +127,12 @@ const StepDesign = forwardRef<
 
       <fieldset className={s.strip}>
         <legend className={s.srOnly}>{stripLabel}</legend>
-        {tiles.map((g, i) => {
+        {tiles.flatMap((g, i) => {
           const selected = sameGraphic(g, p.graphic);
           const art = previewArt(g, 360);
           const tier = p.tiered ? tierLabel(g, p.pricing) : null;
           const key = g.type === "custom" ? "custom" : `${g.type}-${g.design}`;
-          return (
+          const tile = (
             <label
               key={key}
               className={`${s.tile}${g.type === "custom" ? " ph-no-capture" : ""}`}
@@ -143,42 +168,36 @@ const StepDesign = forwardRef<
               </span>
             </label>
           );
+          return i === 0 && makeOwn ? [tile, makeOwn] : [tile];
         })}
       </fieldset>
 
-      <div className={s.links}>
-        {p.libraryCount > 0 && (
+      {p.libraryCount > 0 && (
+        <div className={s.links}>
+          {active && (
+            <button
+              type="button"
+              className={s.linkBtn}
+              onClick={() => p.onSeeAll(active.id)}
+              onPointerEnter={p.onLibraryIntent}
+              onFocus={p.onLibraryIntent}
+              aria-haspopup="dialog"
+            >
+              See all {active.label} designs
+            </button>
+          )}
           <button
             type="button"
             className={s.linkBtn}
-            onClick={p.onSeeAll}
+            onClick={() => p.onSeeAll(null)}
             onPointerEnter={p.onLibraryIntent}
             onFocus={p.onLibraryIntent}
             aria-haspopup="dialog"
           >
             See all {p.libraryCount.toLocaleString("en-US")} designs
           </button>
-        )}
-        {p.allowCustom && (
-          <button type="button" className={s.linkBtn} onClick={p.onMakeOwn}>
-            {p.graphic.type === "custom" ? (
-              <>
-                <Pencil size={16} /> Edit your design
-              </>
-            ) : (
-              <>
-                <Sparkle size={16} /> Make your own
-                {p.tiered && p.pricing.graphicCustomUpchargeCents > 0 && (
-                  <span className={s.muted}>
-                    {" "}
-                    +{formatCents(p.pricing.graphicCustomUpchargeCents)}
-                  </span>
-                )}
-              </>
-            )}
-          </button>
-        )}
-      </div>
+        </div>
+      )}
       {p.status}
     </div>
   );

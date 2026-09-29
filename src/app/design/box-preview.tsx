@@ -212,13 +212,25 @@ export default function BoxPreview({
               )}
             </div>
           ) : (
-            <div className="box-composite">
+            // No box photo for this style in the hub catalog yet: show the
+            // piñata itself above its label — never the label alone.
+            <div className="box-composite box-fallback">
+              {pinataImg && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={pinataImg}
+                  alt={`${styleName} piñata`}
+                  className="box-fallback-pinata"
+                  decoding="async"
+                  onError={() => setPinataAttempt((a) => a + 1)}
+                />
+              )}
               {artUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={artUrl}
                   alt="your graphic"
-                  className="box-img"
+                  className="box-fallback-art"
                   width={LABEL_ART.w}
                   height={LABEL_ART.h}
                 />

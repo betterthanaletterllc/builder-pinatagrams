@@ -194,6 +194,50 @@
   color: var(--pg-success-text);
 }
 
+/* "Make your own" as a design tile: same shape, a dashed "blank label". */
+.makeOwn {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1.5px dashed var(--pg-peri-dark);
+  background: var(--pg-tint);
+  color: var(--pg-peri-dark);
+  font: inherit;
+  text-align: center;
+}
+
+.makeOwn:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 4px;
+}
+
+.makeOwnInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+/* with the price badge along the bottom, the words sit above it */
+.makeOwn[data-priced] .makeOwnInner {
+  padding-bottom: 20px;
+}
+
+.makeOwnInner svg {
+  flex: none;
+}
+
+.makeOwnLabel {
+  font: 600 12px/1.2 var(--pg-font);
+  white-space: nowrap;
+}
+
+@media (min-width: 480px) {
+  .makeOwnLabel {
+    font-size: 14px;
+  }
+}
+
 .links {
   display: flex;
   flex-wrap: wrap;
@@ -349,12 +393,6 @@
 
 .calendar:focus {
   outline: none;
-}
-
-.calendarLabel {
-  margin: 0 0 8px;
-  font: 600 14px/1.4 var(--pg-font);
-  color: var(--pg-text-2);
 }
 
 .calendar :global(.cal) {
@@ -812,12 +850,20 @@
   object-fit: contain;
 }
 
+/* edge to edge on a phone: the label as big as the screen allows */
 .zoomArt {
   overflow: hidden;
   aspect-ratio: 2.05 / 1;
+  margin: 0 -12px;
   border: 1px solid var(--pg-line);
   border-radius: 8px;
   background: var(--pg-white);
+}
+
+@media (min-width: 768px) {
+  .zoomArt {
+    margin: 0;
+  }
 }
 
 .zoomArt img {

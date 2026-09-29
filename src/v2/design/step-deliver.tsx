@@ -58,6 +58,8 @@ const StepDeliver = forwardRef<
     dateSoonest: boolean;
     dateError: string | null;
     onSoonest: () => void;
+    /** Soonest tapped again: no date until they pick one. */
+    onClearDate: () => void;
     onDate: (ymd: string) => void;
     recipient: RecipientProps;
     email: string;
@@ -75,7 +77,6 @@ const StepDeliver = forwardRef<
   const whoH = useId();
   const orderH = useId();
   const soonestYmd = p.carrier ? soonest(p.cfg, p.carrier) : null;
-  const months = Math.max(1, Math.round(p.cfg.maxDaysOut / 30));
   const perPiece = (c: number | null) => (c === null ? "—" : formatCents(c));
 
   return (
@@ -131,12 +132,14 @@ const StepDeliver = forwardRef<
               {/* "Soonest" is one tap; the calendar right under it is always
                   open for any other day. Neither is preselected. */}
               <fieldset className={s.options} aria-labelledby={dateH}>
+                {/* a toggle: tap again to clear it (then pick in the calendar) */}
                 <OptionCard
+                  type="checkbox"
                   inputId={DATE_IDS.soonest}
                   name="pg-date"
                   value="soonest"
                   checked={!!p.date && p.date === soonestYmd}
-                  onChange={p.onSoonest}
+                  onChange={(e) => (e.target.checked ? p.onSoonest() : p.onClearDate())}
                   title={`Soonest · ${
                     p.carrier === "usps"
                       ? formatWindow(uspsWindow(soonestYmd, p.cfg))
@@ -150,7 +153,6 @@ const StepDeliver = forwardRef<
                 />
               </fieldset>
               <div id={DATE_IDS.pick} className={s.calendar} tabIndex={-1}>
-                <p className={s.calendarLabel}>Or pick a day — up to {months} months out</p>
                 <DateCalendar
                   key={p.carrier}
                   value={p.date}

@@ -139,8 +139,12 @@ export default function GraphicLibrary({
   hubGraphics = NO_HUB_GRAPHICS,
   hubCategories = NO_HUB_CATEGORIES,
   styleId,
+  initialView,
 }: {
   onPick: (g: GraphicChoice) => void;
+  // Open on this aisle / sub-filter (no search) instead of where the shopper
+  // last left off — builder2's "See all Birthday designs" / "See all".
+  initialView?: { aisle: string | null; sub: string | null };
   // Variant knob (hub Builder → Storefronts): "birthday" trims the Shopify
   // library to the Birthday set; "none" drops the Shopify library entirely
   // (a folders-only storefront — just this site's granted hub folders).
@@ -161,7 +165,9 @@ export default function GraphicLibrary({
 
   // Re-entering (e.g. "Change graphic") resumes EXACTLY where the shopper
   // left off: same aisle, same sub-pick, same search, same scroll.
-  const restored = useRef(loadLibraryState());
+  const restored = useRef(
+    initialView ? { q: "", a: initialView.aisle, s: initialView.sub, y: 0 } : loadLibraryState(),
+  );
   const isAisle = (v: string | null): v is Aisle =>
     AISLES.some((a) => a.id === v);
   const [query, setQuery] = useState(restored.current?.q ?? "");

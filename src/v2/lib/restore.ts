@@ -2,7 +2,8 @@ import type { CartLine, GraphicChoice } from "@/lib/flow";
 import type { HubFilling } from "@/lib/hub";
 import { fillingAfterDesignChange } from "./defaults";
 import { applyPreset, draftFromLine, draftFromPreset, type DraftV2 } from "./draft";
-import { parseStep } from "./steps";
+import { composeMessage } from "./message";
+import { parseStep, STEPS } from "./steps";
 import type { Preset, StepId, StepVia } from "./types";
 
 /** Library and hub picks are ready as they are; a custom design needs its
@@ -100,6 +101,13 @@ export function resolveRestore(input: {
   let step: StepId = parseStep(url.searchParams.get("step")) ?? "design";
   if (!d) step = "deliver";
   else if (!graphicReady(d.graphic)) step = "design";
+  // no message yet: nothing past the card (every piñata carries one)
+  else if (
+    STEPS[step].index > STEPS.card.index &&
+    !composeMessage({ to: d.msgTo, body: d.msgBody, from: d.msgFrom }).trim()
+  ) {
+    step = "card";
+  }
   url.searchParams.set("step", step);
   url.searchParams.delete("view");
 

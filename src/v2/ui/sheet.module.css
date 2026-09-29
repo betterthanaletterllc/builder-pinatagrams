@@ -128,6 +128,17 @@
   display: none;
 }
 
+/* A thing to look at (the label up close): never a sliver at the bottom. */
+.tall {
+  min-height: 62svh;
+}
+
+.tall .body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 @media (min-width: 768px) {
   .sheet {
     inset: 0;
@@ -150,6 +161,11 @@
     width: min(1040px, 100% - 48px);
     height: min(90svh, 100% - 48px);
     max-height: min(90svh, 100% - 48px);
+  }
+
+  .tall {
+    width: min(960px, 100% - 48px);
+    min-height: 0;
   }
 }
 

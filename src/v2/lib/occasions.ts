@@ -60,6 +60,19 @@ export function occasionDef(id: OccasionId): OccasionDef {
   return OCCASION_DEFS.find((d) => d.id === id)!;
 }
 
+/**
+ * "See all <occasion> designs": where the full library opens — its aisle
+ * and sub-filter for the chip (the library's own taxonomy). null = all.
+ */
+export function libraryViewFor(id: OccasionId | null): { aisle: string | null; sub: string | null } {
+  if (!id) return { aisle: null, sub: null };
+  if (id === "birthday") return { aisle: "birthdays", sub: null };
+  if (id === "holidays") return { aisle: "holidays", sub: null };
+  if (id === "halloween") return { aisle: "holidays", sub: "Halloween" };
+  const first = occasionDef(id).library[0];
+  return first ? { aisle: "occasions", sub: first } : { aisle: null, sub: null };
+}
+
 function daysUntil(month: number, day: number, now: Date): number {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let target = new Date(now.getFullYear(), month - 1, day);

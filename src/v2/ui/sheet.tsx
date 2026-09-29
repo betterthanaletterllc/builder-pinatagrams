@@ -38,6 +38,7 @@ export default function Sheet({
   footer,
   wide = false,
   full = false,
+  tall = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -46,6 +47,8 @@ export default function Sheet({
   footer?: ReactNode;
   wide?: boolean;
   full?: boolean;
+  /** At least ~60% of a phone's height, content centred (the zoom). */
+  tall?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -98,7 +101,7 @@ export default function Sheet({
   return (
     <dialog
       ref={ref}
-      className={`${s.sheet}${wide ? ` ${s.wide}` : ""}${full ? ` ${s.full}` : ""}`}
+      className={`${s.sheet}${wide ? ` ${s.wide}` : ""}${full ? ` ${s.full}` : ""}${tall ? ` ${s.tall}` : ""}`}
       aria-labelledby={titleId}
       // Esc (native cancel → close) and backdrop taps report back up so the
       // caller's state stays the single source of truth.

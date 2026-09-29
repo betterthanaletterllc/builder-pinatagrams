@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { forwardRef, useState } from "react";
+import { forwardRef } from "react";
 import { fillingAllowsAddon } from "@/lib/flow";
 import { formatCents, type HubFilling } from "@/lib/hub";
 import { candyFilling } from "../lib/defaults";
@@ -9,8 +9,6 @@ import type { V2Addon } from "../lib/types";
 import { OptionCard } from "../ui/controls";
 import { Callout, StepHeader } from "../ui/feedback";
 import s from "./steps.module.css";
-
-const FIRST_FILLINGS = 3;
 
 /**
  * Step 3 · Inside — "What goes inside?". Candy is already chosen (most
@@ -31,15 +29,9 @@ const StepInside = forwardRef<
     notice: string | null;
   }
 >(function StepInside(p, h1Ref) {
-  const [showAll, setShowAll] = useState(false);
   const candy = candyFilling(p.fillings);
   const rec = p.fillings.find((f) => f.label === p.filling);
-  // Three options above the fold keeps the add-on in view on a phone; the
-  // chosen one always shows.
-  const visible = showAll
-    ? p.fillings
-    : p.fillings.filter((f, i) => i < FIRST_FILLINGS || f.label === p.filling);
-  const hidden = p.fillings.filter((f) => !visible.includes(f));
+  // Every filling shows — none hide behind a "more" link.
   const offered = p.addons.filter((a) => fillingAllowsAddon(rec, a.id));
 
   return (
@@ -47,7 +39,7 @@ const StepInside = forwardRef<
       <StepHeader ref={h1Ref} index={2} title="What goes inside?" />
       <fieldset className={s.options}>
         <legend className={s.srOnly}>Filling</legend>
-        {visible.map((f) => (
+        {p.fillings.map((f) => (
           <OptionCard
             key={f.id}
             name="pg-filling"
@@ -66,11 +58,6 @@ const StepInside = forwardRef<
           />
         ))}
       </fieldset>
-      {hidden.length > 0 && (
-        <button type="button" className={s.linkBtn} onClick={() => setShowAll(true)}>
-          More fillings: {hidden.map((f) => f.label).join(", ")}
-        </button>
-      )}
 
       {offered.length > 0 && (
         <div className={s.block}>
