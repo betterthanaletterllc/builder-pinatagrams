@@ -230,11 +230,14 @@ export function trackPageView(path: string): void {
 }
 
 /* --- Meta de-duplication -------------------------------------------------------
- * The pixel double-counted AddToCart/InitiateCheckout from ~2026-09-17
- * (InitiateCheckout per draft 0.96 → 1.97). Meta de-duplicates repeats that
- * share an event name + eventID, so each of these events carries its own id
- * — returned to the caller too, so a future server-side (Conversions API)
- * send can reuse it and count once.
+ * Since 2026-09-17 a Conversions API Gateway is attached to the pixel (its
+ * config's "openbridge" block, every domain): fbevents re-sends each browser
+ * event to it and it reaches Meta again as a server event, so raw "events
+ * received" doubled (InitiateCheckout per draft 0.96 → 1.97). Meta
+ * de-duplicates pairs sharing an event name + eventID, and both copies carry
+ * the id set here — ad results didn't double. The id is returned to the
+ * caller too, so a future server-side (Conversions API) send can reuse it.
+ * Raw counts stay ~2× until the gateway is removed or blocks this host.
  * -------------------------------------------------------------------------- */
 
 function newEventId(prefix: string): string {
