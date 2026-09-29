@@ -29,13 +29,19 @@ export default function DryRunResult({ payload }: { payload: Record<string, unkn
             const rec = (o ?? {}) as Record<string, unknown>;
             const input = (rec.input ?? {}) as Record<string, unknown>;
             const shipping = (input.shippingLine ?? {}) as Record<string, unknown>;
+            // 2026-07 payloads carry priceWithCurrency.amount (the deprecated
+            // `price` is gone); older dry runs still show `price`.
+            const shipAmount =
+              (shipping.priceWithCurrency as { amount?: unknown } | undefined)?.amount ??
+              shipping.price ??
+              "";
             const items = Array.isArray(input.lineItems) ? input.lineItems.length : null;
             return (
               <li key={i}>
                 {String(rec.shipTo ?? "Order")}
                 {items !== null && ` · ${items} line item${items === 1 ? "" : "s"}`}
                 {typeof shipping.title === "string" &&
-                  ` · “${shipping.title}” $${String(shipping.price ?? "")}`}
+                  ` · “${shipping.title}” $${String(shipAmount)}`}
               </li>
             );
           })}

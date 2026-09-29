@@ -1429,8 +1429,10 @@ export default function DesignFlowV2(data: FlowData) {
                     <Truck size={16} /> Earliest {formatWindow(uspsWindow(soonest(cfg, "usps"), cfg))}
                   </>
                 ) : (
+                  // Short: it shares a phone-width bar with the price and
+                  // the button (the Stage's promise line has the full words).
                   <>
-                    <Truck size={16} /> Arrives as soon as {fedexSoonest}
+                    <Truck size={16} /> Soonest {fedexSoonest}
                   </>
                 )
               }

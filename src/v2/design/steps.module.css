@@ -279,6 +279,10 @@
 /* starters wrap (they're whole lines); scoped under .starters so this wins
    over the base chip rule regardless of stylesheet order */
 .starters .starter {
+  /* the base chip is flex:none (sized to one unbroken line) — a whole
+     sentence then runs off a phone screen and zooms the page out */
+  flex: 0 1 auto;
+  max-width: 100%;
   height: auto;
   min-height: 36px;
   padding: 8px 14px;
