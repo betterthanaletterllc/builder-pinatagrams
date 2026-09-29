@@ -44,7 +44,9 @@ body {
 .topbar-inner {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 14px 20px;
+  /* viewport-fit=cover: keep clear of a landscape phone's notch */
+  padding: 14px max(20px, env(safe-area-inset-right)) 14px
+    max(20px, env(safe-area-inset-left));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -92,7 +94,8 @@ body {
 main {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 24px 20px 80px;
+  padding: 24px max(20px, env(safe-area-inset-right)) 80px
+    max(20px, env(safe-area-inset-left));
 }
 
 h1 {
@@ -510,7 +513,8 @@ a.style-card:focus-visible {
   display: flex;
   gap: 10px;
   align-items: flex-end;
-  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  padding: 12px max(14px, env(safe-area-inset-right))
+    calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
 }
 
 .edit-sheet textarea {
@@ -765,13 +769,14 @@ a.style-card:focus-visible {
 /* the flow pages pin a CTA/dock stack to the viewport bottom — give the
    footer clearance so its links are reachable there too */
 body:has(.bottom-stack) .site-footer {
-  padding-bottom: 170px;
+  padding-bottom: calc(170px + env(safe-area-inset-bottom));
 }
 
 .footer-inner {
   max-width: 980px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 16px max(16px, env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
@@ -1234,6 +1239,11 @@ body:has(.bottom-stack) .site-footer {
   display: flex;
   flex-direction: column;
   box-shadow: 0 -2px 12px rgba(24, 13, 56, 0.1);
+  /* notched phones: the stack's last bar (dock or CTA) clears the home
+     indicator; the white fill runs on underneath it */
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  background: var(--card);
 }
 
 .cta-bar {
@@ -1355,7 +1365,7 @@ body:has(.bottom-stack) .site-footer {
 
 .has-dock {
   /* clearance for the fixed CTA bar + dock */
-  padding-bottom: 160px;
+  padding-bottom: calc(160px + env(safe-area-inset-bottom));
 }
 
 /* message step: box + text box + continue, one screen */
@@ -1902,7 +1912,8 @@ body:has(.bottom-stack) .site-footer {
 .landing-scroll {
   max-width: 460px;
   margin: 0 auto;
-  padding: 30px 20px calc(44px + env(safe-area-inset-bottom));
+  padding: 30px max(20px, env(safe-area-inset-right))
+    calc(44px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2073,7 +2084,8 @@ body:has(.bottom-stack) .site-footer {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px max(16px, env(safe-area-inset-right))
+      calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
     background: #fff;
     border-top: 1px solid var(--line-strong);
     box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.07);
@@ -2090,7 +2102,7 @@ body:has(.bottom-stack) .site-footer {
   }
   /* clearance so the last cart content isn't hidden under the bar */
   .cart-grid {
-    padding-bottom: 88px;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
   /* per-line ship-to is redundant with the sidebar ship-to once stacked
      (the parent selector out-specifies `.cart-detail > div { display:flex }`) */
@@ -2103,7 +2115,8 @@ body:has(.bottom-stack) .site-footer {
 
 @media (max-width: 600px) {
   main {
-    padding: 16px 14px 60px;
+    padding: 16px max(14px, env(safe-area-inset-right)) 60px
+      max(14px, env(safe-area-inset-left));
   }
   h1 {
     font-size: 26px;
