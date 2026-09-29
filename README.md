@@ -17,6 +17,36 @@ project memory / ROADMAP.md (workstream #7).
 | Fulfillment | Paper (internal monorepo) — meets this app ONLY at Shopify order → webhook → print |
 | Brand identity (colors, logos, fonts) | **`design-system/`** (github.com/betterthanaletterllc/pinatagrams-design-system) — official tokens in `colors_and_type.css` (navy/periwinkle/cream; Arbotek display + Poppins); this app's `globals.css` carries the semantic subset. NOTE: quote/gift still ship an older pink/teal palette — alignment is a separate decision |
 
+## Two flows, one app (2026-09 overhaul)
+
+The request HOSTNAME picks the journey — `src/lib/flow-version.ts`
+(`V2_HOSTS`), stamped by `src/middleware.ts` as the `x-pg-flow` request header
+and on `<body data-flow>`:
+
+| Host | Flow | What it is |
+|---|---|---|
+| builder.pinatagrams.com | **v1** | Today's flow (body → graphic → message → filling → add-ons → delivery → send-to → cart), with the overhaul's fixes |
+| builder2.pinatagrams.com | **v2** | The four-step journey in `src/v2/` — Design → Card → Inside → Deliver & pay — on hub variant `version-b` (tiered + FedEx/USPS) |
+
+Both flows share the cart, `/cart`, `/api/checkout` and everything Paper
+receives. Locally, `?flow=v2` (remembered in a cookie; `?flow=` resets) plus
+`?variant=version-b` previews builder2: `http://localhost:3006/?flow=v2&variant=version-b`.
+Production ignores both overrides. Switching the main site to v2 later =
+add its host to `V2_HOSTS` (or move the switch into the hub's variant rows).
+
+Server pieces added with the overhaul:
+
+- Shopify Admin API version is pinned ONCE in `src/lib/shopify.ts` (2026-07).
+- `GET /api/cron/expire-drafts` (daily, `CRON_SECRET`) deletes unpaid builder
+  drafts whose delivery date can no longer be met — a **dry run** (logs what
+  it would delete) until `DRAFT_EXPIRY_MODE=delete` is set.
+- `POST /api/webhooks/orders-paid` sends `order_paid` to PostHog, joined to the
+  shopper's session via the `_phDistinctId` / `_phSessionId` order attributes.
+  Subscribe Shopify's `orders/paid` topic to it; it verifies the HMAC with
+  `SHOPIFY_WEBHOOK_SECRET` (falls back to `SHOPIFY_CLIENT_SECRET`).
+- Analytics (GA4, Meta pixel, PostHog) only run in production on
+  `*.pinatagrams.com`; PostHog loads lazily.
+
 ## Current state (B2C flow v1)
 
 Full flow: body style (live availability from the hub) → graphic — "Pick a
