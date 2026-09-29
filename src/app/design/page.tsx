@@ -21,8 +21,14 @@ import {
   resolveVariantProfile,
   type VariantProfile,
 } from "@/lib/variant";
+import { flowFromHeaders } from "@/lib/flow-version";
+import DesignPageV2 from "@/v2/design/design-page-v2";
+import dynamicImport from "next/dynamic";
 import VariantBoot from "../variant-boot";
-import DesignFlow from "./design-flow";
+
+// v1's flow (and the graphic library it pulls in) as its own chunk, so
+// builder2 visitors — who get the v2 journey above — never download it.
+const DesignFlow = dynamicImport(() => import("./design-flow"));
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +41,15 @@ export default async function DesignPage({
 }: {
   searchParams: Promise<{ style?: string; variant?: string; edit?: string }>;
 }) {
+  // builder2 (flow v2): the four-step journey in src/v2. It resolves its own
+  // defaults, so a missing or unknown ?style= never dead-ends there.
+  if (flowFromHeaders(await headers()) === "v2") {
+    return (
+      <DesignPageV2
+        searchParams={(await searchParams) as Record<string, string | string[] | undefined>}
+      />
+    );
+  }
   const { style, variant: variantParam, edit } = await searchParams;
   const host = normalizeHost((await headers()).get("host"));
   const previewVariant =

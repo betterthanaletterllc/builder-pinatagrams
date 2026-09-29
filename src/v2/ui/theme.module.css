@@ -1,0 +1,73 @@
+/* The v2 journey's design-system tokens (design-system/colors_and_type.css
+ * + the builder roles in the v2 spec). Scoped to the v2 root — <body> on v2
+ * requests and every v2 page root — NEVER :root, so v1 renders exactly as
+ * before. Names are --pg-* prefixed: v1 components that v2 pages embed
+ * (calendar, library, box preview, the cart page) keep reading their own
+ * --ink/--accent/... from globals.css untouched. */
+
+.theme {
+  /* palette */
+  --pg-navy: #180d38; /* ink; primary action */
+  --pg-navy-hover: #2d1e5e;
+  --pg-peri: #627ae3; /* selection borders, focus accents — never text */
+  --pg-peri-dark: #4a62c4; /* links / accent TEXT: 5.48:1 on white */
+  --pg-cream: #f3e7e4; /* bands */
+  --pg-page: #faf8f6; /* page */
+  --pg-white: #ffffff; /* cards, stage */
+  --pg-lavender: #b3b9ce; /* hairline accents only */
+  --pg-text-2: #4a4060; /* secondary text */
+  --pg-muted: #5b5372; /* muted text: 7:1 on the page */
+  --pg-success: #55a871; /* icon */
+  --pg-success-text: #2f7a4a;
+  --pg-error: #eb7c57; /* icon */
+  --pg-error-text: #a8401f;
+  --pg-yellow: #f6de6b; /* highlight */
+  --pg-tint: #eceffc; /* selected card */
+  --pg-error-tint: #fdeee8;
+  --pg-success-tint: #e6f3ea;
+  --pg-line: rgba(24, 13, 56, 0.13);
+  --pg-line-strong: rgba(24, 13, 56, 0.34); /* input boundaries: >= 3:1 */
+
+  /* shadows only on sticky bars and sheets */
+  --pg-shadow-bar: 0 -4px 20px rgba(24, 13, 56, 0.1);
+  --pg-shadow-top: 0 2px 12px rgba(24, 13, 56, 0.07);
+  --pg-shadow-sheet: 0 16px 60px rgba(24, 13, 56, 0.24);
+
+  /* radii */
+  --pg-r-tile: 6px;
+  --pg-r-card: 12px;
+  --pg-r-stage: 20px;
+  --pg-r-pill: 999px;
+
+  /* type */
+  --pg-font: var(--font-poppins), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --pg-display: var(--font-arbotek), var(--font-poppins), sans-serif;
+
+  /* layout */
+  --pg-header-h: 56px;
+  --pg-bar-h: 64px;
+
+  color: var(--pg-navy);
+  font-family: var(--pg-font);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Applied to <body> on v2 requests (layout.tsx): the page colour behind
+   everything, including overscroll and the shared /cart page. */
+.body {
+  background: var(--pg-page);
+}
+
+/* Applied to <html> on v2 requests: focused fields scroll clear of the
+   sticky header and the sticky action bar. */
+.html {
+  scroll-padding-top: calc(var(--pg-header-h, 56px) + 16px);
+  scroll-padding-bottom: 104px;
+}
+
+@media (min-width: 1024px) {
+  .theme {
+    --pg-header-h: 68px;
+  }
+}

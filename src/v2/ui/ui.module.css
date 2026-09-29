@@ -1,0 +1,606 @@
+/* v2 UI primitives. Every rule hangs off a local class (CSS Modules), so
+ * nothing here can touch v1 markup. Tokens come from theme.module.css. */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Button -------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 24px;
+  border: 1.5px solid transparent;
+  border-radius: var(--pg-r-pill);
+  font: 600 16px/1.2 var(--pg-font);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+.primary {
+  background: var(--pg-navy);
+  color: #fff;
+}
+
+.primary:hover {
+  background: var(--pg-navy-hover);
+}
+
+.secondary {
+  background: #fff;
+  color: var(--pg-navy);
+  border-color: var(--pg-navy);
+}
+
+.secondary:hover {
+  background: var(--pg-tint);
+}
+
+.link {
+  min-height: 44px;
+  padding: 0 2px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--pg-peri-dark);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--pg-navy);
+}
+
+.lg {
+  min-height: 56px;
+  padding: 0 32px;
+  font-size: 17px;
+}
+
+.sm {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 15px;
+}
+
+.block {
+  display: flex;
+  width: 100%;
+}
+
+/* Not ready yet, but still focusable + clickable: the click explains why
+   (a disabled button would just sit there silently). */
+.btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.busy {
+  cursor: progress;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- Chip (toggle) ---------------------------------------------------------
+   36px visual, 44px hit area (the ::before extends the target vertically). */
+
+.chip {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  margin: 4px 0;
+  padding: 0 14px;
+  border: 1px solid var(--pg-line-strong);
+  border-radius: var(--pg-r-pill);
+  background: #fff;
+  color: var(--pg-navy);
+  font: 500 14px/1 var(--pg-font);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.chip::before {
+  content: "";
+  position: absolute;
+  inset: -5px 0;
+}
+
+.chip:hover {
+  border-color: var(--pg-navy);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--pg-navy);
+  border-color: var(--pg-navy);
+  color: #fff;
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+/* --- OptionCard -------------------------------------------------------------
+   A <label> wrapping a real (visually hidden) radio/checkbox. Selected =
+   periwinkle border (2px) + tint + check badge. */
+
+.option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid var(--pg-line-strong);
+  border-radius: var(--pg-r-card);
+  background: #fff;
+  color: var(--pg-navy);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.option:hover {
+  border-color: var(--pg-navy);
+}
+
+/* the one offer that must never be missed (Double Candy): heavier edge */
+.prominent {
+  padding: 14px 16px;
+  border-color: var(--pg-navy);
+  box-shadow: inset 0 0 0 0.5px var(--pg-navy);
+}
+
+.option[data-selected="true"] {
+  border-color: var(--pg-peri);
+  box-shadow: inset 0 0 0 1px var(--pg-peri);
+  background: var(--pg-tint);
+}
+
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+@supports not selector(:has(*)) {
+  .option:focus-within {
+    outline: 2px solid var(--pg-peri-dark);
+    outline-offset: 2px;
+  }
+}
+
+.option[data-disabled="true"] {
+  cursor: not-allowed;
+  background: var(--pg-page);
+  border-style: dashed;
+}
+
+.option[data-disabled="true"]:hover {
+  border-color: var(--pg-line-strong);
+}
+
+.optionInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* the visual radio / checkbox mark */
+.mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid #8a8499;
+  border-radius: 50%;
+  background: #fff;
+  color: #fff;
+}
+
+.markBox {
+  border-radius: 6px;
+}
+
+.option[data-selected="true"] .mark {
+  border: 6px solid var(--pg-peri);
+}
+
+.option[data-selected="true"] .markBox {
+  border: 0;
+  background: var(--pg-peri);
+  animation: pop 0.2s ease-out;
+}
+
+.optionMedia {
+  flex: none;
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--pg-cream);
+}
+
+.optionMedia img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.optionBody {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.optionTitle {
+  font: 600 16px/1.3 var(--pg-font);
+}
+
+.optionDesc {
+  font: 400 14px/1.45 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.optionAside {
+  flex: none;
+  font: 600 15px/1.2 var(--pg-font);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.optionWhy {
+  font: 400 14px/1.4 var(--pg-font);
+  color: var(--pg-muted);
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 3px 8px;
+  border-radius: var(--pg-r-pill);
+  background: var(--pg-navy);
+  color: #fff;
+  font: 600 12px/1.2 var(--pg-font);
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+
+.check {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--pg-peri);
+  color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.option[data-selected="true"] .check {
+  display: grid;
+  animation: pop 0.2s ease-out;
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.4);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* --- Field ---------------------------------------------------------------- */
+
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.label {
+  font: 600 14px/1.25 var(--pg-font);
+  color: var(--pg-navy);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--pg-muted);
+}
+
+.input {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 14px;
+  border: 1px solid #8a8499;
+  border-radius: var(--pg-r-card);
+  background: #fff;
+  color: var(--pg-navy);
+  font: 400 16px/1.4 var(--pg-font); /* >= 16px: no iOS focus zoom */
+  scroll-margin-bottom: 110px;
+}
+
+.input:focus {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+  border-color: var(--pg-peri-dark);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--pg-error-text);
+  box-shadow: inset 0 0 0 1px var(--pg-error-text);
+}
+
+textarea.input {
+  min-height: 132px;
+  resize: vertical;
+}
+
+select.input {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23180d38' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px;
+}
+
+.hint {
+  font: 400 14px/1.45 var(--pg-font);
+  color: var(--pg-muted);
+}
+
+.error {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font: 500 14px/1.45 var(--pg-font);
+  color: var(--pg-error-text);
+}
+
+.error svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--pg-error);
+}
+
+/* --- Callout -------------------------------------------------------------- */
+
+.callout {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: var(--pg-r-card);
+  background: var(--pg-tint);
+  color: var(--pg-navy);
+  font: 400 14px/1.5 var(--pg-font);
+}
+
+.callout > svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--pg-peri-dark);
+}
+
+.callout p {
+  margin: 0;
+}
+
+.callout p + p {
+  margin-top: 6px;
+}
+
+.calloutBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.success {
+  background: var(--pg-success-tint);
+}
+
+.success > svg {
+  color: var(--pg-success);
+}
+
+.errorTone {
+  background: var(--pg-error-tint);
+}
+
+.errorTone > svg {
+  color: var(--pg-error);
+}
+
+.warning {
+  background: #fdf6dc;
+}
+
+.warning > svg {
+  color: #9a6b00;
+}
+
+/* --- Skeleton -------------------------------------------------------------- */
+
+.skeleton {
+  display: block;
+  border-radius: var(--pg-r-card);
+  background: linear-gradient(90deg, #efeaee 0%, #f8f5f7 50%, #efeaee 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* --- StepHeader ------------------------------------------------------------ */
+
+.stepHeader {
+  margin: 0 0 16px;
+}
+
+.eyebrow {
+  display: none;
+  margin: 0 0 6px;
+  font: 600 12px/1.2 var(--pg-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pg-muted);
+}
+
+.stepTitle {
+  margin: 0;
+  font-family: var(--pg-display);
+  font-weight: 400;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  color: var(--pg-navy);
+  outline: none;
+}
+
+.stepSub {
+  margin: 8px 0 0;
+  font: 400 15px/1.5 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+@media (min-width: 1024px) {
+  .eyebrow {
+    display: block;
+  }
+}
+
+/* --- PriceTag --------------------------------------------------------------- */
+
+.price {
+  font: 600 18px/1.2 var(--pg-font);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.priceFrom {
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--pg-text-2);
+}
+
+.priceNote {
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--pg-text-2);
+}
+
+/* --- Toast (polite live region) -------------------------------------------- */
+
+.toastRegion {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--pg-bar-h) + 20px + env(safe-area-inset-bottom));
+  z-index: 60;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: var(--pg-r-card);
+  background: var(--pg-navy);
+  color: #fff;
+  font: 500 15px/1.4 var(--pg-font);
+  box-shadow: var(--pg-shadow-sheet);
+  animation: rise 0.2s ease-out;
+}
+
+.toast svg {
+  flex: none;
+  color: #9fdcb2;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .spin,
+  .toast,
+  .check,
+  .option[data-selected="true"] .markBox {
+    animation: none;
+  }
+  .btn,
+  .option {
+    transition: none;
+  }
+}

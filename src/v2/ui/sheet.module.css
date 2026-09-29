@@ -1,0 +1,150 @@
+/* Sheet: native <dialog> + showModal(). Bottom sheet on phones, centered
+ * panel from 768px. The dialog sits in the top layer, so it inherits the
+ * --pg-* tokens from its DOM parent (the v2 root) but none of the page's
+ * stacking or overflow. */
+
+.sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: min(92svh, 100% - 24px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pg-r-stage) var(--pg-r-stage) 0 0;
+  background: #fff;
+  color: var(--pg-navy);
+  box-shadow: var(--pg-shadow-sheet);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet:not([open]) {
+  display: none;
+}
+
+.sheet::backdrop {
+  background: rgba(24, 13, 56, 0.5);
+}
+
+.sheet[open] {
+  animation: slideUp 0.22s ease-out;
+}
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 8px 8px 8px 20px;
+  border-bottom: 1px solid var(--pg-line);
+}
+
+.grip {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 40px;
+  height: 4px;
+  margin-left: -20px;
+  border-radius: 2px;
+  background: var(--pg-lavender);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font: 600 18px/1.3 var(--pg-font);
+}
+
+.close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pg-navy);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--pg-tint);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 20px calc(20px + env(safe-area-inset-bottom));
+}
+
+.foot {
+  flex: none;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--pg-line);
+  background: #fff;
+}
+
+.wide {
+  /* the library: as tall as the phone allows */
+  max-height: 96svh;
+  height: 96svh;
+}
+
+@media (min-width: 768px) {
+  .sheet {
+    inset: 0;
+    width: min(560px, 100% - 48px);
+    height: fit-content;
+    max-height: min(86svh, 100% - 48px);
+    margin: auto;
+    border-radius: var(--pg-r-stage);
+  }
+
+  .sheet[open] {
+    animation: fadeIn 0.18s ease-out;
+  }
+
+  .grip {
+    display: none;
+  }
+
+  .wide {
+    width: min(1040px, 100% - 48px);
+    height: min(90svh, 100% - 48px);
+    max-height: min(90svh, 100% - 48px);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(24px);
+    opacity: 0.4;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet[open] {
+    animation: none;
+  }
+}

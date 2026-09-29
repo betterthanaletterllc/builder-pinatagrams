@@ -1,0 +1,587 @@
+/* v2 /design layout: FlowHeader, Stage, options panel, sticky ActionBar.
+ * Mobile (< 1024px): header → Stage (scrolls away) → content → ONE sticky
+ * bar (position: sticky, so no magic footer clearances). Desktop: a
+ * configurator — Stage left (sticky, tall), options right with their own
+ * sticky footer. The global v1 `main` rule is neutralised on .flow. */
+
+.flow {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  color: var(--pg-navy);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --- FlowHeader -------------------------------------------------------------- */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(250, 248, 246, 0.96);
+  backdrop-filter: saturate(1.4) blur(8px);
+  box-shadow: var(--pg-shadow-top);
+}
+
+.hMobile {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 4px;
+  height: 44px;
+  padding: 2px 8px 0;
+}
+
+.iconBtn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pg-navy);
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: var(--pg-tint);
+}
+
+.iconBtn:focus-visible,
+.stepBtn:focus-visible,
+.logoLink:focus-visible,
+.bodyChip:focus-visible,
+.zoomBtn:focus-visible,
+.barPrice:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+.hTitle {
+  min-width: 0;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.hEyebrow {
+  display: block;
+  font: 600 11px/1.3 var(--pg-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pg-muted);
+}
+
+.hName {
+  display: block;
+  overflow: hidden;
+  font: 600 15px/1.3 var(--pg-font);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.progress {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  height: 12px;
+  padding: 4px 16px 4px;
+}
+
+.progress span {
+  border-radius: 2px;
+  background: var(--pg-line);
+}
+
+.progress span[data-on="true"] {
+  background: var(--pg-navy);
+}
+
+.hDesktop {
+  display: none;
+}
+
+.logoLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  border-radius: 8px;
+}
+
+.logo {
+  display: block;
+  width: auto;
+  height: 40px;
+}
+
+.stepper ol {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--pg-muted);
+  font: 500 15px/1 var(--pg-font);
+  cursor: pointer;
+}
+
+.stepBtn:disabled {
+  cursor: default;
+}
+
+.stepBtn:not(:disabled):hover {
+  color: var(--pg-navy);
+}
+
+.stepBtn[aria-current="step"] {
+  border-bottom-color: var(--pg-navy);
+  color: var(--pg-navy);
+  font-weight: 600;
+}
+
+.stepNum {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stepBtn[data-done="true"] .stepNum {
+  border-color: var(--pg-navy);
+  background: var(--pg-navy);
+  color: #fff;
+}
+
+/* --- layout -------------------------------------------------------------------- */
+
+.layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.stageCol {
+  padding: 8px 16px 0;
+}
+
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.panelBody {
+  flex: 1;
+  padding: 20px 16px 28px;
+}
+
+/* --- Stage --------------------------------------------------------------------- */
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 38svh;
+  min-height: 220px;
+  overflow: hidden;
+  border-radius: var(--pg-r-stage);
+  background: var(--pg-white);
+  view-transition-name: pg-stage;
+}
+
+.stage[data-step="card"] {
+  height: 32svh;
+}
+
+.stage[data-step="inside"] {
+  height: 28svh;
+  min-height: 180px;
+}
+
+.stage[data-step="deliver"] {
+  height: 24svh;
+  min-height: 160px;
+}
+
+.stageBox {
+  position: relative;
+  height: 100%;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 10px;
+}
+
+/* the open box (message card) is the interior photo's portrait aspect */
+.stageBox[data-mode="open"] {
+  aspect-ratio: 900 / 1251;
+}
+
+/* BoxPreview is a shared v1 component: inside the Stage it drops its own
+   card chrome (the Stage is the surface) and keeps its natural sizing — the
+   frame above is sized so the photo fills it, and the composite overlays
+   stay locked to the photo. Scoped under .stageBox; v1 is untouched. */
+.stageBox :global(.box-preview) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.stageBox :global(.box-stage),
+.stageBox :global(.box-img) {
+  border-radius: 0;
+}
+
+.bodyChip {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 20px);
+  min-height: 44px;
+  padding: 0 14px 0 6px;
+  border: 1px solid var(--pg-line-strong);
+  border-radius: var(--pg-r-pill);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--pg-navy);
+  font: 500 14px/1.2 var(--pg-font);
+  cursor: pointer;
+}
+
+.bodyChip:hover {
+  border-color: var(--pg-navy);
+}
+
+.bodyChipArt {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--pg-cream);
+}
+
+.bodyChipArt img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bodyChip strong {
+  font-weight: 600;
+}
+
+.bodyChipChange {
+  color: var(--pg-peri-dark);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.zoomBtn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--pg-line-strong);
+  border-radius: var(--pg-r-pill);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--pg-text-2);
+  font: 500 14px/1 var(--pg-font);
+  cursor: pointer;
+}
+
+.zoomBtn:hover {
+  color: var(--pg-navy);
+  border-color: var(--pg-navy);
+}
+
+.zoomDesk {
+  display: none;
+}
+
+.stageEmpty {
+  display: grid;
+  gap: 8px;
+  place-items: center;
+  padding: 24px;
+  color: var(--pg-muted);
+  font: 500 15px/1.4 var(--pg-font);
+  text-align: center;
+}
+
+.stageSkeleton {
+  width: 70%;
+  height: 80%;
+}
+
+/* --- ActionBar ------------------------------------------------------------------- */
+
+.bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  margin-top: auto;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  background: var(--pg-white);
+  box-shadow: var(--pg-shadow-bar);
+}
+
+.barNotice {
+  margin-bottom: 8px;
+}
+
+.barRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.barPrice {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+
+button.barPrice {
+  cursor: pointer;
+}
+
+.barLines {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.barMain {
+  overflow: hidden;
+  font: 600 17px/1.25 var(--pg-font);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.barMain small {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--pg-text-2);
+}
+
+.barSub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  font: 400 14px/1.3 var(--pg-font);
+  color: var(--pg-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.barSub svg {
+  flex: none;
+}
+
+.barThumb {
+  flex: none;
+}
+
+.ctaLong {
+  display: none;
+}
+
+.ctaShort {
+  display: inline;
+}
+
+/* status of a custom design's print upload, next to the CTA */
+.saveStatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+  font: 500 14px/1.4 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.saveStatus[data-state="saved"] {
+  color: var(--pg-success-text);
+}
+
+.saveStatus[data-state="failed"] {
+  color: var(--pg-error-text);
+}
+
+.saveStatus svg {
+  flex: none;
+}
+
+/* --- editor view ------------------------------------------------------------------ */
+
+.editorView {
+  flex: 1;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 12px 16px 40px;
+}
+
+.editorHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.editorTitle {
+  margin: 0;
+  font-family: var(--pg-display);
+  font-weight: 400;
+  font-size: clamp(26px, 4vw, 36px);
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  outline: none;
+}
+
+/* --- desktop configurator -------------------------------------------------------- */
+
+@media (min-width: 480px) {
+  .ctaLong {
+    display: inline;
+  }
+
+  .ctaShort {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hMobile,
+  .progress {
+    display: none;
+  }
+
+  .hDesktop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    max-width: 1280px;
+    height: var(--pg-header-h);
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(380px, 5fr);
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  .stageCol {
+    position: sticky;
+    top: var(--pg-header-h);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: calc(100svh - var(--pg-header-h));
+    padding: 24px;
+  }
+
+  .stage,
+  .stage[data-step] {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+
+  .stageBox {
+    padding: 24px;
+  }
+
+  .zoomMobile {
+    display: none;
+  }
+
+  .zoomDesk {
+    display: inline;
+  }
+
+  .panel {
+    min-height: calc(100svh - var(--pg-header-h));
+    border-left: 1px solid var(--pg-line);
+  }
+
+  .panelBody {
+    padding: 32px 32px 32px;
+  }
+
+  .bar {
+    padding: 16px 32px;
+    background: var(--pg-page);
+    box-shadow: none;
+    border-top: 1px solid var(--pg-line);
+  }
+
+  .barThumb {
+    display: none;
+  }
+
+  .editorView {
+    padding: 24px 24px 48px;
+  }
+}
