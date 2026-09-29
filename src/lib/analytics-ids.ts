@@ -8,6 +8,8 @@
  * leaves that id out — this never throws and never blocks checkout.
  */
 
+import { posthogIds as liveIds } from "./analytics";
+
 export type AnalyticsIds = {
   phDistinctId?: string;
   phSessionId?: string;
@@ -107,12 +109,20 @@ function posthogPersisted(): Record<string, unknown> | undefined {
 function posthogIds(): Pick<AnalyticsIds, "phDistinctId" | "phSessionId"> {
   let distinct: string | undefined;
   let session: string | undefined;
-  // A live instance, if one is exposed on window, knows best.
+  // The lazily-loaded instance in lib/analytics knows best (null until it
+  // has loaded — never forces the load); then any instance on window.
+  try {
+    const live = liveIds();
+    if (live) {
+      distinct = clean(live.distinctId);
+      session = clean(live.sessionId);
+    }
+  } catch {}
   try {
     const ph = (window as unknown as { posthog?: PosthogLike }).posthog;
     if (ph && typeof ph === "object") {
-      if (typeof ph.get_distinct_id === "function") distinct = clean(ph.get_distinct_id());
-      if (typeof ph.get_session_id === "function") session = clean(ph.get_session_id());
+      if (!distinct && typeof ph.get_distinct_id === "function") distinct = clean(ph.get_distinct_id());
+      if (!session && typeof ph.get_session_id === "function") session = clean(ph.get_session_id());
     }
   } catch {}
   if (!distinct || !session) {
