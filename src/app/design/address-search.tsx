@@ -6,8 +6,14 @@ import { useEffect, useRef, useState } from "react";
  * Shopify-checkout-style address autocomplete: the Address field ITSELF
  * suggests as you type — pick one and street/city/state/ZIP fill in.
  * Backed by Photon (OpenStreetMap's geocoder) — free, keyless, CORS-open;
- * results filter to US and need a street + city + state to be offered.
- * Service down or address unknown → the field is just a normal input.
+ * the query is boxed to the US, house-number results sort first, and a
+ * suggestion needs a street + city + state to be offered.
+ * Service down or address unknown → the field is just a normal input (and
+ * the browser's own address autofill works on it too).
+ *
+ * An ARIA 1.2 combobox: arrows move through the list, Enter picks, Escape
+ * closes, and a pointer pick lands on click — so taps work on touch screens
+ * and in in-app browsers, not just mouse presses.
  * (Upgrade path: swap the fetch for Google Places behind the same UI.)
  */
 
@@ -20,21 +26,44 @@ export type PickedAddress = {
 
 type Suggestion = PickedAddress & { label: string };
 
-const STATE_CODES: Record<string, string> = {
-  Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR",
-  California: "CA", Colorado: "CO", Connecticut: "CT", Delaware: "DE",
-  "District of Columbia": "DC", Florida: "FL", Georgia: "GA", Hawaii: "HI",
-  Idaho: "ID", Illinois: "IL", Indiana: "IN", Iowa: "IA", Kansas: "KS",
-  Kentucky: "KY", Louisiana: "LA", Maine: "ME", Maryland: "MD",
-  Massachusetts: "MA", Michigan: "MI", Minnesota: "MN", Mississippi: "MS",
-  Missouri: "MO", Montana: "MT", Nebraska: "NE", Nevada: "NV",
-  "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM",
-  "New York": "NY", "North Carolina": "NC", "North Dakota": "ND",
-  Ohio: "OH", Oklahoma: "OK", Oregon: "OR", Pennsylvania: "PA",
-  "Rhode Island": "RI", "South Carolina": "SC", "South Dakota": "SD",
-  Tennessee: "TN", Texas: "TX", Utah: "UT", Vermont: "VT", Virginia: "VA",
-  Washington: "WA", "West Virginia": "WV", Wisconsin: "WI", Wyoming: "WY",
-};
+// [code, name] — the 50 states + DC, in the order a State <select> lists them.
+export const US_STATES: [string, string][] = [
+  ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"],
+  ["CA", "California"], ["CO", "Colorado"], ["CT", "Connecticut"],
+  ["DE", "Delaware"], ["DC", "District of Columbia"], ["FL", "Florida"],
+  ["GA", "Georgia"], ["HI", "Hawaii"], ["ID", "Idaho"], ["IL", "Illinois"],
+  ["IN", "Indiana"], ["IA", "Iowa"], ["KS", "Kansas"], ["KY", "Kentucky"],
+  ["LA", "Louisiana"], ["ME", "Maine"], ["MD", "Maryland"],
+  ["MA", "Massachusetts"], ["MI", "Michigan"], ["MN", "Minnesota"],
+  ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"],
+  ["NE", "Nebraska"], ["NV", "Nevada"], ["NH", "New Hampshire"],
+  ["NJ", "New Jersey"], ["NM", "New Mexico"], ["NY", "New York"],
+  ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"],
+  ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"],
+  ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"],
+  ["TN", "Tennessee"], ["TX", "Texas"], ["UT", "Utah"], ["VT", "Vermont"],
+  ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"],
+  ["WI", "Wisconsin"], ["WY", "Wyoming"],
+];
+
+const STATE_CODES: Record<string, string> = Object.fromEntries(
+  US_STATES.map(([code, name]) => [name, code]),
+);
+
+/** A state as its 2-letter code ("TX", "tx", "Texas" → "TX"); "" if it
+ *  isn't a US state or DC. */
+export function stateCode(v: string): string {
+  const s = v.trim();
+  if (!s) return "";
+  const upper = s.toUpperCase();
+  if (US_STATES.some(([code]) => code === upper)) return upper;
+  const hit = US_STATES.find(([, name]) => name.toLowerCase() === s.toLowerCase());
+  return hit ? hit[0] : "";
+}
+
+// The US (incl. Alaska + Hawaii) as Photon's minLon,minLat,maxLon,maxLat —
+// results elsewhere never make the list, so they shouldn't crowd it out.
+const US_BBOX = "-179.2,18.9,-66.9,71.4";
 
 type PhotonProps = {
   countrycode?: string;
@@ -53,32 +82,54 @@ export default function AddressLine1({
   value,
   onChange,
   onPick,
+  inputId = "addr-address1",
+  label = "Address",
+  autoComplete = "section-recipient shipping address-line1",
+  error,
+  onBlur,
 }: {
   value: string;
   onChange: (v: string) => void;
   onPick: (a: PickedAddress) => void;
+  // Optional (older callers pass none of these):
+  inputId?: string;
+  label?: string;
+  autoComplete?: string;
+  // Inline validation message rendered under the field.
+  error?: string;
+  onBlur?: () => void;
 }) {
   const [sugs, setSugs] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
   const timer = useRef<number | undefined>(undefined);
+  const closeTimer = useRef<number | undefined>(undefined);
+  // Newest request wins — a slow older response must not replace newer
+  // suggestions.
+  const reqId = useRef(0);
   // After a pick, the field holds the chosen street — don't re-search it.
   const picked = useRef<string | null>(null);
+  const listId = `${inputId}-sugs`;
 
   useEffect(() => {
     window.clearTimeout(timer.current);
+    // Any change of value invalidates responses still in flight (even a
+    // cleared field — a late answer must not pop a list open under it).
+    const id = ++reqId.current;
     if (value.trim().length < 5 || value === picked.current) {
       setSugs([]);
       setOpen(false);
+      setActive(-1);
       return;
     }
     timer.current = window.setTimeout(async () => {
       try {
         const r = await fetch(
-          `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=6&lang=en&layer=house&layer=street`,
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=8&lang=en&layer=house&layer=street&bbox=${US_BBOX}`,
         );
-        if (!r.ok) return;
+        if (!r.ok || id !== reqId.current) return;
         const j = await r.json();
-        const out: Suggestion[] = [];
+        const out: (Suggestion & { house: boolean })[] = [];
         for (const f of j.features ?? []) {
           const p: PhotonProps = f.properties ?? {};
           if (p.countrycode !== "US") continue;
@@ -91,10 +142,28 @@ export default function AddressLine1({
           const zip = p.postcode ?? "";
           const label = `${street}, ${city}, ${province}${zip ? ` ${zip}` : ""}`;
           if (out.some((s) => s.label === label)) continue;
-          out.push({ label, address1: street, city, province, zip });
+          out.push({
+            label,
+            address1: street,
+            city,
+            province,
+            zip,
+            house: !!p.housenumber,
+          });
         }
-        setSugs(out);
-        setOpen(out.length > 0);
+        // A real door (house number) beats a bare street; stable otherwise.
+        out.sort((a, b) => Number(b.house) - Number(a.house));
+        if (id !== reqId.current) return;
+        const list: Suggestion[] = out.slice(0, 6).map((s) => ({
+          label: s.label,
+          address1: s.address1,
+          city: s.city,
+          province: s.province,
+          zip: s.zip,
+        }));
+        setSugs(list);
+        setActive(-1);
+        setOpen(list.length > 0);
       } catch {
         // service hiccup — plain typing is unaffected
       }
@@ -102,47 +171,115 @@ export default function AddressLine1({
     return () => window.clearTimeout(timer.current);
   }, [value]);
 
+  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
+
+  const choose = (s: Suggestion) => {
+    window.clearTimeout(closeTimer.current);
+    picked.current = s.address1;
+    onPick(s);
+    setOpen(false);
+    setSugs([]);
+    setActive(-1);
+  };
+
   return (
-    <div className="ffield addr-line1">
-      <input
-        id="addr-address1"
-        value={value}
-        autoComplete="off"
-        placeholder=" "
-        onChange={(e) => {
-          picked.current = null;
-          onChange(e.target.value);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setOpen(false);
-        }}
-        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
-        onFocus={() => sugs.length > 0 && value !== picked.current && setOpen(true)}
-      />
-      <label htmlFor="addr-address1">Address</label>
-      {open && (
-        <div className="addr-sugs" role="listbox">
-          {sugs.map((s) => (
-            <button
-              key={s.label}
-              type="button"
-              role="option"
-              aria-selected={false}
-              className="addr-sug"
-              // mousedown beats the input's blur, so the tap always lands
-              onMouseDown={(e) => {
+    <>
+      <div className={"ffield addr-line1" + (error ? " invalid" : "")}>
+        <input
+          id={inputId}
+          value={value}
+          autoComplete={autoComplete}
+          placeholder=" "
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-activedescendant={
+            open && active >= 0 ? `${listId}-${active}` : undefined
+          }
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${inputId}-err` : undefined}
+          onChange={(e) => {
+            picked.current = null;
+            onChange(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              if (!sugs.length) return;
+              e.preventDefault();
+              if (!open) {
+                setOpen(true);
+                setActive(0);
+              } else {
+                setActive((a) => (a + 1) % sugs.length);
+              }
+            } else if (e.key === "ArrowUp") {
+              if (!open || !sugs.length) return;
+              e.preventDefault();
+              setActive((a) => (a <= 0 ? sugs.length - 1 : a - 1));
+            } else if (e.key === "Enter") {
+              if (open && active >= 0 && sugs[active]) {
                 e.preventDefault();
-                picked.current = s.address1;
-                onPick(s);
+                choose(sugs[active]);
+              }
+            } else if (e.key === "Escape") {
+              if (open) {
+                e.preventDefault();
                 setOpen(false);
-                setSugs([]);
-              }}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+                setActive(-1);
+              }
+            }
+          }}
+          onBlur={() => {
+            // Close a beat later: a tap on a suggestion blurs on some touch
+            // browsers before its click lands; choose() cancels this.
+            window.clearTimeout(closeTimer.current);
+            closeTimer.current = window.setTimeout(() => {
+              setOpen(false);
+              setActive(-1);
+            }, 250);
+            onBlur?.();
+          }}
+          onFocus={() => {
+            window.clearTimeout(closeTimer.current);
+            if (sugs.length > 0 && value !== picked.current) setOpen(true);
+          }}
+        />
+        <label htmlFor={inputId}>{label}</label>
+        {open && (
+          <ul
+            className="addr-sugs"
+            role="listbox"
+            id={listId}
+            aria-label="Address suggestions"
+          >
+            {sugs.map((s, i) => (
+              <li
+                key={s.label}
+                id={`${listId}-${i}`}
+                role="option"
+                aria-selected={i === active}
+                className={"addr-sug" + (i === active ? " active" : "")}
+                // Keep focus (and the phone keyboard) in the field on mouse
+                // presses; the pick itself happens on click, which every
+                // pointer — finger, mouse, pen — produces.
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => choose(s)}
+              >
+                {s.label}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {/* After the field box (the floating label centers on the box); the
+          suggestion list stays anchored right under the input. */}
+      {error && (
+        <p className="field-err" id={`${inputId}-err`}>
+          {error}
+        </p>
       )}
-    </div>
+    </>
   );
 }
