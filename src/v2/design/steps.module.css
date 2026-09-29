@@ -276,7 +276,9 @@
   margin-top: 6px;
 }
 
-.starter {
+/* starters wrap (they're whole lines); scoped under .starters so this wins
+   over the base chip rule regardless of stylesheet order */
+.starters .starter {
   height: auto;
   min-height: 36px;
   padding: 8px 14px;
@@ -624,12 +626,18 @@
 .codeForm {
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: flex-start;
   margin-top: 8px;
 }
 
 .codeForm > div {
   flex: 1;
+}
+
+/* level with the input (under its 14px label + 6px gap), even when an
+   error message grows the field below */
+.codeApply {
+  margin-top: 23.5px;
 }
 
 .codeChips {

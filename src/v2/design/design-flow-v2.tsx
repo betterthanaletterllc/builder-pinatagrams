@@ -193,6 +193,9 @@ export default function DesignFlowV2(data: FlowData) {
   const uploadTimer = useRef<number | undefined>(undefined);
   const discountsTouched = useRef(false);
   const libraryScroll = useRef(0);
+  // Checkout in flight: a ref, not state — a second tap in the same frame
+  // must not commit the piñata twice or open a second draft order.
+  const inFlight = useRef(false);
   useEffect(() => {
     stepRef.current = step;
   }, [step]);
@@ -557,6 +560,19 @@ export default function DesignFlowV2(data: FlowData) {
 
   useEffect(() => () => window.clearTimeout(uploadTimer.current), []);
 
+  // Back from Shopify's invoice may restore this page from the bfcache,
+  // frozen mid-checkout: wake it up with the current cart.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      inFlight.current = false;
+      setBusy(false);
+      setCart(loadCart());
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+
   /* --- choices --------------------------------------------------------------- */
 
   const pickGraphic = (g: GraphicChoice, source: GraphicSource) => {
@@ -581,9 +597,9 @@ export default function DesignFlowV2(data: FlowData) {
     });
   };
 
+  // The sheet decides when to close (a tap closes it; arrow keys don't).
   const pickStyle = (b: HubBodyStyle) => {
     patch({ styleId: b.id });
-    setSheet(null);
     trackV2("body_style_selected", { style: b.id, source: "sheet" });
   };
 
@@ -1025,8 +1041,9 @@ export default function DesignFlowV2(data: FlowData) {
     if (res.ok && res.kind === "redirect") {
       confettiBurst(btn);
       window.location.assign(res.invoiceUrl);
-      return; // stay busy: the page is leaving
+      return; // stay busy (and locked): the page is leaving
     }
+    inFlight.current = false;
     setBusy(false);
     if (res.ok) {
       confettiBurst(btn);
@@ -1043,16 +1060,23 @@ export default function DesignFlowV2(data: FlowData) {
   };
 
   const pay = async (btn: HTMLButtonElement) => {
-    if (busy) return;
+    if (inFlight.current) return;
     if (stop(problems())) return;
+    inFlight.current = true;
     let lines = loadCart();
     if (draftRef.current) {
       const next = commitDraft(lines, shipTo, carrier!);
-      if (!next) return;
+      if (!next) {
+        inFlight.current = false;
+        return;
+      }
       lines = next;
     } else {
       lines = lines.map((l) => ({ ...l, carrier: carrier!, address: shipTo }));
-      if (!saveCart(lines)) return;
+      if (!saveCart(lines)) {
+        inFlight.current = false;
+        return;
+      }
       setCart(lines);
       rememberAddress(shipTo);
     }
@@ -1062,14 +1086,18 @@ export default function DesignFlowV2(data: FlowData) {
   // "Someone else": this piñata waits in its draft while the order that's
   // already in the cart (one address) checks out.
   const payOrderFirst = async (btn: HTMLButtonElement) => {
-    if (busy || !cartAddress) return;
+    if (inFlight.current || !cartAddress) return;
     // Only the ORDER's own problems count here — the piñata in progress
     // isn't part of it.
     if (stop(problems().filter((p) => p.kind === "carrier" || p.kind === "line" || p.kind === "email"))) {
       return;
     }
+    inFlight.current = true;
     const lines = loadCart().map((l) => ({ ...l, carrier: carrier!, address: cartAddress }));
-    if (!saveCart(lines)) return;
+    if (!saveCart(lines)) {
+      inFlight.current = false;
+      return;
+    }
     setCart(lines);
     await runCheckout(lines, btn);
   };
@@ -1469,6 +1497,7 @@ export default function DesignFlowV2(data: FlowData) {
         libraryCount={data.libraryCount}
         allowCustom={variant.allowCustom}
         onOccasion={(id) => {
+          if (id === draft.occasion) return;
           patch({ occasion: id });
           trackV2("occasion_selected", { occasion: id });
         }}

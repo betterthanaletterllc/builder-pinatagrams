@@ -120,7 +120,12 @@ export default function DiscountBox({
                   }
                 }}
               />
-              <Button variant="secondary" busy={checking} onClick={() => void apply()}>
+              <Button
+                variant="secondary"
+                className={s.codeApply}
+                busy={checking}
+                onClick={() => void apply()}
+              >
                 Apply
               </Button>
             </div>

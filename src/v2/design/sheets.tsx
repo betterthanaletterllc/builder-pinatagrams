@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import DateCalendar from "@/app/design/date-calendar";
 import { formatWindow, uspsWindow, type Carrier, type DeliveryConfig } from "@/lib/delivery";
 import type { CartLine, GraphicChoice } from "@/lib/flow";
@@ -48,6 +48,10 @@ export function BodySheet({
   wearable: (styleId: string) => boolean;
   onPick: (s: HubBodyStyle) => void;
 }) {
+  // A tap picks and closes; arrow keys only move the selection (closing on
+  // every arrow press would make the list unbrowsable by keyboard) — "Done"
+  // or Esc closes.
+  const viaPointer = useRef(false);
   const groups = [
     { id: "everyday", label: "Everyday", items: styles.filter((b) => bodyGroup(b.id) === "everyday") },
     {
@@ -57,7 +61,24 @@ export function BodySheet({
     },
   ].filter((g) => g.items.length > 0);
   return (
-    <Sheet open={open} onClose={onClose} title="Choose your piñata">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Choose your piñata"
+      footer={
+        <Button block onClick={onClose}>
+          Done
+        </Button>
+      }
+    >
+      <div
+        onPointerDown={() => {
+          viaPointer.current = true;
+        }}
+        onKeyDown={() => {
+          viaPointer.current = false;
+        }}
+      >
       {groups.map((g) => (
         <fieldset key={g.id} className={`${s.sheetGroup} ${s.legendReset}`}>
           <legend className={s.eyebrow}>{g.label}</legend>
@@ -77,7 +98,10 @@ export function BodySheet({
                     className={s.srOnly}
                     checked={b.id === current}
                     disabled={!ok}
-                    onChange={() => onPick(b)}
+                    onChange={() => {
+                      onPick(b);
+                      if (viaPointer.current) onClose();
+                    }}
                   />
                   <span className={s.bodyArt}>
                     <Image
@@ -99,6 +123,7 @@ export function BodySheet({
           </div>
         </fieldset>
       ))}
+      </div>
     </Sheet>
   );
 }
