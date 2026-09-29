@@ -158,6 +158,14 @@ export default async function ReviewsPage({
           )}
         </nav>
       )}
+
+      {/* Reading reviews ends in a way forward, not a dead end. */}
+      <section className="reviews-cta" aria-label="Send your own">
+        <p className="reviews-cta-line">Ready to make someone&apos;s day?</p>
+        <Link className="btn primary reviews-cta-btn" href="/">
+          Send a Piñatagram
+        </Link>
+      </section>
     </main>
   );
 }

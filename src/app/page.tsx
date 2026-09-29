@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import {
+  formatCents,
   getCatalog,
   getReviews,
   HUB_URL,
@@ -9,9 +10,15 @@ import {
   resolveBuilderPricing,
   type HubPrice,
 } from "@/lib/hub";
+import {
+  formatYmd,
+  minDeliveryDate,
+  resolveDeliveryConfig,
+} from "@/lib/delivery";
 import { normalizeHost, resolveVariantProfile } from "@/lib/variant";
 import BuilderPreview from "./builder-preview";
 import LandingOverlay from "./landing-overlay";
+import PromiseLine, { type PromiseInfo } from "./promise-line";
 import Stars from "./stars";
 import VariantBoot from "./variant-boot";
 
@@ -22,6 +29,8 @@ export const dynamic = "force-dynamic";
 // The base retail price + ship rate, for the "from" price on every style
 // card: Classic graphic included, cheapest carrier (USPS). Tiers/add-ons/
 // FedEx ride on top in the flow. Null on any hiccup — the cards just omit it.
+// Uncached like the catalog (commit c97a4bf): the hub's edge cache is the
+// ONE cache layer — a second Next data cache here made price edits crawl.
 async function b2cPrice(): Promise<HubPrice | null> {
   try {
     const res = await fetch(
@@ -33,7 +42,7 @@ async function b2cPrice(): Promise<HubPrice | null> {
         mode: "individual",
         carrier: "standard",
       }),
-      { next: { revalidate: 300 } },
+      { cache: "no-store" },
     );
     if (!res.ok) return null;
     const p: HubPrice = await res.json();
@@ -100,6 +109,20 @@ export default async function Home({
           label: reviews.scope.label,
         }
       : null;
+    // The promise line (overlay's first screen + top of the body picker):
+    // soonest FedEx arrival for an order placed today in shop time, the
+    // same delivered price the style cards show, and the pooled rating
+    // with its scope label. Parts that didn't load drop out.
+    const promise: PromiseInfo = {
+      arrives: formatYmd(
+        minDeliveryDate(resolveDeliveryConfig(catalog.delivery)),
+      ),
+      price:
+        priceCents != null
+          ? `${variant.pricing === "tiered" ? "From " : ""}${formatCents(priceCents)} delivered`
+          : null,
+      rating: trust ? { value: trust.rating, label: trust.label } : null,
+    };
     // The home strip shows the strongest social proof first: five-star or
     // verified, in the API's (newest-first) order.
     const reviewPicks = reviews
@@ -124,11 +147,15 @@ export default async function Home({
             images={landingImgs}
             lines={variant.landingLines}
             trust={trust}
+            promise={promise}
           />
         )}
-        <h1 className="visually-hidden">
+        {/* tabIndex: where focus returns when the overlay dialog closes */}
+        <h1 className="visually-hidden" id="home-title" tabIndex={-1}>
           Piñatagrams — personalized mini piñatas, delivered
         </h1>
+
+        <PromiseLine info={promise} className="home-promise" />
 
         {/* The numbered step row — a first-time visitor sees the whole
             journey at a glance ("6 quick steps"). Body is active; the rest
