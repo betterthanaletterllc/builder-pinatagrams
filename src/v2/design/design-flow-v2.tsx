@@ -84,12 +84,12 @@ import { computeOrder, designName, type OrderPiece } from "../lib/order";
 import { deliveredCents, priceRows, type PriceCtx } from "../lib/pricing";
 import { graphicReady, resolveRestore } from "../lib/restore";
 import { parseStep, stepAt, STEPS } from "../lib/steps";
-import { scopeText } from "../lib/text";
+import { PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import type { FlowData, GraphicSource, StepId, StepVia } from "../lib/types";
 import BoxThumb from "../ui/box-thumb";
 import { confettiBurst, prefersReducedMotion } from "../ui/confetti";
 import { Callout, PriceTag, useAnnouncer, useToast } from "../ui/feedback";
-import { Alert, Check, Spinner, Star, Truck } from "../ui/icons";
+import { Alert, Check, Height, Spinner, Star, Truck } from "../ui/icons";
 import u from "../ui/ui.module.css";
 import ActionBar, { type Cta } from "./action-bar";
 import DryRunResult from "./dry-run";
@@ -1343,25 +1343,20 @@ export default function DesignFlowV2(data: FlowData) {
       ) : (
         <div className={f.layout}>
           <div className={f.stageCol}>
+            {/* One line: what the bar below can't say. Price and soonest
+                arrival are already in the sticky bar on every step. */}
             {step === "design" && !loading && (
-              <ul className={st.promise} aria-label="Delivery, price and rating">
+              <ul className={st.promise} aria-label="Size and rating">
                 <li>
-                  <Truck size={16} />
+                  <Height size={16} />
                   <span>
-                    Arrives as soon as <strong>{fedexSoonest}</strong>
+                    <strong>
+                      <span aria-hidden="true">{PINATA_HEIGHT_IN}″</span>
+                      <span className={st.srOnly}>{PINATA_HEIGHT_IN} inches</span>
+                    </strong>{" "}
+                    tall
                   </span>
                 </li>
-                {piecePrice?.cents != null && (
-                  <li>
-                    <span>
-                      <strong>
-                        {piecePrice.from ? "From " : ""}
-                        {formatCents(piecePrice.cents)}
-                      </strong>{" "}
-                      delivered
-                    </span>
-                  </li>
-                )}
                 {data.trust && (
                   <li>
                     <Star size={15} className={st.star} />
@@ -1430,7 +1425,7 @@ export default function DesignFlowV2(data: FlowData) {
                   </>
                 ) : (
                   // Short: it shares a phone-width bar with the price and
-                  // the button (the Stage's promise line has the full words).
+                  // the button.
                   <>
                     <Truck size={16} /> Soonest {fedexSoonest}
                   </>

@@ -95,6 +95,13 @@ export const Truck = (p: IconProps) => (
   </Svg>
 );
 
+/** A height dimension line: bars top and bottom, arrow between. */
+export const Height = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 3h10M7 21h10M12 6.5v11M9 9l3-3 3 3M9 15l3 3 3-3" />
+  </Svg>
+);
+
 export const Mail = (p: IconProps) => (
   <Svg {...p}>
     <rect x="3" y="5" width="18" height="14" rx="2" />

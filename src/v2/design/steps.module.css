@@ -53,14 +53,15 @@
 
 /* --- promise line (Step 1) ------------------------------------------------- */
 
+/* One line on a phone: each item leads with its own icon, so no dots. */
 .promise {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 2px 12px;
+  gap: 2px 16px;
   margin: 0 0 8px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: var(--pg-r-card);
   background: var(--pg-cream);
   list-style: none;
@@ -71,15 +72,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-}
-
-.promise li + li::before {
-  content: "";
-  width: 4px;
-  height: 4px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: var(--pg-muted);
+  white-space: nowrap;
 }
 
 .promise strong {

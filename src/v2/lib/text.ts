@@ -11,6 +11,10 @@ export function clipText(s: string, max = 200): string {
   return `${(cut.replace(/\s+\S*$/, "") || cut).trimEnd()}…`;
 }
 
+/** Every Piñatagram is 11 inches tall — said briefly, up front: Step 1's
+ *  line, the body sheet, the home pitch. */
+export const PINATA_HEIGHT_IN = 11;
+
 /**
  * The rating's scope label, readable after the number: "4.8 across all
  * Piñatagrams" (the hub sends "Across all Piñatagrams"). Other labels keep

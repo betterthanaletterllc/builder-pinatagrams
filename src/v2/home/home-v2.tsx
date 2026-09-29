@@ -17,7 +17,7 @@ import PendingBanner from "../chrome/pending-banner";
 import { bestSellers, libraryCount, occasionStrips } from "../lib/catalog-server";
 import { cutoffTonight, soonest } from "../lib/dates";
 import { b2cPrice, requestContext, trustFrom } from "../lib/server";
-import { clipText, scopeText } from "../lib/text";
+import { clipText, PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import { ButtonLink, ChipLink } from "../ui/controls";
 import { Check, ChevronRight, Star, Truck, Users } from "../ui/icons";
 import Stars from "../ui/stars";
@@ -92,7 +92,7 @@ export default async function HomeV2({
     : [];
   const pitch =
     variant.landingLines?.[0] ??
-    "A mini piñata packed with candy, your design on the box and your message inside the lid — delivered to their door.";
+    `An ${PINATA_HEIGHT_IN}-inch piñata packed with candy, your design on the box and your message inside the lid — delivered to their door.`;
 
   return (
     <main className={s.home}>

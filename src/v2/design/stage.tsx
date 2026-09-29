@@ -27,7 +27,8 @@ export function messageCardFor(g: GraphicChoice | null): string | null {
  * The Stage: the real box photo with the chosen art composited on it
  * (BoxPreview, shared with v1), on every step. The Card step opens the box
  * to show the message printed inside the lid. Step 1 adds the body chip
- * ("Googly · Change") and the zoom control on top.
+ * ("Googly · Change") and the zoom control across the top — the label at
+ * the bottom stays clear.
  */
 export default function Stage({
   step,
@@ -107,7 +108,7 @@ export default function Stage({
       {!loading && step === "design" && graphic && onZoom && (
         <button type="button" className={f.zoomBtn} onClick={onZoom} aria-haspopup="dialog">
           <ZoomIn size={18} />
-          <span className={f.zoomMobile}>Tap to zoom</span>
+          <span className={f.zoomMobile}>Zoom in on the label</span>
           <span className={f.zoomDesk}>8 × 3.9 in label · Zoom</span>
         </button>
       )}

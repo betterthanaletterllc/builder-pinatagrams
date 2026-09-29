@@ -10,6 +10,7 @@ import type { HubBodyStyle, HubGraphicCategory, HubGraphicEntry } from "@/lib/hu
 import { cdnThumb } from "@/lib/library-data";
 import { dateProblemText } from "../lib/dates";
 import { bodyGroup } from "../lib/defaults";
+import { PINATA_HEIGHT_IN } from "../lib/text";
 import { Button } from "../ui/controls";
 import { Callout, Skeleton } from "../ui/feedback";
 import { Check } from "../ui/icons";
@@ -79,6 +80,9 @@ export function BodySheet({
           viaPointer.current = false;
         }}
       >
+      <p className={s.small} style={{ margin: "0 0 12px" }}>
+        Every piñata is {PINATA_HEIGHT_IN} inches tall.
+      </p>
       {groups.map((g) => (
         <fieldset key={g.id} className={`${s.sheetGroup} ${s.legendReset}`}>
           <legend className={s.eyebrow}>{g.label}</legend>
