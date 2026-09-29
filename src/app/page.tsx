@@ -10,6 +10,8 @@ import {
   type HubPrice,
 } from "@/lib/hub";
 import { normalizeHost, resolveVariantProfile } from "@/lib/variant";
+import { flowFromHeaders } from "@/lib/flow-version";
+import HomeV2 from "@/v2/home/home-v2";
 import BuilderPreview from "./builder-preview";
 import LandingOverlay from "./landing-overlay";
 import Stars from "./stars";
@@ -59,6 +61,11 @@ export default async function Home({
 }: {
   searchParams: Promise<{ variant?: string }>;
 }) {
+  // builder2 (flow v2): the inline-hero home in src/v2 — same hub data
+  // (catalog, price, reviews), fetched there under the v2 preview rules.
+  if (flowFromHeaders(await headers()) === "v2") {
+    return <HomeV2 searchParams={await searchParams} />;
+  }
   try {
     // The hostname picks the variant profile (hub /pricing → "Builder
     // variants"); ?variant= previews any profile OUTSIDE production only.

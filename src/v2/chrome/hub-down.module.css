@@ -1,0 +1,36 @@
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 16px 64px;
+}
+
+.box {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 20px;
+  border-radius: var(--pg-r-card);
+  background: var(--pg-error-tint);
+  color: var(--pg-navy);
+  font: 400 16px/1.6 var(--pg-font);
+}
+
+.box > svg {
+  flex: none;
+  color: var(--pg-error);
+}
+
+.box p {
+  margin: 0;
+}
+
+.box a {
+  color: var(--pg-peri-dark);
+  font-weight: 600;
+}
+
+.title {
+  margin: 0 0 6px;
+  font: 600 18px/1.35 var(--pg-font);
+  letter-spacing: 0;
+}
