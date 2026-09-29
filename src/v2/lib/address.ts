@@ -1,37 +1,13 @@
 import type { Carrier } from "@/lib/delivery";
-import type { DeliveryAddress } from "@/lib/flow";
+import { stateCode, US_STATES, type DeliveryAddress } from "@/lib/flow";
 
-/** US states + DC, for the State <select> (value = the 2-letter code the
- *  address suggestions and Shopify both use). */
-export const US_STATES: [string, string][] = [
-  ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"],
-  ["CA", "California"], ["CO", "Colorado"], ["CT", "Connecticut"],
-  ["DE", "Delaware"], ["DC", "District of Columbia"], ["FL", "Florida"],
-  ["GA", "Georgia"], ["HI", "Hawaii"], ["ID", "Idaho"], ["IL", "Illinois"],
-  ["IN", "Indiana"], ["IA", "Iowa"], ["KS", "Kansas"], ["KY", "Kentucky"],
-  ["LA", "Louisiana"], ["ME", "Maine"], ["MD", "Maryland"],
-  ["MA", "Massachusetts"], ["MI", "Michigan"], ["MN", "Minnesota"],
-  ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"],
-  ["NE", "Nebraska"], ["NV", "Nevada"], ["NH", "New Hampshire"],
-  ["NJ", "New Jersey"], ["NM", "New Mexico"], ["NY", "New York"],
-  ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"],
-  ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"],
-  ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"],
-  ["TN", "Tennessee"], ["TX", "Texas"], ["UT", "Utah"], ["VT", "Vermont"],
-  ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"],
-  ["WI", "Wisconsin"], ["WY", "Wyoming"],
-];
-
-const STATE_CODES = new Set(US_STATES.map(([c]) => c));
+/** US states + DC, for the State <select> — the one shared list in lib/flow
+ *  (value = the 2-letter code the address suggestions and Shopify use). */
+export { US_STATES };
 
 /** Normalize whatever arrives (a full name from autofill, lower case) to a
  *  2-letter code, or "" when it isn't a US state. */
-export function toStateCode(v: string): string {
-  const t = v.trim();
-  if (STATE_CODES.has(t.toUpperCase())) return t.toUpperCase();
-  const byName = US_STATES.find(([, n]) => n.toLowerCase() === t.toLowerCase());
-  return byName ? byName[0] : "";
-}
+export const toStateCode = stateCode;
 
 const ZIP_RE = /^\d{5}(-?\d{4})?$/;
 // "PO Box 12", "P.O. Box", "Post Office Box", "POB 12", "Box 12" at the start.
@@ -67,7 +43,7 @@ export function validateAddress(
       : "FedEx can't deliver to PO boxes — use a street address.";
   if (!a.city.trim()) e.city = "Enter the city.";
   if (!a.province.trim()) e.province = "Choose the state.";
-  else if (!STATE_CODES.has(a.province)) e.province = "Choose a US state.";
+  else if (stateCode(a.province) !== a.province) e.province = "Choose a US state.";
   if (!a.zip.trim()) e.zip = "Enter the ZIP code.";
   else if (!ZIP_RE.test(a.zip.trim())) e.zip = "Enter a 5-digit ZIP code.";
   if (a.phone.trim() && a.phone.replace(/\D/g, "").length < 10)

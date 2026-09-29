@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CART_EVENT, cartCount } from "@/lib/flow";
+import { checkPendingOrders } from "@/lib/checkout-client";
 import { Bag } from "../ui/icons";
 import c from "./chrome.module.css";
 
@@ -10,9 +11,9 @@ import c from "./chrome.module.css";
  *  0 on the server render; hydrates to the real count immediately.
  *
  *  Both v2 headers (site + flow) render this instead of v1's <CartLink/>, so
- *  builder2's shared "was the pending order paid?" check belongs on this
- *  mount too: checkPendingOrders() from lib/checkout-client (MERGE NOTE — it
- *  lands with the checkout workstream; call it in the effect below). */
+ *  it also runs builder2's global "was the waiting order paid?" check — on
+ *  mount and when a tab that sat open comes back into view. Throttled per
+ *  order inside checkPendingOrders. */
 export function useCartCount(): number {
   const [n, setN] = useState(0);
   useEffect(() => {
@@ -20,9 +21,15 @@ export function useCartCount(): number {
     update();
     window.addEventListener(CART_EVENT, update);
     window.addEventListener("storage", update);
+    void checkPendingOrders();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void checkPendingOrders();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.removeEventListener(CART_EVENT, update);
       window.removeEventListener("storage", update);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
   return n;

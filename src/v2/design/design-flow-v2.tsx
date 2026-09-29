@@ -8,13 +8,20 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
 import { trackAddToCart } from "@/lib/analytics";
 import { startCheckout } from "@/lib/checkout-client";
 import { formatWindow, formatYmd, uspsWindow, type Carrier } from "@/lib/delivery";
-import type { DesignDocument } from "@/lib/design-document";
+import { designKey, type DesignDocument } from "@/lib/design-document";
+import {
+  designSaveState,
+  designSavesVersion,
+  saveDesignArt,
+  subscribeDesignSaves,
+} from "@/lib/design-upload";
 import {
   addressComplete,
   CART_EVENT,
@@ -121,11 +128,6 @@ const EMPTY_PREFS: OrderPrefs = {
   email: "",
 };
 
-// A custom design's print upload runs in the background (the editor hands
-// back art + sha256 when done). No word after this long = treat as failed
-// and offer Retry; a late success still lands and clears it.
-const UPLOAD_PATIENCE_MS = 90_000;
-
 /**
  * The v2 journey: Design → Card → Inside → Deliver & pay. This component
  * owns the state machine — the piñata in progress (a draft in session
@@ -151,8 +153,10 @@ export default function DesignFlowV2(data: FlowData) {
   const [hydrated, setHydrated] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [unitPrice, setUnitPrice] = useState<HubPrice | null>(data.initialPrice);
-  const [upload, setUpload] = useState<"saving" | "failed" | null>(null);
   const [editorRetry, setEditorRetry] = useState(false);
+  // Custom-design print uploads live in lib/design-upload (they outlive the
+  // editor); re-render when any of them changes state.
+  useSyncExternalStore(subscribeDesignSaves, designSavesVersion, () => 0);
   const [addonNotice, setAddonNotice] = useState<string | null>(null);
   const [cardNotice, setCardNotice] = useState<string | null>(null);
   const [carrierNotice, setCarrierNotice] = useState<Carrier | null>(null);
@@ -172,7 +176,6 @@ export default function DesignFlowV2(data: FlowData) {
   const draftRef = useRef(draft);
   const stepStart = useRef(0);
   const focusPending = useRef(false);
-  const uploadTimer = useRef<number | undefined>(undefined);
   const discountsTouched = useRef(false);
   const libraryScroll = useRef(0);
   // Checkout in flight: a ref, not state — a second tap in the same frame
@@ -212,13 +215,17 @@ export default function DesignFlowV2(data: FlowData) {
   const piecePrice = draft
     ? deliveredCents({ graphic: draft.graphic, filling: draft.filling, addons: draft.addons }, carrier, priceCtx)
     : null;
+  // The print upload for the design on the Stage (null when none started —
+  // e.g. a draft restored after a reload, which re-uploads below).
+  const customJob =
+    draft?.graphic.type === "custom" ? designSaveState(designKey(draft.graphic.design)) : null;
   const saveStatus: "saving" | "saved" | "failed" | null =
     draft?.graphic.type === "custom"
       ? graphicReady(draft.graphic)
         ? "saved"
-        : upload === "saving"
-          ? "saving"
-          : "failed"
+        : customJob?.status === "failed"
+          ? "failed"
+          : "saving"
       : null;
   const maxReachable = draft ? (graphicReady(draft.graphic) ? 3 : 0) : 3;
   const editing = !!draft?.editLineId;
@@ -322,8 +329,11 @@ export default function DesignFlowV2(data: FlowData) {
     setDraft(r.draft);
     setStep(r.step);
     setHydrated(true);
-    // A background upload can't survive a reload: say so, offer Retry.
-    if (r.draft?.graphic.type === "custom" && !graphicReady(r.draft.graphic)) setUpload("failed");
+    // A background upload can't survive a reload: re-render the print file
+    // from the saved document and upload it again (status shows on Step 1).
+    if (r.draft?.graphic.type === "custom" && !graphicReady(r.draft.graphic)) {
+      void saveDesignArt(r.draft.graphic.design);
+    }
 
     // The commit tick: storage writes, the URL and the first events. A dev
     // Strict-Mode double mount cancels the first tick, so nothing is
@@ -503,7 +513,25 @@ export default function DesignFlowV2(data: FlowData) {
     return () => window.clearTimeout(t);
   }, [hydrated, busy, draft, cart.length, freshPiece, navigate]);
 
-  useEffect(() => () => window.clearTimeout(uploadTimer.current), []);
+  // The upload for the design on the Stage landed (possibly after the editor
+  // closed, a Retry, or a reload): stamp its art + hash onto the draft and
+  // onto any cart line that went in before it finished.
+  const landedAssets = customJob?.status === "saved" ? customJob.assets : null;
+  useEffect(() => {
+    const d = draftRef.current;
+    if (!landedAssets || d?.graphic.type !== "custom" || graphicReady(d.graphic)) return;
+    onEditorAssets(landedAssets, JSON.stringify(d.graphic.design));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [landedAssets]);
+  // Never "Saving…" forever: a custom design without its print file and with
+  // no upload running starts one (saveDesignArt joins a job already in flight
+  // for the same design, so the editor's own upload is never doubled).
+  const needsUpload =
+    hydrated && draft?.graphic.type === "custom" && !graphicReady(draft.graphic) && !customJob;
+  useEffect(() => {
+    const d = draftRef.current;
+    if (needsUpload && d?.graphic.type === "custom") void saveDesignArt(d.graphic.design);
+  }, [needsUpload]);
 
   /* --- choices --------------------------------------------------------------- */
 
@@ -599,15 +627,6 @@ export default function DesignFlowV2(data: FlowData) {
     }
   };
 
-  const watchUpload = () => {
-    setUpload("saving");
-    window.clearTimeout(uploadTimer.current);
-    uploadTimer.current = window.setTimeout(
-      () => setUpload((s) => (s === "saving" ? "failed" : s)),
-      UPLOAD_PATIENCE_MS,
-    );
-  };
-
   const onEditorSave = (design: DesignDocument, preview: string, assets: DesignAssets) => {
     const d = draftRef.current;
     if (!d) return;
@@ -623,12 +642,8 @@ export default function DesignFlowV2(data: FlowData) {
       },
       "editor",
     );
-    if (assets.art && assets.artSha256) {
-      setUpload(null);
-      window.clearTimeout(uploadTimer.current);
-    } else {
-      watchUpload();
-    }
+    // Without art yet, the editor's upload job (lib/design-upload) is still
+    // running; Step 1 shows its status and the effect above stamps the result.
     trackV2("custom_design_saved");
     closeEditor();
   };
@@ -646,11 +661,6 @@ export default function DesignFlowV2(data: FlowData) {
     }
     const same = (x: DesignDocument) =>
       JSON.stringify({ ...doc, bodyStyleId: x.bodyStyleId }) === JSON.stringify(x);
-    const d = draftRef.current;
-    if (d?.graphic.type === "custom" && same(d.graphic.design)) {
-      window.clearTimeout(uploadTimer.current);
-      setUpload(null);
-    }
     setDraft((cur) =>
       cur && cur.graphic.type === "custom" && same(cur.graphic.design)
         ? { ...cur, graphic: { ...cur.graphic, ...assets } }
@@ -1066,7 +1076,11 @@ export default function DesignFlowV2(data: FlowData) {
             id="pg-retry-save"
             type="button"
             className={st.linkBtn}
-            onClick={() => openEditor(true)}
+            onClick={() => {
+              // Re-sends the same print file (or re-renders it from the
+              // document) — no need to reopen the editor.
+              if (draft?.graphic.type === "custom") void saveDesignArt(draft.graphic.design);
+            }}
           >
             Retry
           </button>
