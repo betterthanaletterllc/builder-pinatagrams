@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LogoZone } from "@/lib/hub";
 
 /**
@@ -24,6 +24,22 @@ const SVG_MESSAGE_ZONE = { x: 0.3, y: 0.78, w: 0.4, h: 0.17 };
 // looks nestled against the box floor, just above the flap fold).
 const PHOTO_PINATA_ZONE = { x: 0.22, y: 0.2, w: 0.56, h: 0.47 };
 const SVG_PINATA_ZONE = { x: 0.3, y: 0.28, w: 0.4, h: 0.4 };
+
+// Intrinsic sizes of the preview photos, as width/height attributes: the
+// browser reserves the box before the image arrives (no layout shift). If a
+// photo ever has a different shape, its real aspect takes over on load.
+const BOX_PHOTO = { w: 1080, h: 1080 }; // hub catalog/boxes/*.webp
+const INTERIOR_PHOTO = { w: 900, h: 1251 }; // hub box-interior + box-open.jpg
+const LABEL_ART = { w: 2400, h: 1170 }; // 8 × 3.9 in @ 300 dpi
+
+function whenIdle(cb: () => void): () => void {
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(cb, { timeout: 3000 });
+    return () => window.cancelIdleCallback(id);
+  }
+  const t = window.setTimeout(cb, 1500); // Safari: no requestIdleCallback
+  return () => window.clearTimeout(t);
+}
 
 function OpenBoxSvg() {
   // Minimal open-box illustration: interior + fold-out flap at the bottom.
@@ -106,6 +122,29 @@ export default function BoxPreview({
   const pinataImg =
     pinataAttempt === 0 ? pinataSrc : pinataAttempt === 1 ? pinataFallback : null;
 
+  // The open box (interior photo, ~170 KB piñata cutout, message card) is
+  // only seen on the message step. Fetch it when it's shown — or once the
+  // page has loaded and the browser is idle, so the crossfade is ready by
+  // then — never in the way of the closed box, the page's LCP image.
+  const [openWarm, setOpenWarm] = useState(false);
+  const showOpen = openWarm || mode === "open";
+  useEffect(() => {
+    if (mode === "open") setOpenWarm(true); // stays mounted afterwards
+  }, [mode]);
+  useEffect(() => {
+    if (openWarm) return;
+    let cancel = () => {};
+    const warm = () => {
+      cancel = whenIdle(() => setOpenWarm(true));
+    };
+    if (document.readyState === "complete") warm();
+    else {
+      window.addEventListener("load", warm, { once: true });
+      cancel = () => window.removeEventListener("load", warm);
+    }
+    return () => cancel();
+  }, [openWarm]);
+
   // Auto-fit: shrink the text until the whole message sits inside the white
   // card (padding included). Runs after layout; opacity-hidden layers still
   // have geometry, so this works even before the crossfade reveals it.
@@ -136,7 +175,14 @@ export default function BoxPreview({
           {boxImageUrl ? (
             <div className="box-composite">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={boxImageUrl} alt={`${styleName} box`} className="box-img" />
+              <img
+                src={boxImageUrl}
+                alt={`${styleName} box`}
+                className="box-img"
+                width={BOX_PHOTO.w}
+                height={BOX_PHOTO.h}
+                fetchPriority={mode === "closed" ? "high" : undefined}
+              />
               {artUrl && logoZone && (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -169,7 +215,13 @@ export default function BoxPreview({
             <div className="box-composite">
               {artUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={artUrl} alt="your graphic" className="box-img" />
+                <img
+                  src={artUrl}
+                  alt="your graphic"
+                  className="box-img"
+                  width={LABEL_ART.w}
+                  height={LABEL_ART.h}
+                />
               ) : (
                 <p className="note">Pick a graphic to see it on the box.</p>
               )}
@@ -180,7 +232,7 @@ export default function BoxPreview({
         {/* open box + message on the inside flap */}
         <div className={"box-layer" + (mode === "open" ? " visible" : "")}>
           <div className="box-composite">
-            {photoFailed ? (
+            {!showOpen ? null : photoFailed ? (
               <OpenBoxSvg />
             ) : (
               /* eslint-disable-next-line @next/next/no-img-element */
@@ -188,10 +240,13 @@ export default function BoxPreview({
                 src={interiorSrc}
                 alt="open box"
                 className="box-img"
+                width={INTERIOR_PHOTO.w}
+                height={INTERIOR_PHOTO.h}
+                decoding="async"
                 onError={() => setPhotoFailed(true)}
               />
             )}
-            {pinataImg && (
+            {showOpen && pinataImg && (
               /* Width + bottom-edge anchored; height follows the image's own
                  aspect — so scaling the zone directly scales the piñata with
                  no dead air above it. zone.h only records the footprint. */
@@ -200,6 +255,7 @@ export default function BoxPreview({
                 src={pinataImg}
                 alt="your piñata, in the box"
                 className="box-pinata"
+                decoding="async"
                 onError={() => setPinataAttempt((a) => a + 1)}
                 style={{
                   left: `${pinataZone.x * 100}%`,
@@ -208,13 +264,14 @@ export default function BoxPreview({
                 }}
               />
             )}
-            {messageCard && !photoFailed && (
+            {showOpen && messageCard && !photoFailed && (
               // The matching card sits in the flap zone, text painted on top.
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={messageCard}
                 alt=""
                 className="flap-card"
+                decoding="async"
                 style={{
                   left: `${zone.x * 100}%`,
                   top: `${zone.y * 100}%`,
