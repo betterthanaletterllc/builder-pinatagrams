@@ -1263,8 +1263,6 @@ export default function DesignFlowV2(data: FlowData) {
           carrier,
           onChange: (a) => setPrefs((p) => ({ ...p, address: { ...p.address, ...a } })),
           onBlurField: (k) => setTouched((t) => ({ ...t, [k]: true })),
-          onCheckoutCartFirst: payOrderFirst,
-          busy,
         }}
         email={prefs.email}
         emailError={emailError && (touched.email || submitted) ? emailError : null}

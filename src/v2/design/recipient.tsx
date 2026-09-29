@@ -5,7 +5,7 @@ import AddressLine1, { type PickedAddress } from "@/app/design/address-search";
 import type { Carrier } from "@/lib/delivery";
 import type { DeliveryAddress } from "@/lib/flow";
 import { US_STATES, toStateCode, type AddressErrors, type AddressField } from "../lib/address";
-import { Button, OptionCard } from "../ui/controls";
+import { OptionCard } from "../ui/controls";
 import { Callout } from "../ui/feedback";
 import { SelectField, TextField } from "../ui/field";
 import { Alert } from "../ui/icons";
@@ -194,7 +194,8 @@ export function AddressForm({
  * "Who's it for?" — one address per order. With piñatas already in the
  * order, the shopper chooses explicitly: the same recipient (shown, with
  * Change) or someone else, which means a separate order — the order in
- * progress checks out first (never a silent re-route of earlier piñatas).
+ * progress checks out first via the step's primary action (never a silent
+ * re-route of earlier piñatas).
  */
 export default function Recipient({
   headingId,
@@ -210,8 +211,6 @@ export default function Recipient({
   carrier,
   onChange,
   onBlurField,
-  onCheckoutCartFirst,
-  busy,
 }: {
   headingId: string;
   cartAddress: DeliveryAddress | null;
@@ -227,8 +226,6 @@ export default function Recipient({
   carrier: Carrier | null;
   onChange: (patch: Partial<DeliveryAddress>) => void;
   onBlurField: (f: AddressField) => void;
-  onCheckoutCartFirst: (el: HTMLButtonElement) => void;
-  busy: boolean;
 }) {
   const form = (
     <AddressForm
@@ -287,20 +284,10 @@ export default function Recipient({
         <div className={s.block}>
           <Callout tone="info">
             <p>
-              Every order ships to one address. Pay for the {cartCount} piñata
-              {cartCount === 1 ? "" : "s"} already in your order first — this one stays
-              saved right here, ready for its own recipient.
+              Every order ships to one address, so this one becomes its own order. Pay
+              for the {cartCount} piñata{cartCount === 1 ? "" : "s"} already in your order
+              first — this one stays saved right here, ready for its new recipient.
             </p>
-            <div style={{ marginTop: 10 }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                busy={busy}
-                onClick={(e) => onCheckoutCartFirst(e.currentTarget)}
-              >
-                Check out my order first
-              </Button>
-            </div>
           </Callout>
         </div>
       ) : editing ? (
