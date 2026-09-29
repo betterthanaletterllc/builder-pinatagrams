@@ -42,8 +42,12 @@ Server pieces added with the overhaul:
   it would delete) until `DRAFT_EXPIRY_MODE=delete` is set.
 - `POST /api/webhooks/orders-paid` sends `order_paid` to PostHog, joined to the
   shopper's session via the `_phDistinctId` / `_phSessionId` order attributes.
-  Subscribe Shopify's `orders/paid` topic to it; it verifies the HMAC with
-  `SHOPIFY_WEBHOOK_SECRET` (falls back to `SHOPIFY_CLIENT_SECRET`).
+  The builder subscribes Shopify's `orders/paid` topic to it by itself
+  (`src/lib/webhooks.ts`: once per instance after a production checkout, plus
+  the daily `GET /api/cron/ensure-webhooks`), trimmed to non-personal fields.
+  Needs `read_orders` on the Shopify app. The HMAC is checked against
+  `SHOPIFY_CLIENT_SECRET` (or `SHOPIFY_WEBHOOK_SECRET` for a hand-made admin
+  webhook); `GET` on the same path says whether the subscription exists.
 - Analytics (GA4, Meta pixel, PostHog) only run in production on
   `*.pinatagrams.com`; PostHog loads lazily.
 

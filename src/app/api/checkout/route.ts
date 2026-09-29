@@ -33,6 +33,7 @@ import {
   type Carrier,
 } from "@/lib/delivery";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { ensureOrdersPaidWebhookOnce } from "@/lib/webhooks";
 import {
   NONCE_ATTR,
   shopifyCreds,
@@ -1343,6 +1344,10 @@ export async function POST(req: Request) {
   if (supersedes && !created.some((o) => o.draftOrderId === supersedes.draftOrderId)) {
     after(() => retireSupersededDraft(creds, supersedes));
   }
+  // Keep the orders/paid webhook (paid order → PostHog) registered — once
+  // per server instance, after the response; a fresh deploy registers itself
+  // on its first checkouts, and the daily cron backs it up.
+  after(() => ensureOrdersPaidWebhookOnce());
 
   return NextResponse.json({ dryRun: false, orders: created });
 }

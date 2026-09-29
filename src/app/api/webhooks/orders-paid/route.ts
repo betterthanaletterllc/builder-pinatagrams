@@ -1,6 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { POSTHOG_HOST, POSTHOG_KEY } from "@/lib/analytics-config";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { ordersPaidWebhookStatus } from "@/lib/webhooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,12 +17,15 @@ export const dynamic = "force-dynamic";
  * gift message); Shopify delivers those back here as `note_attributes`, which
  * joins the paid order to the session and experiment arm that built it.
  *
- * Setup (once, by the store owner): subscribe `orders/paid` to
+ * Setup: none. The builder subscribes `orders/paid` to
  *   https://builder.pinatagrams.com/api/webhooks/orders-paid
- * either through the builder's Shopify app (signed with SHOPIFY_CLIENT_SECRET)
- * or in Shopify admin → Settings → Notifications → Webhooks (signed with the
- * key shown there — put it in SHOPIFY_WEBHOOK_SECRET). Without a secret the
+ * itself through its own Shopify app (lib/webhooks — after production
+ * checkouts and from the daily ensure-webhooks cron), so deliveries are signed
+ * with SHOPIFY_CLIENT_SECRET. A webhook added by hand in Shopify admin →
+ * Settings → Notifications is signed with the key shown there instead — put
+ * it in SHOPIFY_WEBHOOK_SECRET; either key is accepted. Without a secret the
  * route refuses every call rather than trusting unsigned payloads.
+ * `GET` answers whether the subscription exists (read-only, rate-limited).
  *
  * Only orders tagged `builder` are forwarded. Nothing personal leaves this
  * route: no names, emails, addresses or messages — just counts, money and
@@ -72,14 +77,27 @@ const money = (v: string | undefined): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+/** Is Shopify's orders/paid subscribed to this route? Read-only. */
+export async function GET(req: Request) {
+  if (!rateLimit(`webhook-status:${clientIp(req)}`, 5, 60_000)) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  }
+  return NextResponse.json(await ordersPaidWebhookStatus(), {
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
 export async function POST(req: Request) {
-  const secret =
-    process.env.SHOPIFY_WEBHOOK_SECRET ?? process.env.SHOPIFY_CLIENT_SECRET;
-  if (!secret) {
+  // The builder's own subscription is signed with the app's client secret; a
+  // hand-made admin webhook with SHOPIFY_WEBHOOK_SECRET. Accept either.
+  const secrets = [process.env.SHOPIFY_WEBHOOK_SECRET, process.env.SHOPIFY_CLIENT_SECRET]
+    .filter((s): s is string => Boolean(s));
+  if (!secrets.length) {
     return NextResponse.json({ error: "Webhook secret not configured." }, { status: 503 });
   }
   const raw = await req.text();
-  if (!verified(raw, req.headers.get("x-shopify-hmac-sha256"), secret)) {
+  const hmac = req.headers.get("x-shopify-hmac-sha256");
+  if (!secrets.some((s) => verified(raw, hmac, s))) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
   }
   const topic = req.headers.get("x-shopify-topic");

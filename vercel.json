@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/expire-drafts",
       "schedule": "30 9 * * *"
+    },
+    {
+      "path": "/api/cron/ensure-webhooks",
+      "schedule": "45 9 * * *"
     }
   ]
 }
