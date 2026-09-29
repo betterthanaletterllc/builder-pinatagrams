@@ -220,7 +220,8 @@ function carrierDead(
   return null;
 }
 
-/** null = fine; otherwise a customer-facing reason the date doesn't work. */
+/** null = fine; otherwise a customer-facing reason the date doesn't work.
+ *  Dates in messages are always formatted ("Thu, Oct 1"), never YYYY-MM-DD. */
 export function deliveryProblem(
   ymd: string,
   cfg: DeliveryConfig,
@@ -229,31 +230,61 @@ export function deliveryProblem(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "Pick a delivery date.";
   if (ymd < minDeliveryDate(cfg, carrier)) {
     return carrier === "usps"
-      ? `USPS First Class takes ${uspsSpreadLabel(cfg)} mailing days — ${minDeliveryDate(cfg, "usps")} is the soonest target for USPS (FedEx 2-Day can get there sooner).`
-      : `We need a day to make your piñata and two FedEx days to fly it there — ${minDeliveryDate(cfg)} is the soonest.`;
+      ? `USPS First Class takes ${uspsSpreadLabel(cfg)} mailing days — ${formatYmd(minDeliveryDate(cfg, "usps"))} is the soonest target for USPS (FedEx 2-Day can get there sooner).`
+      : `We need a day to make your piñata and two FedEx days to fly it there — ${formatYmd(minDeliveryDate(cfg))} is the soonest.`;
   }
   if (ymd > maxDeliveryDate(cfg)) return "That's a bit too far out — pick a closer date.";
   return carrierDead(ymd, cfg, carrier);
 }
 
+/** Why a date fails at checkout: a stable machine code (the client maps it
+ *  to the right field; analytics counts it) + the customer-facing message. */
+export type DeliveryIssue = {
+  code: "date_missing" | "date_too_soon" | "date_too_far" | "date_unavailable";
+  message: string;
+};
+
 /**
  * Server-side validation at checkout: the earliest date is recomputed as if
  * the order were placed YESTERDAY, so a date that was legitimately selectable
  * when the cart was built isn't rejected because midnight passed (or a clock
- * skews) in between.
+ * skews) in between. Same rules as deliveryProblem, structured.
  */
+export function deliveryIssueAtCheckout(
+  ymd: string,
+  cfg: DeliveryConfig,
+  carrier: Carrier = "fedex",
+): DeliveryIssue | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    return { code: "date_missing", message: "Pick a delivery date." };
+  }
+  const graceMin = earliestDeliveryDate(cfg, addDays(shopToday(), -1), carrier);
+  if (ymd < graceMin) {
+    const earliest = formatYmd(earliestDeliveryDate(cfg, shopToday(), carrier));
+    return {
+      code: "date_too_soon",
+      // USPS promises a window around a TARGET, so it never claims an
+      // exact arrival day.
+      message:
+        carrier === "usps"
+          ? `That's too soon for USPS — the earliest target date is ${earliest}.`
+          : `That's too soon — the earliest it can arrive is ${earliest}.`,
+    };
+  }
+  if (ymd > maxDeliveryDate(cfg)) {
+    return { code: "date_too_far", message: "That's a bit too far out — pick a closer date." };
+  }
+  const dead = carrierDead(ymd, cfg, carrier);
+  return dead ? { code: "date_unavailable", message: dead } : null;
+}
+
+/** deliveryIssueAtCheckout's message alone (null = fine). */
 export function deliveryProblemAtCheckout(
   ymd: string,
   cfg: DeliveryConfig,
   carrier: Carrier = "fedex",
 ): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "Pick a delivery date.";
-  const graceMin = earliestDeliveryDate(cfg, addDays(shopToday(), -1), carrier);
-  if (ymd < graceMin) {
-    return `That delivery date is too soon now — ${earliestDeliveryDate(cfg, shopToday(), carrier)} is the earliest. Pick a new date.`;
-  }
-  if (ymd > maxDeliveryDate(cfg)) return "That's a bit too far out — pick a closer date.";
-  return carrierDead(ymd, cfg, carrier);
+  return deliveryIssueAtCheckout(ymd, cfg, carrier)?.message ?? null;
 }
 
 /* ---------------------------------------------------------------------------
