@@ -66,9 +66,9 @@ import {
   resumePayment,
   startCheckout,
 } from "@/lib/checkout-client";
+import { CORPORATE_URL } from "@/lib/links";
 
 const MAX_QTY = 25;
-const CORPORATE_URL = "https://my.betterthanaletter.com";
 
 // The whole cart ships to ONE address (one order, one invoice). Editing it
 // here rewrites every line. Autocomplete tokens put these fields in their

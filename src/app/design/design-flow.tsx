@@ -49,6 +49,7 @@ import {
   subscribeDesignSaves,
 } from "@/lib/design-upload";
 import { discardEditorAutosave } from "@/lib/editor-autosave";
+import { CORPORATE_URL } from "@/lib/links";
 import {
   formatCents,
   HUB_URL,
@@ -2214,9 +2215,7 @@ export default function DesignFlow({
 
           <p className="note several-link">
             Sending to several people?{" "}
-            <a href="https://my.betterthanaletter.com">
-              Order for a group at my.betterthanaletter.com →
-            </a>
+            <a href={CORPORATE_URL}>See corporate gifting →</a>
           </p>
         </div>
       )}

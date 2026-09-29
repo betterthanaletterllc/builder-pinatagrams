@@ -20,6 +20,7 @@ import { b2cPrice, requestContext, trustFrom } from "../lib/server";
 import { clipText, PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import { ButtonLink, ChipLink } from "../ui/controls";
 import { Check, ChevronRight, Star, Tag, Truck, Users } from "../ui/icons";
+import { CORPORATE_URL } from "@/lib/links";
 import Stars from "../ui/stars";
 import s from "./home.module.css";
 
@@ -92,7 +93,7 @@ export default async function HomeV2({
     : [];
   const pitch =
     variant.landingLines?.[0] ??
-    `A ${PINATA_HEIGHT_IN}-inch piñata packed with candy, your design on the box and your message inside the lid — delivered to their door.`;
+    `A ${PINATA_HEIGHT_IN}-inch piñata packed with candy, your design on the box and your message on the inside flap delivered straight to their door.`;
 
   return (
     <main className={s.home}>
@@ -141,7 +142,7 @@ export default async function HomeV2({
               <Check size={16} /> Made to order, just for them
             </li>
             <li>
-              <Check size={16} /> FedEx delivers on the day you choose
+              <Check size={16} /> Choose your delivery date!
             </li>
           </ul>
         </div>
@@ -321,7 +322,7 @@ export default async function HomeV2({
             Corporate gifting has its own home: bulk pricing, one invoice, many addresses.
           </p>
         </div>
-        <ButtonLink href="https://my.betterthanaletter.com" variant="secondary">
+        <ButtonLink href={CORPORATE_URL} variant="secondary">
           Corporate gifting
         </ButtonLink>
       </section>

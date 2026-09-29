@@ -11,6 +11,7 @@ import {
   type DeliveryConfig,
 } from "@/lib/delivery";
 import { formatCents } from "@/lib/hub";
+import { CORPORATE_URL } from "@/lib/links";
 import { cutoffTonight, soonest } from "../lib/dates";
 import { OptionCard } from "../ui/controls";
 import { Callout, StepHeader } from "../ui/feedback";
@@ -233,7 +234,7 @@ const StepDeliver = forwardRef<
               <Plus size={18} /> Add another piñata
             </button>
           )}
-          <a className={s.linkBtn} href="https://my.betterthanaletter.com">
+          <a className={s.linkBtn} href={CORPORATE_URL}>
             <Users size={18} /> Sending to several people?
           </a>
         </div>
