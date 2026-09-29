@@ -2,25 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 import { formatCents } from "@/lib/hub";
+import type { LineView } from "../lib/order";
+import BoxThumb from "../ui/box-thumb";
 import { Button } from "../ui/controls";
 import { Callout } from "../ui/feedback";
 import { Calendar, Pencil } from "../ui/icons";
 import s from "./steps.module.css";
-
-export type LineView = {
-  id: string; // a cart line id, or "current" for the piñata in progress
-  current: boolean; // the piñata being built or edited right now
-  tag?: string; // "This piñata" / "Editing"
-  title: string;
-  thumb: ReactNode;
-  details: string;
-  arrives: string | null;
-  qty: number;
-  merchCents: number | null; // piñata + tier + filling, × qty
-  addonRows: { label: string; cents: number }[]; // × qty
-  problem: string | null; // its date doesn't work with the order's carrier
-  error: string | null; // what checkout said about this line
-};
 
 /**
  * Every piñata in the order (the one in progress first), then shipping,
@@ -61,7 +48,7 @@ export default function OrderSummary({
             className={s.line}
             data-problem={!!(l.problem || l.error) || undefined}
           >
-            {l.thumb}
+            <BoxThumb {...l.box} size={56} />
             <div className={s.lineInfo}>
               {l.tag && <span className={s.lineTag}>{l.tag}</span>}
               <span className={s.lineTitle}>

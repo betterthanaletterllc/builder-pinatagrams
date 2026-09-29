@@ -36,7 +36,6 @@ import {
   type GraphicChoice,
 } from "@/lib/flow";
 import {
-  discountAmountCents,
   formatCents,
   priceUrl,
   resolveDiscount,
@@ -58,7 +57,6 @@ import { trackV2 } from "../lib/analytics";
 import { arrivalText, dateProblemText, soonest } from "../lib/dates";
 import { fillingAfterDesignChange } from "../lib/defaults";
 import {
-  applyPreset,
   draftFromLine,
   draftFromPreset,
   loadDraftV2,
@@ -75,7 +73,9 @@ import {
 } from "../lib/draft";
 import { composeMessage, type CardParts } from "../lib/message";
 import type { OccasionId } from "../lib/occasions";
-import { deliveredCents, pieceBreakdown, shipCents, type PriceCtx } from "../lib/pricing";
+import { computeOrder, designName, type OrderPiece } from "../lib/order";
+import { deliveredCents, priceRows, type PriceCtx } from "../lib/pricing";
+import { graphicReady, resolveRestore } from "../lib/restore";
 import { parseStep, stepAt, STEPS } from "../lib/steps";
 import { scopeText } from "../lib/text";
 import type { FlowData, GraphicSource, StepId, StepVia } from "../lib/types";
@@ -85,19 +85,11 @@ import { Callout, PriceTag, useAnnouncer, useToast } from "../ui/feedback";
 import { Alert, Check, Spinner, Star, Truck } from "../ui/icons";
 import u from "../ui/ui.module.css";
 import ActionBar, { type Cta } from "./action-bar";
+import DryRunResult from "./dry-run";
 import EditorView from "./editor-view";
 import FlowHeader from "./flow-header";
-import type { LineView } from "./order-summary";
 import { focusAddressField } from "./recipient";
-import {
-  BodySheet,
-  LibrarySheet,
-  LineDateSheet,
-  loadLibrary,
-  PriceSheet,
-  ZoomSheet,
-  type BreakdownRow,
-} from "./sheets";
+import { BodySheet, LibrarySheet, LineDateSheet, loadLibrary, PriceSheet, ZoomSheet } from "./sheets";
 import Stage from "./stage";
 import StepCard from "./step-card";
 import StepDeliver, { CARRIER_IDS, DATE_IDS, EMAIL_ID } from "./step-deliver";
@@ -116,6 +108,12 @@ type SheetState =
 
 type Nav = { via: StepVia; history: "push" | "replace" | "none"; view?: "editor" | null };
 
+type Problem = {
+  kind: "carrier" | "date" | "design" | "line" | "address" | "email";
+  message: string;
+  focus: () => void;
+};
+
 const EMPTY_PREFS: OrderPrefs = {
   carrier: null,
   address: EMPTY_ADDRESS,
@@ -128,30 +126,14 @@ const EMPTY_PREFS: OrderPrefs = {
 // and offer Retry; a late success still lands and clears it.
 const UPLOAD_PATIENCE_MS = 90_000;
 
-/** Library and hub picks are ready as-is; a custom design needs its
- *  uploaded print file AND its sha256, or checkout refuses the line. */
-function graphicReady(g: GraphicChoice): boolean {
-  return g.type !== "custom" || (!!g.art && !!g.artSha256);
-}
-
-/** Customer-facing name; hub-graphic titles are internal. */
-function designName(g: GraphicChoice): string {
-  return g.type === "custom" ? "Your design" : g.type === "hub" ? "Your graphic" : g.title;
-}
-
-function excerpt(message: string, n = 36): string {
-  const one = message.replace(/\s+/g, " ").trim();
-  return one.length > n ? `“${one.slice(0, n).trimEnd()}…”` : `“${one}”`;
-}
-
 /**
- * The v2 journey: Design → Card → Inside → Deliver & pay. One component
- * owns the state machine — the in-progress piñata (draft, sessionStorage,
- * debounced), order-level choices (carrier, recipient, email), the cart
- * (lib/flow, shared with v1's /cart and /api/checkout), history-backed step
- * navigation with View Transitions, and checkout. Steps render as
- * presentational components; the Stage and the ActionBar persist around
- * them.
+ * The v2 journey: Design → Card → Inside → Deliver & pay. This component
+ * owns the state machine — the piñata in progress (a draft in session
+ * storage, debounced), the order-level choices (carrier, recipient, email),
+ * the cart (lib/flow, shared with v1's /cart and /api/checkout), history-
+ * backed steps with View Transitions, and checkout. Pure decisions live in
+ * src/v2/lib (restore, order, pricing, dates); the steps are presentational
+ * and the Stage and ActionBar persist around them.
  */
 export default function DesignFlowV2(data: FlowData) {
   const router = useRouter();
@@ -211,7 +193,7 @@ export default function DesignFlowV2(data: FlowData) {
   );
   // ONE carrier per order: FedEx-only stores are FedEx; with piñatas in the
   // order its carrier is the order's; otherwise nothing is assumed until the
-  // shopper chooses (the price shows "From" meanwhile).
+  // shopper chooses (prices show "From" meanwhile).
   const carrier: Carrier | null = !uspsOffered
     ? "fedex"
     : cart.length > 0
@@ -252,7 +234,7 @@ export default function DesignFlowV2(data: FlowData) {
       const base = draftFromPreset(data.preset);
       const occ = occasion ?? base.occasion;
       const top = data.strips.find((s) => s.id === occ)?.designs[0];
-      // Never re-use the deep-linked design for the NEXT piñata: tiered
+      // Never re-use a deep-linked design for the NEXT piñata: tiered
       // stores start on the Classic, flat ones on the occasion's #1.
       const graphic = tiered ? CLASSIC_GRAPHIC : (top ?? base.graphic);
       return {
@@ -320,107 +302,57 @@ export default function DesignFlowV2(data: FlowData) {
   /* --- restore: stored draft, deep link, edit link, order review --------- */
 
   useEffect(() => {
-    // READS only here; every storage write and event waits for the commit
-    // tick below (see there), so a dev Strict-Mode double mount can't
-    // consume a parked piñata or a deep link twice.
-    const url = new URL(window.location.href);
+    // Reads only; every write waits for the commit tick below.
+    const here = new URL(window.location.href);
     const lines = loadCart();
-    const sig = presetSignature(url);
-    const editId = url.searchParams.get("edit");
-    let d = loadDraftV2();
-    let via: StepVia = "continue";
-    let fresh = false;
-    let note: string | null = null;
-    let park: DraftV2 | null = null; // set aside while a cart line is edited
-    let unpark = false; // the parked piñata is back in progress
-    let consume = false; // this deep link has now been applied
-
-    if (editId) {
-      consume = true; // the edit link's ?style= is not a new preset
-      if (d?.editLineId === editId) {
-        via = "restore";
-      } else {
-        const line = lines.find((l) => l.id === editId);
-        if (line) {
-          // A new piñata in progress is set aside, not lost.
-          if (d && !d.editLineId) park = d;
-          d = draftFromLine(line, d?.occasion ?? data.preset.occasion);
-          via = "deeplink";
-        } else {
-          url.searchParams.delete("edit");
-          if (d?.editLineId) d = null;
-          note = "That piñata isn't in your order anymore.";
-        }
-      }
-    } else {
-      // An abandoned edit must never leak into a new piñata (it would
-      // silently REPLACE a cart line on save).
-      if (d?.editLineId) d = null;
-      if (!d) {
-        const parked = loadParked();
-        if (parked) {
-          d = parked;
-          unpark = true;
-        }
-      }
-      if (data.deepLink && !presetConsumed(sig)) {
-        fresh = !d;
-        d = applyPreset(d, data.preset, (x, g) => fillingAfterDesignChange(x, g, fillings));
-        consume = true;
-        via = "deeplink";
-      } else if (d) {
-        via = "restore";
-      } else if (!(parseStep(url.searchParams.get("step")) === "deliver" && lines.length)) {
-        d = draftFromPreset(data.preset);
-        fresh = true;
-      }
-    }
-
-    if (d && !stylesById.has(d.styleId)) {
-      d = { ...d, styleId: data.preset.styleId };
-      note = "That piñata style just sold out, so we picked another — change it anytime.";
-    }
-
-    let target: StepId = parseStep(url.searchParams.get("step")) ?? "design";
-    if (!d) target = "deliver";
-    else if (!graphicReady(d.graphic)) target = "design";
-    url.searchParams.set("step", target);
-    url.searchParams.delete("view");
-
+    const sig = presetSignature(here);
+    const r = resolveRestore({
+      url: here,
+      stored: loadDraftV2(),
+      parked: loadParked(),
+      lines,
+      preset: data.preset,
+      deepLink: data.deepLink,
+      presetApplied: presetConsumed(sig),
+      inStock: (id) => stylesById.has(id),
+      fillings,
+    });
     setCart(lines);
     setPrefs(loadOrderPrefs());
-    setDraft(d);
-    setStep(target);
+    setDraft(r.draft);
+    setStep(r.step);
     setHydrated(true);
     // A background upload can't survive a reload: say so, offer Retry.
-    if (d?.graphic.type === "custom" && !graphicReady(d.graphic)) setUpload("failed");
+    if (r.draft?.graphic.type === "custom" && !graphicReady(r.draft.graphic)) setUpload("failed");
 
-    const restored = d;
-    // The commit tick. Also deferred for the URL: this effect runs BEFORE
-    // the App Router (a parent) installs its history patch — written now,
-    // the entry would lose Next's own state (__NA) and Back to it would
-    // reload the page; a tick later the patched replaceState keeps Next's
-    // bookkeeping and syncs its URL.
+    // The commit tick: storage writes, the URL and the first events. A dev
+    // Strict-Mode double mount cancels the first tick, so nothing is
+    // consumed twice. The URL write must wait anyway: this effect runs
+    // BEFORE the App Router (a parent) installs its history patch — written
+    // now, the entry would lose Next's own state (__NA) and Back to it
+    // would reload the page; a tick later the patched replaceState keeps
+    // Next's bookkeeping and syncs its URL.
     const t = window.setTimeout(() => {
-      if (park) saveParked(park);
-      if (unpark) saveParked(null);
-      if (consume) markPresetConsumed(sig);
+      if (r.park) saveParked(r.park);
+      if (r.unpark) saveParked(null);
+      if (r.consume) markPresetConsumed(sig);
       window.history.replaceState(
         { pgv2: true, pgDepth: Number(window.history.state?.pgDepth ?? 0) },
         "",
-        url,
+        r.url,
       );
       stepStart.current = performance.now();
-      trackV2("step_viewed", { step: target, step_index: STEPS[target].index, via });
-      if (restored && (fresh || via === "deeplink") && !restored.editLineId) {
-        trackV2("body_style_selected", { style: restored.styleId, source: data.preset.styleSource });
+      trackV2("step_viewed", { step: r.step, step_index: STEPS[r.step].index, via: r.via });
+      const d = r.draft;
+      if (d && (r.fresh || r.via === "deeplink") && !d.editLineId) {
+        trackV2("body_style_selected", { style: d.styleId, source: data.preset.styleSource });
         trackV2("graphic_picked", {
-          design: restored.graphic.type === "custom" ? "custom" : restored.graphic.design,
-          tier: graphicTier(restored.graphic),
-          source: restored.graphicSource === "deeplink" ? "deeplink" : "default",
+          design: d.graphic.type === "custom" ? "custom" : d.graphic.design,
+          tier: graphicTier(d.graphic),
+          source: d.graphicSource === "deeplink" ? "deeplink" : "default",
         });
       }
-      if (note) showToast(note);
+      if (r.note) showToast(r.note);
     }, 0);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -478,6 +410,19 @@ export default function DesignFlowV2(data: FlowData) {
       window.removeEventListener(CART_EVENT, refresh);
       window.removeEventListener("storage", refresh);
     };
+  }, []);
+
+  // Back from Shopify's invoice may restore this page from the bfcache,
+  // frozen mid-checkout: wake it up with the current cart.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      inFlight.current = false;
+      setBusy(false);
+      setCart(loadCart());
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
   }, []);
 
   // Prices: the server's copy first; if that failed, retry here (display
@@ -547,8 +492,8 @@ export default function DesignFlowV2(data: FlowData) {
     if (draft.date !== ymd) patch({ date: ymd });
   }, [draft?.dateSoonest, draft?.date, carrier, cfg, patch]);
 
-  // Nothing in progress and nothing in the order: start a piñata. (Out of
-  // the effect's commit — navigate() flushes synchronously.)
+  // Nothing in progress and nothing in the order: start a piñata. (Off the
+  // effect's commit — navigate() flushes synchronously.)
   useEffect(() => {
     if (!hydrated || busy || draft || cart.length > 0) return;
     const t = window.setTimeout(() => {
@@ -559,19 +504,6 @@ export default function DesignFlowV2(data: FlowData) {
   }, [hydrated, busy, draft, cart.length, freshPiece, navigate]);
 
   useEffect(() => () => window.clearTimeout(uploadTimer.current), []);
-
-  // Back from Shopify's invoice may restore this page from the bfcache,
-  // frozen mid-checkout: wake it up with the current cart.
-  useEffect(() => {
-    const onShow = (e: PageTransitionEvent) => {
-      if (!e.persisted) return;
-      inFlight.current = false;
-      setBusy(false);
-      setCart(loadCart());
-    };
-    window.addEventListener("pageshow", onShow);
-    return () => window.removeEventListener("pageshow", onShow);
-  }, []);
 
   /* --- choices --------------------------------------------------------------- */
 
@@ -671,7 +603,7 @@ export default function DesignFlowV2(data: FlowData) {
     setUpload("saving");
     window.clearTimeout(uploadTimer.current);
     uploadTimer.current = window.setTimeout(
-      () => setUpload((u) => (u === "saving" ? "failed" : u)),
+      () => setUpload((s) => (s === "saving" ? "failed" : s)),
       UPLOAD_PATIENCE_MS,
     );
   };
@@ -679,16 +611,18 @@ export default function DesignFlowV2(data: FlowData) {
   const onEditorSave = (design: DesignDocument, preview: string, assets: DesignAssets) => {
     const d = draftRef.current;
     if (!d) return;
-    const g: GraphicChoice = {
-      type: "custom",
-      // stamp the CURRENT body (it can change while the editor is open)
-      design: { ...design, bodyStyleId: d.styleId },
-      preview,
-      art: assets.art,
-      designUrl: assets.designUrl,
-      artSha256: assets.artSha256,
-    };
-    pickGraphic(g, "editor");
+    pickGraphic(
+      {
+        type: "custom",
+        // stamp the CURRENT body (it can change while the editor is open)
+        design: { ...design, bodyStyleId: d.styleId },
+        preview,
+        art: assets.art,
+        designUrl: assets.designUrl,
+        artSha256: assets.artSha256,
+      },
+      "editor",
+    );
     if (assets.art && assets.artSha256) {
       setUpload(null);
       window.clearTimeout(uploadTimer.current);
@@ -737,8 +671,8 @@ export default function DesignFlowV2(data: FlowData) {
 
   // Where the order ships: the address already on the order (unless the
   // shopper is changing it, or it can't take this carrier), else the form.
-  const cartAddressIssues = cartAddress ? validateAddress(cartAddress, carrier, uspsOffered) : {};
-  const cartAddressOk = !!cartAddress && Object.keys(cartAddressIssues).length === 0;
+  const cartAddressOk =
+    !!cartAddress && Object.keys(validateAddress(cartAddress, carrier, uspsOffered)).length === 0;
   const usingCartAddress = cartAddressOk && !editingAddress;
   const shipTo: DeliveryAddress = usingCartAddress ? cartAddress! : prefs.address;
   const someoneElse = !!draft && !editing && !!cartAddress && prefs.recipient === "new";
@@ -760,171 +694,33 @@ export default function DesignFlowV2(data: FlowData) {
 
   const lineCarrier: Carrier = carrier ?? "fedex";
   const order = useMemo(() => {
-    const ship = shipCents(carrier, priceCtx);
-    const views: LineView[] = [];
-    let merchandise = 0;
-    let units = 0;
-    const row = (
-      id: string,
-      l: {
-        graphic: GraphicChoice;
-        filling: string;
-        addons: string[];
-        date: string;
-        qty: number;
-        styleName: string;
-        boxImageUrl: string | null;
-        logoZone: CartLine["logoZone"];
-        message: string;
-      },
-      kind: "current" | "editing" | "line",
-    ) => {
-      const b = pieceBreakdown({ graphic: l.graphic, filling: l.filling, addons: l.addons }, priceCtx);
-      units += l.qty;
-      if (b.base !== null) merchandise += (b.base + b.addons.reduce((s, a) => s + a.cents, 0)) * l.qty;
-      // Every line re-checked against the ORDER's carrier (a switch, or a
-      // date that went stale overnight) — named here, fixed per line.
-      const problem =
-        kind === "line" && carrier ? dateProblemText(l.date, cfg, carrier) : null;
-      views.push({
-        id,
-        current: kind !== "line",
-        tag: kind === "current" ? "This piñata" : kind === "editing" ? "Editing" : undefined,
-        title: `${designName(l.graphic)} · ${l.styleName}`,
-        thumb: (
-          <BoxThumb
-            boxImageUrl={l.boxImageUrl}
-            logoZone={l.logoZone}
-            graphic={l.graphic}
-            size={56}
-          />
-        ),
-        details: [l.filling, l.message ? excerpt(l.message) : null].filter(Boolean).join(" · "),
-        arrives:
-          l.date && !(kind === "line" && problem) ? arrivalText(l.date, lineCarrier, cfg) : null,
-        qty: l.qty,
-        merchCents: b.base === null ? null : b.base * l.qty,
-        addonRows: b.addons.map((a) => ({ label: a.label, cents: a.cents * l.qty })),
-        problem,
-        error: lineErrors[id] ?? null,
-      });
-    };
-    if (draft && style && !draft.editLineId) {
-      row(
-        "current",
-        {
-          graphic: draft.graphic,
-          filling: draft.filling,
-          addons: draft.addons,
-          date: draft.date,
-          qty: 1,
-          styleName: style.name,
-          boxImageUrl: style.boxImageUrl,
-          logoZone: style.logoZone,
-          message,
-        },
-        "current",
-      );
-    }
-    for (const l of cart) {
-      if (draft && style && l.id === draft.editLineId) {
-        row(
-          l.id,
-          {
+    const live: OrderPiece | null =
+      draft && style
+        ? {
             graphic: draft.graphic,
             filling: draft.filling,
             addons: draft.addons,
             date: draft.date,
-            qty: l.qty,
+            qty: 1,
             styleName: style.name,
             boxImageUrl: style.boxImageUrl,
             logoZone: style.logoZone,
             message,
-          },
-          "editing",
-        );
-      } else {
-        row(
-          l.id,
-          {
-            graphic: l.graphic,
-            filling: l.filling,
-            addons: l.addons ?? [],
-            date: l.deliveryDate,
-            qty: l.qty,
-            styleName: l.styleName,
-            boxImageUrl: l.boxImageUrl,
-            logoZone: l.logoZone,
-            message: l.message,
-          },
-          "line",
-        );
-      }
-    }
-    const known = !!unitPrice && ship !== null;
-    const shipTotal = ship !== null ? ship * units : null;
-    // PREVIEW of each code (the cart's rules): an order code comes off the
-    // merchandise, a shipping code off shipping. Shopify applies the real one.
-    const codeRows: { label: string; cents: number }[] = [];
-    const notes: { code: string; text: string }[] = [];
-    let off = 0;
-    for (const d of discounts) {
-      if (!known) continue;
-      const minOk = merchandise >= d.minSubtotalCents;
-      const capBlocked =
-        d.kind === "shipping" && d.maxShippingCents != null && shipTotal! >= d.maxShippingCents;
-      if (!minOk) {
-        notes.push({ code: d.code, text: `${d.code} needs a ${formatCents(d.minSubtotalCents)} minimum.` });
-        continue;
-      }
-      if (capBlocked) {
-        notes.push({
-          code: d.code,
-          text: `${d.code} only covers shipping under ${formatCents(d.maxShippingCents!)}.`,
-        });
-        continue;
-      }
-      const cents = discountAmountCents(d, merchandise, shipTotal!);
-      if (cents > 0) {
-        off += cents;
-        codeRows.push({ label: d.code, cents });
-      }
-    }
-    return {
-      views,
-      units,
-      shipLabel:
-        carrier === "usps"
-          ? "USPS First Class"
-          : carrier === "fedex"
-            ? "Guaranteed FedEx delivery"
-            : "Shipping",
-      shipTotal,
-      codeRows,
-      notes,
-      total: known ? merchandise + shipTotal! - off : null,
-      from: uspsOffered && carrier === null,
-    };
-  }, [
-    carrier,
-    priceCtx,
-    draft,
-    style,
-    cart,
-    message,
-    cfg,
-    lineCarrier,
-    lineErrors,
-    unitPrice,
-    discounts,
-    uspsOffered,
-  ]);
+          }
+        : null;
+    return computeOrder({
+      current: live && !draft?.editLineId ? live : null,
+      editing: live && draft?.editLineId ? { lineId: draft.editLineId, piece: live } : null,
+      cart,
+      carrier,
+      uspsOffered,
+      cfg,
+      priceCtx,
+      discounts,
+      lineErrors,
+    });
+  }, [draft, style, message, cart, carrier, uspsOffered, cfg, priceCtx, discounts, lineErrors]);
 
-  type Problem = {
-    kind: "carrier" | "date" | "design" | "line" | "address" | "email";
-    message: string;
-    focus: () => void;
-  };
   const byId = (id: string) => () => document.getElementById(id)?.focus();
   /** Everything standing between the shopper and payment, in page order. */
   const problems = (): Problem[] => {
@@ -1179,41 +975,18 @@ export default function DesignFlowV2(data: FlowData) {
     trackV2("delivery_date_picked", { soonest: ymd === soonest(cfg, lineCarrier), carrier: lineCarrier });
   };
 
-  /* --- ActionBar per step ----------------------------------------------------- */
+  /* --- ActionBar ---------------------------------------------------------------- */
 
   const barPrice =
     step === "deliver"
       ? { cents: order.total, from: order.from }
       : (piecePrice ?? { cents: null, from: false });
-  const barMain =
-    step === "deliver" ? (
-      <>
-        Total <PriceTag cents={barPrice.cents} from={barPrice.from} />
-      </>
-    ) : (
-      <PriceTag cents={barPrice.cents} from={barPrice.from} note="delivered" />
-    );
   const fedexSoonest = formatYmd(soonest(cfg, "fedex"));
-  const barSub =
-    step === "deliver" ? (
-      "Plus tax at payment"
-    ) : draft?.date && carrier && !dateProblemText(draft.date, cfg, carrier) ? (
-      <>
-        <Truck size={16} /> Arrives {arrivalText(draft.date, carrier, cfg)}
-      </>
-    ) : carrier === "usps" ? (
-      <>
-        <Truck size={16} /> Earliest {formatWindow(uspsWindow(soonest(cfg, "usps"), cfg))}
-      </>
-    ) : (
-      <>
-        <Truck size={16} /> Arrives as soon as {fedexSoonest}
-      </>
-    );
   const priceText =
     barPrice.cents === null
       ? null
       : `${step === "deliver" ? "Total " : ""}${barPrice.from ? "from " : ""}${formatCents(barPrice.cents)}`;
+
   // One polite, debounced announcement when a CHOICE changes the price —
   // not when a step change merely switches what the bar shows.
   const lastAnnounced = useRef<{ step: StepId; text: string } | null>(null);
@@ -1271,7 +1044,7 @@ export default function DesignFlowV2(data: FlowData) {
         ? { label: "Save changes", onClick: saveChanges }
         : someoneElse
           ? { label: "Check out my order first", short: "Check out order", onClick: payOrderFirst, busy }
-          : { label: "Continue to payment", short: "Continue to payment", onClick: pay, busy };
+          : { label: STEPS.deliver.next, onClick: pay, busy };
     }
   }
 
@@ -1307,70 +1080,23 @@ export default function DesignFlowV2(data: FlowData) {
     );
   }
 
-  /* --- price breakdown sheet (steps 1–3) ----------------------------------------- */
-
-  const breakdown = (): { rows: BreakdownRow[]; total: BreakdownRow; note: string | null } => {
-    const rows: BreakdownRow[] = [];
-    if (!draft || !style) return { rows, total: { label: "Total", value: "—" }, note: null };
-    const b = pieceBreakdown({ graphic: draft.graphic, filling: draft.filling, addons: draft.addons }, priceCtx);
-    const unit = unitPrice?.unitPriceCents ?? null;
-    rows.push({ label: `${style.name} piñata`, value: unit === null ? "—" : formatCents(unit) });
-    if (tiered) {
-      rows.push({
-        label:
-          draft.graphic.type === "custom"
-            ? "Your own design"
-            : graphicTier(draft.graphic) === "classic"
-              ? "Classic design"
-              : "Library design",
-        value: b.tier > 0 ? `+${formatCents(b.tier)}` : "Included",
-      });
-    }
-    rows.push({ label: draft.filling, value: b.filling > 0 ? `+${formatCents(b.filling)}` : "Included" });
-    for (const a of b.addons) rows.push({ label: a.label, value: `+${formatCents(a.cents)}` });
-    const ship = shipCents(carrier, priceCtx);
-    rows.push({
-      label:
-        carrier === "usps"
-          ? "USPS First Class"
-          : carrier === "fedex"
-            ? "Guaranteed FedEx delivery"
-            : "Delivery (choose at the last step)",
-      value: ship === null ? "—" : `${carrier ? "" : "from "}${formatCents(ship)}`,
-    });
-    const others = cart.filter((l) => l.id !== draft.editLineId).length;
-    return {
-      rows,
-      total: {
-        label: carrier ? "Delivered" : "Delivered, from",
-        value: piecePrice?.cents == null ? "—" : formatCents(piecePrice.cents),
-      },
-      note: others
-        ? `Your order also has ${others} other piñata${others === 1 ? "" : "s"} — you'll see everything at the last step.`
-        : null,
-    };
-  };
-
   /* --- render --------------------------------------------------------------------- */
 
-  const reviewStyle: HubBodyStyle | null = !draft && cart.length
-    ? (() => {
-        const l = cart[cart.length - 1];
-        return (
-          stylesById.get(l.styleId) ?? {
-            id: l.styleId,
-            name: l.styleName,
-            imageUrl: null,
-            boxImageUrl: l.boxImageUrl,
-            logoZone: l.logoZone,
-            inStock: true,
-          }
-        );
-      })()
-    : null;
-  const stageStyle = style ?? reviewStyle;
-  const stageGraphic = draft?.graphic ?? (cart.length ? cart[cart.length - 1].graphic : null);
-  const stageStep: StepId = step;
+  // The order review (nothing in progress) shows the latest piñata on stage.
+  const last = cart.length ? cart[cart.length - 1] : null;
+  const stageStyle: HubBodyStyle | null =
+    style ??
+    (last
+      ? (stylesById.get(last.styleId) ?? {
+          id: last.styleId,
+          name: last.styleName,
+          imageUrl: null,
+          boxImageUrl: last.boxImageUrl,
+          logoZone: last.logoZone,
+          inStock: true,
+        })
+      : null);
+  const stageGraphic = draft?.graphic ?? last?.graphic ?? null;
   const idx = STEPS[step].index;
   const backLabel =
     view === "editor"
@@ -1411,28 +1137,18 @@ export default function DesignFlowV2(data: FlowData) {
     return !rec || rec.bodyStyles === "all" || rec.bodyStyles.includes(styleId);
   };
 
-  const trustLine = data.trust && (
-    <li>
-      <Star size={15} className={st.star} />
-      <span>
-        {data.trust.rating.toFixed(1)} {scopeText(data.trust.label)}
-      </span>
-    </li>
-  );
-
-  const affectedLines = order.views.filter((v) => !v.current && v.problem);
+  const affected = order.views.filter((v) => !v.current && v.problem);
   const carrierNoticeNode =
     carrierNotice && carrierNotice === carrier ? (
-      <Callout tone={affectedLines.length ? "warning" : "info"} role="status">
+      <Callout tone={affected.length ? "warning" : "info"} role="status">
         <p>
           Everything in this order now travels by{" "}
           {carrierNotice === "usps" ? "USPS First Class" : "FedEx 2-Day"}.
         </p>
-        {affectedLines.length > 0 && (
+        {affected.length > 0 && (
           <p>
-            {affectedLines.map((v) => v.title).join(", ")}{" "}
-            {affectedLines.length === 1 ? "needs" : "need"} a new date — pick one in your order
-            below.
+            {affected.map((v) => v.title).join(", ")}{" "}
+            {affected.length === 1 ? "needs" : "need"} a new date — pick one in your order below.
           </p>
         )}
       </Callout>
@@ -1441,47 +1157,8 @@ export default function DesignFlowV2(data: FlowData) {
   const lineForSheet =
     sheet?.kind === "lineDate" ? (cart.find((l) => l.id === sheet.lineId) ?? null) : null;
 
-  const dryRunNode = dryRun && (
-    // addresses + messages: kept out of autocapture and session replay
-    <div
-      id="pg-dry-run"
-      tabIndex={-1}
-      className={`${st.block} ${st.dryRun} ph-sensitive`}
-      data-ph-mask
-    >
-      <Callout tone="success" role="status">
-        <p>
-          <strong>Dry run — nothing was charged.</strong>{" "}
-          {typeof dryRun.reason === "string" ? dryRun.reason : ""}
-        </p>
-        <ul>
-          {(Array.isArray(dryRun.draftOrders) ? dryRun.draftOrders : []).map((o, i) => {
-            const rec = (o ?? {}) as Record<string, unknown>;
-            const input = (rec.input ?? {}) as Record<string, unknown>;
-            const shipping = (input.shippingLine ?? {}) as Record<string, unknown>;
-            const items = Array.isArray(input.lineItems) ? input.lineItems.length : null;
-            return (
-              <li key={i}>
-                {String(rec.shipTo ?? "Order")}
-                {items !== null && ` · ${items} line item${items === 1 ? "" : "s"}`}
-                {typeof shipping.title === "string" &&
-                  ` · “${shipping.title}” $${String(shipping.price ?? "")}`}
-              </li>
-            );
-          })}
-        </ul>
-        <details>
-          <summary>What checkout would send</summary>
-          <pre>{JSON.stringify(dryRun.draftOrders ?? dryRun, null, 2)}</pre>
-        </details>
-      </Callout>
-    </div>
-  );
-
   let content: ReactNode = null;
-  if (loading) {
-    content = null;
-  } else if (step === "design" && draft && style) {
+  if (step === "design" && draft && style) {
     content = (
       <StepDesign
         ref={h1Ref}
@@ -1544,14 +1221,6 @@ export default function DesignFlowV2(data: FlowData) {
       />
     );
   } else if (step === "deliver") {
-    const dateErr =
-      draft && carrier
-        ? draft.date
-          ? dateProblemText(draft.date, cfg, carrier)
-          : submitted
-            ? "Pick a delivery date."
-            : null
-        : null;
     content = (
       <StepDeliver
         ref={h1Ref}
@@ -1567,7 +1236,15 @@ export default function DesignFlowV2(data: FlowData) {
         cfg={cfg}
         date={draft?.date ?? ""}
         dateSoonest={!!draft?.dateSoonest}
-        dateError={dateErr}
+        dateError={
+          draft && carrier
+            ? draft.date
+              ? dateProblemText(draft.date, cfg, carrier)
+              : submitted
+                ? "Pick a delivery date."
+                : null
+            : null
+        }
         onSoonest={pickSoonest}
         onDate={pickDate}
         recipient={{
@@ -1584,8 +1261,7 @@ export default function DesignFlowV2(data: FlowData) {
           address: prefs.address,
           errors: shownAddressErrors,
           carrier,
-          onChange: (patchAddr) =>
-            setPrefs((p) => ({ ...p, address: { ...p.address, ...patchAddr } })),
+          onChange: (a) => setPrefs((p) => ({ ...p, address: { ...p.address, ...a } })),
           onBlurField: (k) => setTouched((t) => ({ ...t, [k]: true })),
           onCheckoutCartFirst: payOrderFirst,
           busy,
@@ -1612,12 +1288,20 @@ export default function DesignFlowV2(data: FlowData) {
           notes: order.notes,
         }}
         onAddAnother={addAnother}
-        result={dryRunNode}
+        result={dryRun && <DryRunResult payload={dryRun} />}
       />
     );
   }
 
-  const bd = sheet?.kind === "price" ? breakdown() : null;
+  const priceSheet =
+    sheet?.kind === "price" && draft && style
+      ? priceRows(
+          { graphic: draft.graphic, filling: draft.filling, addons: draft.addons, styleName: style.name },
+          carrier,
+          priceCtx,
+        )
+      : null;
+  const otherLines = cart.filter((l) => l.id !== draft?.editLineId).length;
 
   return (
     <main className={f.flow}>
@@ -1666,11 +1350,18 @@ export default function DesignFlowV2(data: FlowData) {
                     </span>
                   </li>
                 )}
-                {trustLine}
+                {data.trust && (
+                  <li>
+                    <Star size={15} className={st.star} />
+                    <span>
+                      {data.trust.rating.toFixed(1)} {scopeText(data.trust.label)}
+                    </span>
+                  </li>
+                )}
               </ul>
             )}
             <Stage
-              step={stageStep}
+              step={step}
               style={stageStyle}
               graphic={stageGraphic}
               message={draft ? message : ""}
@@ -1705,8 +1396,32 @@ export default function DesignFlowV2(data: FlowData) {
                   />
                 ) : undefined
               }
-              main={barMain}
-              sub={barSub}
+              main={
+                step === "deliver" ? (
+                  <>
+                    Total <PriceTag cents={barPrice.cents} from={barPrice.from} />
+                  </>
+                ) : (
+                  <PriceTag cents={barPrice.cents} from={barPrice.from} note="delivered" />
+                )
+              }
+              sub={
+                step === "deliver" ? (
+                  "Plus tax at payment"
+                ) : draft?.date && carrier && !dateProblemText(draft.date, cfg, carrier) ? (
+                  <>
+                    <Truck size={16} /> Arrives {arrivalText(draft.date, carrier, cfg)}
+                  </>
+                ) : carrier === "usps" ? (
+                  <>
+                    <Truck size={16} /> Earliest {formatWindow(uspsWindow(soonest(cfg, "usps"), cfg))}
+                  </>
+                ) : (
+                  <>
+                    <Truck size={16} /> Arrives as soon as {fedexSoonest}
+                  </>
+                )
+              }
               onPrice={step !== "deliver" && draft ? () => setSheet({ kind: "price" }) : undefined}
               cta={cta}
               notice={barNotice}
@@ -1749,17 +1464,21 @@ export default function DesignFlowV2(data: FlowData) {
             }}
           />
           <PriceSheet
-            open={sheet?.kind === "price"}
+            open={!!priceSheet}
             onClose={() => setSheet(null)}
-            rows={bd?.rows ?? []}
-            total={bd?.total ?? { label: "Total", value: "—" }}
-            note={bd?.note}
+            rows={priceSheet?.rows ?? []}
+            total={priceSheet?.total ?? { label: "Delivered", value: "—" }}
+            note={
+              otherLines
+                ? `Your order also has ${otherLines} other piñata${otherLines === 1 ? "" : "s"} — you'll see everything at the last step.`
+                : null
+            }
           />
         </>
       )}
       <LineDateSheet
         key={lineForSheet?.id ?? "none"}
-        open={sheet?.kind === "lineDate" && !!lineForSheet}
+        open={!!lineForSheet}
         onClose={() => setSheet(null)}
         line={lineForSheet}
         title={lineForSheet ? `${designName(lineForSheet.graphic)} · ${lineForSheet.styleName}` : ""}

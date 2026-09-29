@@ -1,5 +1,5 @@
 import type { Carrier } from "@/lib/delivery";
-import { graphicTierCents, type CartLine, type GraphicChoice } from "@/lib/flow";
+import { graphicTier, graphicTierCents, type CartLine, type GraphicChoice } from "@/lib/flow";
 import { formatCents, type BuilderPricing, type HubFilling, type HubPrice } from "@/lib/hub";
 import type { V2Addon } from "./types";
 
@@ -88,6 +88,47 @@ export function deliveredCents(
 
 export function linePiece(l: CartLine): Piece {
   return { graphic: l.graphic, filling: l.filling, addons: l.addons ?? [] };
+}
+
+/** The price sheet (tap the price): one piñata itemised, delivered total. */
+export function priceRows(
+  p: Piece & { styleName: string },
+  carrier: Carrier | null,
+  ctx: PriceCtx,
+): { rows: { label: string; value: string }[]; total: { label: string; value: string } } {
+  const money = (c: number | null) => (c === null ? "—" : formatCents(c));
+  const b = pieceBreakdown(p, ctx);
+  const rows = [{ label: `${p.styleName} piñata`, value: money(ctx.unitPrice?.unitPriceCents ?? null) }];
+  if (ctx.tiered && p.graphic) {
+    rows.push({
+      label:
+        p.graphic.type === "custom"
+          ? "Your own design"
+          : graphicTier(p.graphic) === "classic"
+            ? "Classic design"
+            : "Library design",
+      value: b.tier > 0 ? `+${formatCents(b.tier)}` : "Included",
+    });
+  }
+  if (p.filling) {
+    rows.push({ label: p.filling, value: b.filling > 0 ? `+${formatCents(b.filling)}` : "Included" });
+  }
+  for (const a of b.addons) rows.push({ label: a.label, value: `+${formatCents(a.cents)}` });
+  const ship = shipCents(carrier, ctx);
+  rows.push({
+    label:
+      carrier === "usps"
+        ? "USPS First Class"
+        : carrier === "fedex"
+          ? "Guaranteed FedEx delivery"
+          : "Delivery (you choose at the last step)",
+    value: ship === null ? "—" : `${carrier ? "" : "from "}${formatCents(ship)}`,
+  });
+  const d = deliveredCents(p, carrier, ctx);
+  return {
+    rows,
+    total: { label: d.from ? "Delivered, from" : "Delivered", value: money(d.cents) },
+  };
 }
 
 /** The graphic's tier upcharge label on tiered stores: "Included" / "+$2.00". */
