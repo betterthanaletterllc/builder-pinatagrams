@@ -29,7 +29,7 @@ export function useCartCount(): number {
 }
 
 function label(n: number) {
-  return n > 0 ? `Your order, ${n} piñata${n === 1 ? "" : "s"}` : "Your order is empty";
+  return n > 0 ? `Your order, ${n} piñata${n === 1 ? "" : "s"} in the cart` : "Your order";
 }
 
 /**
