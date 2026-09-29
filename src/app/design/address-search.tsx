@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { stateCode, US_STATES } from "@/lib/flow";
 
 /**
  * Shopify-checkout-style address autocomplete: the Address field ITSELF
@@ -26,40 +27,13 @@ export type PickedAddress = {
 
 type Suggestion = PickedAddress & { label: string };
 
-// [code, name] — the 50 states + DC, in the order a State <select> lists them.
-export const US_STATES: [string, string][] = [
-  ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"],
-  ["CA", "California"], ["CO", "Colorado"], ["CT", "Connecticut"],
-  ["DE", "Delaware"], ["DC", "District of Columbia"], ["FL", "Florida"],
-  ["GA", "Georgia"], ["HI", "Hawaii"], ["ID", "Idaho"], ["IL", "Illinois"],
-  ["IN", "Indiana"], ["IA", "Iowa"], ["KS", "Kansas"], ["KY", "Kentucky"],
-  ["LA", "Louisiana"], ["ME", "Maine"], ["MD", "Maryland"],
-  ["MA", "Massachusetts"], ["MI", "Michigan"], ["MN", "Minnesota"],
-  ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"],
-  ["NE", "Nebraska"], ["NV", "Nevada"], ["NH", "New Hampshire"],
-  ["NJ", "New Jersey"], ["NM", "New Mexico"], ["NY", "New York"],
-  ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"],
-  ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"],
-  ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"],
-  ["TN", "Tennessee"], ["TX", "Texas"], ["UT", "Utah"], ["VT", "Vermont"],
-  ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"],
-  ["WI", "Wisconsin"], ["WY", "Wyoming"],
-];
+// The 50 states + DC live once, in lib/flow (the cart's State select uses
+// them too); re-exported here for the flow's existing imports.
+export { US_STATES, stateCode };
 
 const STATE_CODES: Record<string, string> = Object.fromEntries(
   US_STATES.map(([code, name]) => [name, code]),
 );
-
-/** A state as its 2-letter code ("TX", "tx", "Texas" → "TX"); "" if it
- *  isn't a US state or DC. */
-export function stateCode(v: string): string {
-  const s = v.trim();
-  if (!s) return "";
-  const upper = s.toUpperCase();
-  if (US_STATES.some(([code]) => code === upper)) return upper;
-  const hit = US_STATES.find(([, name]) => name.toLowerCase() === s.toLowerCase());
-  return hit ? hit[0] : "";
-}
 
 // The US (incl. Alaska + Hawaii) as Photon's minLon,minLat,maxLon,maxLat —
 // results elsewhere never make the list, so they shouldn't crowd it out.

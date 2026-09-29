@@ -963,9 +963,9 @@ export function rememberAddress(a: DeliveryAddress): void {
 }
 
 /* ---------------------------------------------------------------------------
- * US states + DC — the ship-to State select, [code, name]. Same set the
- * Send-to autocomplete maps to (design/address-search.tsx keeps a private
- * name → code copy).
+ * US states + DC — the ship-to State select, [code, name]. The one list:
+ * the cart, the Send-to form and the address autocomplete (which maps
+ * Photon's state names to codes through it) all read this.
  * ------------------------------------------------------------------------- */
 
 export const US_STATES: readonly (readonly [code: string, name: string])[] = [
