@@ -15,12 +15,18 @@
   --card: #ffffff;
   --line: rgba(24, 13, 56, 0.12);
   --line-strong: rgba(24, 13, 56, 0.25);
-  --accent: #627ae3; /* periwinkle — interactive */
+  --accent: #627ae3; /* periwinkle — borders, rings, selection (not text) */
+  /* periwinkle-dark — accent TEXT and any fill under white text: 5.48:1
+     (white on --accent is 3.88:1, under WCAG AA's 4.5) */
   --accent-hover: #4a62c4;
+  --accent-press: #3d52ab; /* primary buttons' hover — a step darker */
   --accent-soft: rgba(98, 122, 227, 0.12);
   --highlight: #f6de6b;
-  --good: #55a871;
-  --warn: #d4623d; /* coral-dark: readable warning/error text on light bg */
+  /* success TEXT: 5.25:1 on white (brand green #55a871 is 2.9:1) */
+  --good: #2f7a4a;
+  /* error/warning TEXT: 6.1:1 on white, 5.6:1 on --warn-soft (coral-dark
+     #d4623d was 3.7:1) */
+  --warn: #a8401f;
   --warn-soft: #fdf3d8;
   --shadow-sm: 0 2px 8px rgba(24, 13, 56, 0.08);
   --shadow-md: 0 4px 20px rgba(24, 13, 56, 0.12);
@@ -189,7 +195,7 @@ a.style-card:focus-visible {
 .style-card .style-price {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-hover);
   margin-top: 2px;
 }
 
@@ -323,7 +329,7 @@ a.style-card:focus-visible {
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--accent);
+  color: var(--accent-hover);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -405,14 +411,16 @@ a.style-card:focus-visible {
 }
 
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: #fff;
 }
 
-.btn.primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+@media (hover: hover) {
+  .btn.primary:hover {
+    background: var(--accent-press);
+    border-color: var(--accent-press);
+  }
 }
 
 .btn.block {
@@ -460,7 +468,7 @@ a.style-card:focus-visible {
 }
 
 .seg-btn.on {
-  background: var(--accent);
+  background: var(--accent-hover);
   color: #fff;
 }
 
@@ -812,7 +820,7 @@ body:has(.bottom-stack) .site-footer {
   margin-left: 6px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-hover);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
@@ -1125,7 +1133,7 @@ body:has(.bottom-stack) .site-footer {
   color: var(--ok, #1a7f37);
 }
 .choice-price.plus {
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 /* Delivery-step carrier chooser: two side-by-side option cards. */
@@ -1172,7 +1180,7 @@ body:has(.bottom-stack) .site-footer {
   margin-top: 5px;
   font-size: 13px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 .ship-to-note {
@@ -1486,7 +1494,7 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .cal-day.selected {
-  background: var(--accent);
+  background: var(--accent-hover);
   color: #fff;
   font-weight: 700;
 }
@@ -1498,12 +1506,14 @@ body:has(.bottom-stack) .site-footer {
 
 /* USPS arrival window: the picked day stays full-strength (.selected); the
    window's mailing days either side shade lighter — "it may arrive on
-   these" (width = uspsWindowDays in the hub delivery config). */
+   these" (width = uspsWindowDays in the hub delivery config). Light tint +
+   periwinkle outline (3.9:1 against the calendar — the shape reads) with
+   navy numbers (14.9:1); it was white on 40% periwinkle, 1.6:1. */
 .cal-day.win {
-  background: var(--accent);
-  color: #fff;
+  background: #e3e8fc;
+  color: var(--ink);
   font-weight: 600;
-  opacity: 0.4;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .addr-cards {
@@ -1628,7 +1638,7 @@ body:has(.bottom-stack) .site-footer {
 }
 
 .filling-body .filling-price.plus {
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 .addon-note {
@@ -1700,7 +1710,7 @@ body:has(.bottom-stack) .site-footer {
 
 .addon-price {
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-hover);
   white-space: nowrap;
 }
 
