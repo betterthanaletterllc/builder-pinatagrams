@@ -211,13 +211,16 @@ async function addonVariantIds(
   return out;
 }
 
-/** GET a hub public endpoint on the money path: no builder-side cache (the
- *  hub's edge cache is the only layer, so a config edit can't serve a stale
- *  charge from a second stacked cache) and a hard deadline. null on ANY
- *  failure — the caller turns that into a friendly 503. */
+/** GET a hub public endpoint on the money path: no cache layer at all and a
+ *  hard deadline. no-store skips the builder's fetch cache, and a unique
+ *  query param skips the hub's edge cache (s-maxage up to 5 minutes), so a
+ *  price the hub has just published is the price charged. Display pages keep
+ *  the cached URLs. null on ANY failure — the caller turns that into a
+ *  friendly 503. */
 async function hubGet<T>(url: string, what: string): Promise<T | null> {
   try {
-    const res = await fetch(url, {
+    const fresh = `${url}${url.includes("?") ? "&" : "?"}fresh=${Date.now()}`;
+    const res = await fetch(fresh, {
       cache: "no-store",
       signal: AbortSignal.timeout(HUB_TIMEOUT_MS),
     });
