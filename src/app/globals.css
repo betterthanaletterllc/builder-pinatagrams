@@ -3280,3 +3280,252 @@ ul.addr-sugs {
   color: var(--accent-hover);
   font-weight: 600;
 }
+
+/* --- the step button's "why not yet" line: beside the button, on every
+   step (mobile bar + desktop summary card) ------------------------------- */
+.cta-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 620px;
+}
+
+.cta-note {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--accent-hover);
+}
+
+.cta-note.warn {
+  color: #a8401f; /* error text — 5.9:1 on white */
+  font-weight: 600;
+}
+
+.cta-note .link-btn,
+.save-status .link-btn {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+.desk-summary .cta-note {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* The one button that can be held (a custom design still uploading) must
+   LOOK held — the fixed-bar buttons had no disabled style at all. */
+.cta-btn:disabled,
+.desk-summary-cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Room for the note under the fixed stack / beside the rail card. */
+.flow-root:has(.cta-note) .has-dock {
+  padding-bottom: 196px;
+}
+
+body:has(.bottom-stack .cta-note) .site-footer {
+  padding-bottom: 200px;
+}
+
+@media (min-width: 1024px) {
+  .flow-root:has(.cta-note) .has-dock {
+    padding-bottom: 24px;
+  }
+  .flow-grid:has(.desk-summary .cta-note) {
+    padding-bottom: 190px;
+  }
+}
+
+/* --- top-of-flow notices (substituted body style, retired filling/extra,
+   a deep link we couldn't honor) ------------------------------------------ */
+.flow-notices {
+  display: grid;
+  gap: 8px;
+  max-width: 620px;
+  margin: 0 auto 12px;
+}
+
+.flow-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 0;
+}
+
+.flow-notice .link-btn {
+  flex: none;
+  color: inherit;
+  text-decoration: none;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+/* --- custom design upload status (graphic confirm screen) ---------------- */
+.save-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 560px;
+  margin: 0 auto 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.save-status.ready {
+  color: #2f7a4a; /* success text — 5.3:1 on cream */
+}
+
+.save-status.failed,
+.save-status.remake {
+  color: #a8401f;
+}
+
+.deeplink-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+/* --- message step: label, sign-off, remaining characters ----------------- */
+.field-label {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.msg-from-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.msg-from-row .field-label {
+  flex: none;
+  margin: 0;
+}
+
+.message-from {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 16px; /* no iOS focus-zoom */
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+.msg-count {
+  margin: 6px 0 0;
+  font-size: 12px;
+  text-align: right;
+  color: var(--muted);
+}
+
+.msg-count.over {
+  color: #a8401f;
+  font-weight: 600;
+}
+
+/* the "full" live region stays mounted (so it announces) but takes no room
+   while empty */
+.msg-count.over:empty {
+  margin: 0;
+}
+
+/* --- filling picked to match a pet design -------------------------------- */
+.filling-auto-note {
+  margin-top: 10px;
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+/* --- Delivery: who it's going to, and the one-carrier-per-order notice --- */
+.sendto-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 12px;
+  box-shadow: var(--shadow-sm);
+  font-size: 14px;
+  text-align: left;
+}
+
+.sendto-line {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.sendto-label {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.sendto-card .link-btn {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+.sendto-card > .field-err {
+  margin: 6px 0 0;
+}
+
+.sendto-else {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.sendto-else-note {
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.sendto-else-note a {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+.sendto-edit {
+  margin-top: 10px;
+}
+
+.sendto-edit > .note {
+  margin: 0 0 8px;
+}
+
+.sendto-edit .inline-actions {
+  margin-top: 4px;
+}
+
+.carrier-switch {
+  margin: -2px 0 12px;
+  border-left: 3px solid var(--warn);
+  color: var(--ink);
+  text-align: left;
+}
+
+.carrier-switch p {
+  margin: 0 0 6px;
+}

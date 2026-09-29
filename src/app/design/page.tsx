@@ -26,17 +26,24 @@ import DesignFlow from "./design-flow";
 
 export const dynamic = "force-dynamic";
 
+// The best-selling body — the default when a link names none (or one that
+// can't be sold right now).
+const DEFAULT_STYLE_ID = "googly";
+
 export default async function DesignPage({
   searchParams,
 }: {
-  searchParams: Promise<{ style?: string; variant?: string }>;
+  searchParams: Promise<{ style?: string; variant?: string; edit?: string }>;
 }) {
-  const { style, variant: variantParam } = await searchParams;
+  const { style, variant: variantParam, edit } = await searchParams;
   const host = normalizeHost((await headers()).get("host"));
   const previewVariant =
     process.env.VERCEL_ENV !== "production" ? (variantParam ?? null) : null;
 
   let match: HubBodyStyle | null = null;
+  // The body the URL asked for, even if it can't be sold right now.
+  let requested: HubBodyStyle | null = null;
+  let fallback: HubBodyStyle | null = null;
   let box: { interiorUrl: string | null; messageZone: LogoZone | null } | null =
     null;
   let addons: HubAddon[] = [];
@@ -49,7 +56,13 @@ export default async function DesignPage({
   let hubDown = false;
   try {
     const catalog = await getCatalog({ host, previewVariant });
-    match = catalog.bodyStyles.find((s) => s.id === style && s.inStock) ?? null;
+    requested = catalog.bodyStyles.find((s) => s.id === style) ?? null;
+    match = requested?.inStock ? requested : null;
+    if (!match) {
+      const inStock = catalog.bodyStyles.filter((s) => s.inStock);
+      fallback =
+        inStock.find((s) => s.id === DEFAULT_STYLE_ID) ?? inStock[0] ?? null;
+    }
     box = catalog.box ?? null;
     addons = catalog.addons ?? [];
     fillings = resolveFillings(catalog.fillings);
@@ -64,7 +77,23 @@ export default async function DesignPage({
     hubDown = true;
   }
 
-  if (!style || (!match && !hubDown)) {
+  // A missing, unknown or out-of-stock body no longer dead-ends here: start
+  // on an in-stock default (Googly first). A CART EDIT of a line whose body
+  // sold out opens with the style switcher and says why — its design,
+  // message and the rest carry over to whichever body they pick.
+  // Only a hub outage with no style at all (nothing to fall back to), or a
+  // catalog with nothing in stock, still stops.
+  const chosen: HubBodyStyle | null = match ?? fallback;
+  let styleNotice: string | null = null;
+  if (!match && fallback && style) {
+    const why = requested
+      ? `The ${requested.name} body is out of stock right now`
+      : "That body style isn't available anymore";
+    styleNotice = edit
+      ? `${why} — pick another style below. Your design and message stay put.`
+      : `${why} — we started you on ${fallback.name}. Tap it above to swap.`;
+  }
+  if (!chosen && (!style || !hubDown)) {
     return (
       <main>
         <div className="error-box">
@@ -76,6 +105,7 @@ export default async function DesignPage({
       </main>
     );
   }
+  const styleId = chosen?.id ?? style!;
 
   return (
     <main>
@@ -90,13 +120,13 @@ export default async function DesignPage({
       )}
       <DesignFlow
         style={{
-          id: style,
-          name: match?.name ?? style,
-          imageUrl: match?.imageUrl ?? null,
-          boxImageUrl: match?.boxImageUrl ?? null,
-          logoZone: match?.logoZone ?? null,
-          pinataZone: match?.pinataZone ?? null,
-          cutoutUrl: match?.cutoutUrl ?? null,
+          id: styleId,
+          name: chosen?.name ?? styleId,
+          imageUrl: chosen?.imageUrl ?? null,
+          boxImageUrl: chosen?.boxImageUrl ?? null,
+          logoZone: chosen?.logoZone ?? null,
+          pinataZone: chosen?.pinataZone ?? null,
+          cutoutUrl: chosen?.cutoutUrl ?? null,
         }}
         boxInterior={box}
         addonOptions={addons}
@@ -106,6 +136,8 @@ export default async function DesignPage({
         variant={variant}
         hubGraphics={hubGraphics}
         hubCategories={hubCategories}
+        styleNotice={styleNotice}
+        openSwitcher={!!styleNotice && !!edit}
       />
     </main>
   );
