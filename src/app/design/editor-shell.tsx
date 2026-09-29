@@ -17,6 +17,7 @@ export default function EditorShell({
   logoZone,
   onSave,
   onAssets,
+  onDirtyChange,
   initialDesign,
   initialAssets,
 }: {
@@ -29,6 +30,9 @@ export default function EditorShell({
     assets: DesignAssets,
   ) => void;
   onAssets?: (assets: DesignAssets, docJson: string) => void;
+  // Optional: true while leaving the editor would lose work (so the host
+  // can ask "Discard this design?" before navigating away).
+  onDirtyChange?: (dirty: boolean) => void;
   initialDesign?: DesignDocument | null;
   initialAssets?: Partial<DesignAssets> | null;
 }) {
@@ -39,6 +43,7 @@ export default function EditorShell({
       logoZone={logoZone}
       onSave={onSave}
       onAssets={onAssets}
+      onDirtyChange={onDirtyChange}
       initialDesign={initialDesign}
       initialAssets={initialAssets}
     />

@@ -3078,3 +3078,146 @@ a.pager-btn:hover {
 .lb-nav.next {
   right: 10px;
 }
+
+/* === v1 overhaul (flow & editor) === */
+/* builder.pinatagrams.com's flow: dead-end fixes, the custom-design upload
+   status, the recipient form, the message sign-off, the promise line. Only
+   NEW rules live here (plus a few overrides that must win over the rules
+   above) — the look stays today's. */
+
+/* --- editor: resume card, notices, Undo toast, framing slider, counter --- */
+.resume-card {
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.resume-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.resume-card .note {
+  margin: 4px 0 10px;
+}
+
+.editor-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.editor-notice .link-btn {
+  flex: none;
+  color: inherit;
+  font-weight: 600;
+}
+
+.editor-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+}
+
+.editor-toast .link-btn {
+  color: var(--highlight);
+  font-weight: 700;
+}
+
+.frame-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 180px;
+  min-width: 160px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.frame-slider input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  accent-color: var(--accent);
+}
+
+.edit-sheet-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edit-sheet-field textarea {
+  flex: none;
+  width: 100%;
+}
+
+.edit-count {
+  font-size: 12px;
+  text-align: right;
+  color: var(--muted);
+}
+
+.edit-count.full {
+  color: #a8401f;
+  font-weight: 600;
+}
+
+/* --- inline confirmations (no native dialogs) ---------------------------- */
+.inline-confirm {
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--warn);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.inline-confirm p {
+  margin: 0 0 8px;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn.danger-fill {
+  background: #a8401f;
+  border-color: #a8401f;
+  color: #fff;
+}
+
+.btn.danger-fill:hover {
+  background: #8f3519;
+  border-color: #8f3519;
+}
+
+.editor-cta .inline-confirm {
+  width: 100%;
+  margin: 0;
+}

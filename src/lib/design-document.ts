@@ -172,6 +172,17 @@ export function isCurrentDesign(d: unknown): d is DesignDocument {
 }
 
 /**
+ * A design's identity for matching an upload to the piñata it belongs to:
+ * the whole document EXCEPT bodyStyleId. The flow re-stamps bodyStyleId
+ * with the current style (the body can be swapped after designing), so two
+ * copies of the same design can legitimately disagree on it. Spreading keeps
+ * the key order, so equal designs always serialize identically.
+ */
+export function designKey(doc: DesignDocument): string {
+  return JSON.stringify({ ...doc, bodyStyleId: "" });
+}
+
+/**
  * Cover-fit a photo into its box: scale to cover, then slide along the one
  * axis that overflows. Returns draw geometry in artboard px.
  */
@@ -209,13 +220,14 @@ export function coverFit(
 // Brand palette offered as text-color swatches — the official base palette
 // from design-system/colors_and_type.css.
 // No white: text always sits on the white artboard background, so a white
-// swatch would print blank — an invisible-text trap.
+// swatch would print blank — an invisible-text trap. Yellow (#F6DE6B, 1.3:1
+// on white) and pink (#F2A7B0, 2:1) are gone for the same reason: pale text
+// on a white label reads as a smudge in print. Designs saved with them still
+// render as saved; they just aren't offered anymore.
 export const TEXT_SWATCHES = [
   "#180D38", // navy
   "#627AE3", // periwinkle
   "#55A871", // green
-  "#F6DE6B", // yellow
-  "#F2A7B0", // pink
   "#EB7C57", // coral
 ] as const;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -15,6 +16,7 @@ import {
   artboardPx,
   coverFit,
   DEFAULT_ARTBOARD,
+  designKey,
   isCurrentDesign,
   newDesign,
   templateSlotRects,
@@ -27,24 +29,55 @@ import {
   type TemplateId,
   type TextSlot,
 } from "@/lib/design-document";
-import { toPrintBlob } from "@/lib/print-png";
+import {
+  designFontFamily,
+  fitFontSize,
+  TEXT_LINE_HEIGHT,
+  textBox,
+  textCapacity,
+  textFits,
+} from "@/lib/design-render";
+import { saveDesignArt } from "@/lib/design-upload";
+import {
+  beginEditorSession,
+  clearEditorAutosave,
+  loadEditorAutosave,
+  saveEditorAutosave,
+  type EditorAutosave,
+} from "@/lib/editor-autosave";
+import { track } from "@/lib/analytics";
 
 /**
  * Template editor (v2 — replaced the freeform canvas). The label divides
  * into a fixed layout of boxes; each box holds ONE photo (cover-filled,
- * dragged along its overflow axis to frame) or ONE text block (centered,
- * auto-fit). Constraints over freedom: every design fills the whole
- * 8"×3.9" print area and looks intentional.
+ * dragged — or slid with the framing slider — along its overflow axis) or
+ * ONE text block (centered, auto-fit). Constraints over freedom: every
+ * design fills the whole 8"×3.9" print area and looks intentional.
  *
  * Two view modes survive from v1:
- *  - flat: the artboard fills the width (default on phones)
- *  - boxed: the artboard composited on the box photo at the hub's logoZone
+ *  - flat: the artboard fills the width — the default everywhere (editing
+ *    at label size is fiddly even with a mouse)
+ *  - boxed: the artboard composited on the box photo at the hub's logoZone,
+ *    the "On the box" preview toggle
  * The document stays in artboard pixels either way; export renders ONLY the
  * design group, cropped to the artboard region.
+ *
+ * No native dialogs: confirm()/alert() can silently no-op in Instagram's
+ * in-app browser, so every question is asked inline.
  */
 
 const MAX_STAGE_WIDTH = 760;
-const NARROW = 520;
+// Spoken names for the text-color swatches (lib/design-document).
+const SWATCH_NAMES: Record<string, string> = {
+  "#180D38": "Navy",
+  "#627AE3": "Periwinkle",
+  "#55A871": "Green",
+  "#EB7C57": "Coral",
+};
+// Removing a box can be undone this long.
+const UNDO_MS = 6000;
+// Autosave debounce while editing.
+const AUTOSAVE_MS = 800;
 // Decode-sanity bound only — real camera files never get near this. Photo
 // SIZE is never a reason to refuse an upload; ingestPhoto compresses
 // whatever it's given down to a bounded data URL.
@@ -216,36 +249,29 @@ async function ingestPhoto(
   }
 }
 
-/** Largest font size (px) whose wrapped height fits the box AND whose widest
- *  single word fits on one line — so words wrap whole and are never broken
- *  mid-word (Konva's "word" wrap otherwise splits a word too wide to fit). */
-function fitFontSize(
-  text: string,
-  w: number,
-  h: number,
-  fontFamily: string,
-): number {
-  let size = Math.min(Math.round(h * 0.5), 260);
-  const probe = new Konva.Text({
-    text,
-    width: w,
-    fontFamily,
-    fontSize: size,
-    lineHeight: 1.15,
-  });
-  const words = text.split(/\s+/).filter(Boolean);
-  const widestWord = () =>
-    words.reduce((m, word) => Math.max(m, probe.measureSize(word).width), 0);
-  while (size > 16 && (probe.height() > h || widestWord() > w)) {
-    size = Math.floor(size * 0.9);
-    probe.fontSize(size);
-  }
-  probe.destroy();
-  return size;
-}
-
 const clamp = (v: number, min: number, max: number) =>
   Math.min(max, Math.max(min, v));
+
+/**
+ * Where a new photo starts inside its box. Wide photos center; TALL photos
+ * (the ones that overflow vertically — most phone portraits) center on the
+ * upper third, where faces usually are, instead of cropping to a midriff.
+ */
+function initialPhotoOffset(rect: SlotRect, natW: number, natH: number): number {
+  const fit = coverFit(rect, natW, natH, 0.5);
+  if (fit.axis !== "y") return 0.5;
+  return clamp((fit.height / 3 - rect.h / 2) / fit.overY, 0, 1);
+}
+
+/** "a few minutes ago" / "yesterday" — for the Continue-your-design card. */
+function sinceLabel(ts: number): string {
+  const mins = Math.round((Date.now() - ts) / 60000);
+  if (mins < 60) return "a few minutes ago";
+  const days = Math.floor(mins / 1440);
+  if (days < 1) return "earlier today";
+  if (days === 1) return "yesterday";
+  return `${days} days ago`;
+}
 
 /* --- slot renderers ----------------------------------------------------------- */
 
@@ -321,9 +347,9 @@ function TextSlotEl({
   onSelect: () => void;
   onEdit: () => void;
 }) {
-  const pad = Math.round(Math.min(rect.w, rect.h) * 0.08);
-  const w = rect.w - pad * 2;
-  const h = rect.h - pad * 2;
+  // Same box + fit the print render uses (lib/design-render) — the screen
+  // and the printed file can't disagree about where the words sit.
+  const { x, y, w, h } = textBox(rect);
   const empty = slot.text.trim() === "";
   const display = empty ? "Your text" : slot.text;
   // fontsReady in the deps re-fits once Poppins loads (its metrics differ
@@ -335,8 +361,8 @@ function TextSlotEl({
   return (
     <Group clip={{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}>
       <Text
-        x={rect.x + pad}
-        y={rect.y + pad}
+        x={x}
+        y={y}
         width={w}
         height={h}
         text={display}
@@ -346,11 +372,13 @@ function TextSlotEl({
         opacity={empty ? 0.35 : 1}
         align="center"
         verticalAlign="middle"
-        lineHeight={1.15}
+        lineHeight={TEXT_LINE_HEIGHT}
+        // Touch: ONE tap opens the text for editing (a double-tap is a
+        // hidden gesture on a phone). Mouse: click selects, double-click
+        // edits — Konva only fires `tap` for touch, so the two never mix.
         onMouseDown={onSelect}
-        onTap={onSelect}
+        onTap={onEdit}
         onDblClick={onEdit}
-        onDblTap={onEdit}
       />
     </Group>
   );
@@ -385,6 +413,7 @@ export default function Editor({
   logoZone,
   onSave,
   onAssets,
+  onDirtyChange,
   initialDesign,
   initialAssets,
 }: {
@@ -397,9 +426,13 @@ export default function Editor({
     assets: DesignAssets,
   ) => void;
   // Fires when the BACKGROUND print upload finishes (the flow advances
-  // immediately on save; the print file catches up). docJson lets the
-  // receiver make sure the assets still match the current design.
+  // immediately on save; the print file catches up) — including after a
+  // Retry made from outside the editor (lib/design-upload owns the job).
+  // docJson lets the receiver make sure the assets still match the design.
   onAssets?: (assets: DesignAssets, docJson: string) => void;
+  // True while leaving would lose work (a fresh design with content, or
+  // unsaved changes to an existing one) — the flow asks before discarding.
+  onDirtyChange?: (dirty: boolean) => void;
   // Re-editing an existing design ("Edit graphic") — photos and text intact.
   initialDesign?: DesignDocument | null;
   // The assets already uploaded for initialDesign — an unchanged re-save
@@ -419,12 +452,31 @@ export default function Editor({
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [editingText, setEditingText] = useState<number | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<"flat" | "boxed">("boxed");
+  // Flat is where editing happens (phones AND desktop); "On the box" is the
+  // preview toggle.
+  const [viewMode, setViewMode] = useState<"flat" | "boxed">("flat");
   const savedDocJson = useRef(editable ? JSON.stringify(editable) : null);
-  const userToggledView = useRef(false);
   const designRef = useRef<Konva.Group>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<number | null>(null);
+
+  // Inline stand-ins for the old native dialogs.
+  const [pendingTemplate, setPendingTemplate] = useState<TemplateId | null>(
+    null,
+  );
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // "Removed — Undo": the box's content and the layout it belonged to.
+  const [undo, setUndo] = useState<{
+    slot: number;
+    content: SlotContent;
+    template: TemplateId;
+  } | null>(null);
+  const undoTimer = useRef<number | undefined>(undefined);
+  // The text sheet refused a keystroke (the words would print too small).
+  const [textFull, setTextFull] = useState(false);
+  // An autosaved design from an earlier visit, offered on entry.
+  const [resume, setResume] = useState<EditorAutosave | null>(null);
 
   const { img: boxImg, failed: boxFailed } = useImg(boxImageUrl);
   const px = artboardPx(doc.artboard);
@@ -433,17 +485,15 @@ export default function Editor({
     [doc.template, doc.artboard],
   );
 
-  // Responsive stage width; phones default to flat editing (the boxed print
-  // zone is too small to work in by thumb).
+  // Responsive stage width. The 2px is the .artboard-wrap border: a stage as
+  // wide as the column overflowed it by exactly that and drew a scrollbar.
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [stageW, setStageW] = useState(MAX_STAGE_WIDTH);
+  const [stageW, setStageW] = useState(MAX_STAGE_WIDTH - 2);
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const update = () => {
-      const w = Math.max(280, Math.min(MAX_STAGE_WIDTH, el.clientWidth));
-      setStageW(w);
-      if (!userToggledView.current && w < NARROW) setViewMode("flat");
+      setStageW(Math.max(280, Math.min(MAX_STAGE_WIDTH, el.clientWidth) - 2));
     };
     update();
     const ro = new ResizeObserver(update);
@@ -451,6 +501,102 @@ export default function Editor({
     return () => ro.disconnect();
     // re-run when the loading gate lifts and the wrapper first renders
   }, [boxImg, boxFailed, picked]);
+
+  /* --- autosave -------------------------------------------------------------
+   * Debounced while editing, flushed when the tab hides or the editor
+   * unmounts; cleared once the design is used. The session token (taken on
+   * mount) lets the flow's "Discard" end this session so the unmount flush
+   * can't bring the discarded design back. */
+  const mode: "new" | "edit" = editable ? "edit" : "new";
+  const baseKey = useMemo(
+    () => (editable ? designKey(editable) : null),
+    // the design this edit started from — fixed for the editor's lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const initialDoc = useRef(doc);
+  const hasContent = doc.slots.some(Boolean);
+  const dirty =
+    picked && (editable ? doc !== initialDoc.current : hasContent);
+  const sessionToken = useRef(0);
+  const finished = useRef(false);
+  const autosaveTimer = useRef<number | undefined>(undefined);
+  const latest = useRef({ doc, dirty });
+  useEffect(() => {
+    latest.current = { doc, dirty };
+  });
+
+  const flushAutosave = useCallback(() => {
+    window.clearTimeout(autosaveTimer.current);
+    if (finished.current) return;
+    const { doc: d, dirty: isDirty } = latest.current;
+    if (isDirty) {
+      void saveEditorAutosave(
+        { doc: d, mode, baseKey, savedAt: Date.now() },
+        sessionToken.current,
+      );
+    }
+  }, [mode, baseKey]);
+
+  useEffect(() => {
+    sessionToken.current = beginEditorSession();
+    track("editor_opened", { mode });
+    // Offer an earlier unsaved design: a fresh one on a fresh entry, or
+    // unsaved changes to THIS design when re-editing it.
+    let live = true;
+    void loadEditorAutosave().then((a) => {
+      if (!live || !a) return;
+      if (a.mode === "new" && !editable && a.doc.slots.some(Boolean)) {
+        setResume(a);
+      } else if (a.mode === "edit" && editable && a.baseKey === baseKey) {
+        setResume(a);
+      }
+    });
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flushAutosave();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flushAutosave);
+    return () => {
+      live = false;
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flushAutosave);
+      flushAutosave();
+    };
+    // mount/unmount only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!picked || finished.current) return;
+    window.clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = window.setTimeout(() => {
+      if (finished.current) return;
+      if (dirty) {
+        void saveEditorAutosave(
+          { doc, mode, baseKey, savedAt: Date.now() },
+          sessionToken.current,
+        );
+      } else if (!editable) {
+        // a fresh design emptied back out — nothing worth resuming
+        void clearEditorAutosave();
+      }
+    }, AUTOSAVE_MS);
+    return () => window.clearTimeout(autosaveTimer.current);
+    // doc identity changes on every edit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, picked]);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(
+    () => () => onDirtyChange?.(false),
+    // unmount only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  useEffect(() => () => window.clearTimeout(undoTimer.current), []);
 
   const canBox = !!(boxImg && logoZone);
   const boxed = viewMode === "boxed" && canBox;
@@ -481,12 +627,7 @@ export default function Editor({
     };
   }, [boxed, boxImg, logoZone, px.width, px.height, stageW]);
 
-  const fontFamily = useMemo(() => {
-    const v = getComputedStyle(document.body)
-      .getPropertyValue("--font-poppins")
-      .trim();
-    return v || "sans-serif";
-  }, []);
+  const fontFamily = useMemo(() => designFontFamily(), []);
 
   // Text auto-fit measures against whatever font is loaded NOW; if Poppins
   // isn't ready yet it measures the fallback and the size (baked into the
@@ -505,6 +646,23 @@ export default function Editor({
       live = false;
     };
   }, []);
+
+  // Roughly how much text the box being edited holds at the smallest
+  // legible print size — drives the sheet's character counter.
+  const editingRect = editingText !== null ? rects[editingText] : undefined;
+  const textRoom = useMemo(
+    () => (editingRect ? textCapacity(editingRect, fontFamily) : 0),
+    [editingRect, fontFamily, fontsReady],
+  );
+  useEffect(() => setTextFull(false), [editingText]);
+
+  // Touch devices get "tap" wording; mice get "double-click".
+  const coarsePointer = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      !!window.matchMedia?.("(pointer: coarse)").matches,
+    [],
+  );
 
   // Slot index whose photo is currently being ingested (shows a spinner).
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
@@ -536,39 +694,69 @@ export default function Editor({
     if (editingText === i) setEditingText(null);
   };
 
+  // The shopper's ✕: clears the box and offers a few seconds of Undo.
+  const removeSlot = (i: number) => {
+    const content = doc.slots[i];
+    if (!content) return;
+    clearSlot(i);
+    setUndo({ slot: i, content, template: doc.template });
+    window.clearTimeout(undoTimer.current);
+    undoTimer.current = window.setTimeout(() => setUndo(null), UNDO_MS);
+  };
+
+  const undoRemove = () => {
+    if (!undo) return;
+    window.clearTimeout(undoTimer.current);
+    // Only while the box is still empty in the same layout — never clobber
+    // something added since.
+    if (doc.template === undo.template && doc.slots[undo.slot] === null) {
+      setSlot(undo.slot, undo.content);
+      setSelectedSlot(undo.slot);
+    }
+    setUndo(null);
+  };
+
   const pickTemplate = (id: TemplateId) => {
     setDoc(newDesign(bodyStyleId, id));
     setPicked(true);
     setSelectedSlot(null);
     setEditingText(null);
     setMenuFor(null);
+    setResume(null); // starting fresh answers "Continue your design?"
+    track("editor_template_chosen", { template: id });
   };
 
-  const switchTemplate = (id: TemplateId) => {
-    if (id === doc.template) return;
+  const applyTemplate = (id: TemplateId) => {
     const nextRects = templateSlotRects(id, doc.artboard);
-    const dropped = doc.slots.slice(nextRects.length).filter(Boolean).length;
-    if (
-      dropped > 0 &&
-      !confirm(
-        "This layout has fewer boxes — the extra content will be removed. Switch anyway?",
-      )
-    ) {
-      return;
-    }
     setDoc((d) => ({
       ...d,
       template: id,
       slots: nextRects.map((_, i) => d.slots[i] ?? null),
     }));
+    setPendingTemplate(null);
     setSelectedSlot(null);
     setEditingText(null);
     setMenuFor(null);
+    setUndo(null);
+    track("editor_template_chosen", { template: id, switched: true });
+  };
+
+  const switchTemplate = (id: TemplateId) => {
+    if (id === doc.template) {
+      setPendingTemplate(null);
+      return;
+    }
+    const nextRects = templateSlotRects(id, doc.artboard);
+    const dropped = doc.slots.slice(nextRects.length).filter(Boolean).length;
+    // Fewer boxes would drop content — ask inline first.
+    if (dropped > 0) setPendingTemplate(id);
+    else applyTemplate(id);
   };
 
   const requestPhoto = (i: number) => {
     uploadTarget.current = i;
     setMenuFor(null);
+    setNotice(null);
     fileRef.current?.click();
   };
 
@@ -576,7 +764,7 @@ export default function Editor({
     const i = uploadTarget.current;
     if (i === null) return;
     if (file.size > MAX_UPLOAD_BYTES) {
-      alert(
+      setNotice(
         "That file is unusually huge — export it as a normal JPG or PNG and try again.",
       );
       return;
@@ -590,16 +778,19 @@ export default function Editor({
       // ingestPhoto never fails on size — it compresses to fit. Its output
       // dims ARE the encoded image's dims (no second decode needed).
       const photo = await ingestPhoto(file);
+      const replaced = doc.slots[i]?.kind === "photo";
       setSlot(i, {
         kind: "photo",
         src: photo.src,
         natW: photo.w,
         natH: photo.h,
-        offset: 0.5,
+        offset: initialPhotoOffset(rects[i], photo.w, photo.h),
       });
       setSelectedSlot(i);
+      setNotice(null);
+      track("photo_added", { replaced });
     } catch {
-      alert("That image couldn't be read — try a JPG or PNG.");
+      setNotice("That image couldn't be read — try a JPG or PNG.");
     } finally {
       setUploadingSlot(null);
     }
@@ -638,23 +829,53 @@ export default function Editor({
   };
 
   const filledCount = doc.slots.filter(Boolean).length;
+  const emptyCount = doc.slots.length - filledCount;
+
+  // Text-sheet input: refuse a keystroke/paste that would push the words
+  // under the smallest legible print size (the counter says why).
+  const typeText = (i: number, next: string) => {
+    const cur = doc.slots[i];
+    const grew = cur?.kind === "text" && next.length > cur.text.length;
+    if (grew && !textFits(next, rects[i], fontFamily)) {
+      setTextFull(true);
+      return;
+    }
+    setTextFull(false);
+    patchSlot(i, { text: next });
+  };
 
   const useThisDesign = () => {
     if (filledCount === 0) return;
-    const emptyCount = doc.slots.length - filledCount;
-    if (
-      emptyCount > 0 &&
-      !confirm(
-        `${emptyCount === 1 ? "One box is" : `${emptyCount} boxes are`} still empty and will print blank — continue anyway?`,
-      )
-    ) {
-      return;
-    }
     setSelectedSlot(null);
     setEditingText(null);
     setMenuFor(null);
+    // A text box left empty (typing never started, or erased) goes back to
+    // being an empty box — the canvas would otherwise export its "Your
+    // text" placeholder into the print file.
+    const cleaned = doc.slots.map((s) =>
+      s?.kind === "text" && !s.text.trim() ? null : s,
+    );
+    if (cleaned.some((s, i) => s !== doc.slots[i])) {
+      setDoc({ ...doc, slots: cleaned });
+      if (cleaned.some(Boolean)) setConfirmEmpty(true);
+      return;
+    }
+    // Empty boxes print blank — ask inline (confirmed via commitDesign).
+    if (emptyCount > 0) {
+      setConfirmEmpty(true);
+      return;
+    }
+    commitDesign();
+  };
+
+  const commitDesign = () => {
+    setConfirmEmpty(false);
     const preview = exportPng(480);
     if (!preview || !onSave) return;
+    // The design leaves the editor now — its autosave has done its job.
+    finished.current = true;
+    window.clearTimeout(autosaveTimer.current);
+    void clearEditorAutosave();
     const docJson = JSON.stringify(doc);
 
     // Nothing changed since the last save → the uploaded print file is
@@ -676,9 +897,11 @@ export default function Editor({
     }
 
     // Advance the flow IMMEDIATELY — the confirm screen only needs the
-    // small preview. The print-resolution export + Blob upload run in the
-    // background (closures outlive this component) and patch the flow via
-    // onAssets when done. Upload failure → checkout's PENDING fallback.
+    // small preview. The print-resolution export happens NOW (it needs this
+    // live stage) and hands off to lib/design-upload, which encodes, hashes
+    // and uploads it outside this component: the job survives the unmount,
+    // the flow shows its status, and Retry works from there. Add-to-cart
+    // waits for it — a line never leaves without its print file.
     const g = designRef.current;
     const full = g
       ? g.toCanvas({
@@ -690,72 +913,70 @@ export default function Editor({
         })
       : null;
     onSave(doc, preview, { art: null, designUrl: null, artSha256: null });
-
-    if (!full) return;
-    const hasPhoto = doc.slots.some((s) => s?.kind === "photo");
-    const format = hasPhoto ? "image/jpeg" : "image/png";
-    void (async () => {
-      try {
-        // Exactly artboard-sized (2400×1170) with real 300-DPI metadata, so
-        // the file measures 8"×3.9" in print tools instead of 72-DPI-huge.
-        const printBlob = await toPrintBlob(
-          full,
-          px.width,
-          px.height,
-          doc.artboard.dpi,
-          format,
-        );
-        // Hash the exact bytes being uploaded (post-DPI-stamp) — Paper
-        // re-hashes what it downloads from the blob and refuses a mismatch.
-        // A digest failure lands in the catch below: art stays null and
-        // checkout refuses the line, same as an upload failure.
-        const digest = await crypto.subtle.digest(
-          "SHA-256",
-          await printBlob.arrayBuffer(),
-        );
-        const artSha256 = Array.from(new Uint8Array(digest))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("");
-        const { upload } = await import("@vercel/blob/client");
-        const id =
-          typeof crypto !== "undefined" && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `${doc.bodyStyleId}-${doc.slots.length}-${preview.length}`;
-        const [put, sidecar] = await Promise.all([
-          upload(
-            `builder-art/${id}/front.${hasPhoto ? "jpg" : "png"}`,
-            printBlob,
-            {
-              access: "public",
-              handleUploadUrl: "/api/art/upload",
-              contentType: format,
-            },
-          ),
-          upload(
-            `builder-art/${id}/design.json`,
-            new Blob([docJson], { type: "application/json" }),
-            {
-              access: "public",
-              handleUploadUrl: "/api/art/upload",
-              contentType: "application/json",
-            },
-          ),
-        ]);
-        onAssets?.(
-          { art: put.url, designUrl: sidecar.url, artSha256 },
-          docJson,
-        );
-      } catch {
-        // art stays null — checkout refuses the line until a re-save
-        // succeeds; the design itself is safe in the document
-      }
-    })();
+    void saveDesignArt(doc, { canvas: full }).then((assets) =>
+      onAssets?.(assets, docJson),
+    );
   };
+
+  const resumeDesign = () => {
+    if (!resume) return;
+    setDoc({ ...resume.doc, bodyStyleId });
+    setPicked(true);
+    setSelectedSlot(null);
+    setEditingText(null);
+    setMenuFor(null);
+    setResume(null);
+  };
+
+  const dismissResume = () => {
+    setResume(null);
+    void clearEditorAutosave();
+  };
+
+  // "Continue your design?" — shown atop the picker (fresh) or the editor
+  // (unsaved changes to this design).
+  const resumeCard = resume ? (
+    <div className="resume-card" role="region" aria-label="Unsaved design">
+      <p className="resume-title">
+        {resume.mode === "edit"
+          ? "Continue your unsaved changes?"
+          : "Continue your design?"}
+      </p>
+      <p className="note">
+        {resume.mode === "edit" ? "You changed this design" : "You started one"}{" "}
+        {sinceLabel(resume.savedAt)} (
+        {(() => {
+          const photos = resume.doc.slots.filter(
+            (s) => s?.kind === "photo",
+          ).length;
+          const texts = resume.doc.slots.filter(
+            (s) => s?.kind === "text",
+          ).length;
+          return [
+            photos ? `${photos} photo${photos === 1 ? "" : "s"}` : null,
+            texts ? `${texts} text box${texts === 1 ? "" : "es"}` : null,
+          ]
+            .filter(Boolean)
+            .join(", ");
+        })()}
+        ) — pick up where you left off.
+      </p>
+      <div className="inline-actions">
+        <button className="btn primary" onClick={resumeDesign}>
+          Continue
+        </button>
+        <button className="btn" onClick={dismissResume}>
+          {resume.mode === "edit" ? "Discard changes" : "Start fresh"}
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   /* --- layout picker (fresh designs) ------------------------------------- */
   if (!picked) {
     return (
       <div className="editor-v4">
+        {resumeCard}
         <p className="tmpl-heading">How should your label split?</p>
         <div className="tmpl-grid">
           {TEMPLATES.map((t) => (
@@ -794,6 +1015,10 @@ export default function Editor({
     selected?.kind === "photo" && selectedSlot !== null
       ? coverFit(rects[selectedSlot], selected.natW, selected.natH, selected.offset)
       : null;
+  // A croppable photo is selected: it can be dragged, so the stage takes
+  // over touch gestures (touch-action: none) — ONLY then, so a swipe over
+  // the rest of the preview still scrolls the page.
+  const framing = !!selectedFit && selectedFit.axis !== "none";
 
   // Print sharpness: cover-fitting a photo into its slot upscales it by
   // max(slot/natural); at the 300-DPI print that's an effective DPI of
@@ -843,19 +1068,15 @@ export default function Editor({
           <div className="seg">
             <button
               className={"seg-btn" + (!boxed ? " on" : "")}
-              onClick={() => {
-                userToggledView.current = true;
-                setViewMode("flat");
-              }}
+              aria-pressed={!boxed}
+              onClick={() => setViewMode("flat")}
             >
               Flat
             </button>
             <button
               className={"seg-btn" + (boxed ? " on" : "")}
-              onClick={() => {
-                userToggledView.current = true;
-                setViewMode("boxed");
-              }}
+              aria-pressed={boxed}
+              onClick={() => setViewMode("boxed")}
             >
               On the box
             </button>
@@ -863,11 +1084,44 @@ export default function Editor({
         )}
       </div>
 
+      {resumeCard}
+
+      {pendingTemplate && (
+        <div className="inline-confirm" role="group" aria-label="Switch layout?">
+          <p>
+            That layout has fewer boxes —{" "}
+            {(() => {
+              const n = doc.slots
+                .slice(templateSlotRects(pendingTemplate, doc.artboard).length)
+                .filter(Boolean).length;
+              return n === 1 ? "one of your boxes" : `${n} of your boxes`;
+            })()}{" "}
+            will be removed.
+          </p>
+          <div className="inline-actions">
+            <button
+              className="btn primary"
+              onClick={() => applyTemplate(pendingTemplate)}
+            >
+              Switch anyway
+            </button>
+            <button
+              className="btn"
+              autoFocus
+              onClick={() => setPendingTemplate(null)}
+            >
+              Keep this layout
+            </button>
+          </div>
+        </div>
+      )}
+
       <div ref={wrapRef} className="editor-canvas-col">
         <div className="artboard-wrap">
           <Stage
             width={stageW}
             height={geo.stageH}
+            style={framing ? { touchAction: "none" } : undefined}
             onMouseDown={(e) => {
               if (e.target === e.target.getStage()) setSelectedSlot(null);
             }}
@@ -1018,7 +1272,7 @@ export default function Editor({
                 <button
                   title="Remove"
                   aria-label="Remove this box"
-                  onClick={() => clearSlot(i)}
+                  onClick={() => removeSlot(i)}
                 >
                   ✕
                 </button>
@@ -1053,14 +1307,24 @@ export default function Editor({
         </div>
 
         <p className="note">
-          {selectedFit && selectedFit.axis !== "none"
-            ? `Drag your photo ${selectedFit.axis === "x" ? "left or right" : "up or down"} to frame it.`
+          {framing
+            ? `Drag your photo ${selectedFit!.axis === "x" ? "left or right" : "up or down"} — or use the slider below — to frame it.`
             : selected?.kind === "text"
-              ? "Double-tap the text to edit it — it sizes itself to fit."
+              ? coarsePointer
+                ? "Tap the text to edit it — it sizes itself to fit."
+                : "Double-click the text to edit it — it sizes itself to fit."
               : boxed
                 ? "This is the printed area on your box — tap a ＋ to fill a box."
                 : "Your label, edge to edge — tap a ＋ to fill a box."}
         </p>
+        {notice && (
+          <div className="notice warn editor-notice" role="alert">
+            <span>{notice}</span>
+            <button className="link-btn" onClick={() => setNotice(null)}>
+              OK
+            </button>
+          </div>
+        )}
         {anyLowRes && (
           <p className="note dpi-warn">
             ⚠ A photo you added is lower-resolution than ideal for this size and
@@ -1088,7 +1352,9 @@ export default function Editor({
                   }
                   style={{ background: c }}
                   onClick={() => patchSlot(selectedSlot, { fill: c })}
-                  title={c}
+                  title={SWATCH_NAMES[c] ?? c}
+                  aria-label={`Text color: ${SWATCH_NAMES[c] ?? c}`}
+                  aria-pressed={selected.fill === c}
                 />
               ))}
             </>
@@ -1101,10 +1367,37 @@ export default function Editor({
               ↺ Replace photo
             </button>
           )}
+          {framing && selected.kind === "photo" && (
+            // The single-pointer alternative to dragging (WCAG 2.5.7):
+            // the same 0..1 offset the drag writes, as a plain slider.
+            <label className="frame-slider">
+              <span aria-hidden>
+                {selectedFit!.axis === "x" ? "◀ Frame ▶" : "▲ Frame ▼"}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(selected.offset * 100)}
+                aria-label={
+                  selectedFit!.axis === "x"
+                    ? "Frame the photo, left to right"
+                    : "Frame the photo, top to bottom"
+                }
+                onChange={(e) =>
+                  patchSlot(selectedSlot, {
+                    offset: clamp(Number(e.target.value) / 100, 0, 1),
+                  })
+                }
+              />
+            </label>
+          )}
           <button
             className="btn danger"
-            onClick={() => clearSlot(selectedSlot)}
+            onClick={() => removeSlot(selectedSlot)}
             title="Remove"
+            aria-label="Remove this box"
           >
             ✕
           </button>
@@ -1112,6 +1405,26 @@ export default function Editor({
       )}
 
       <div className="editor-cta">
+        {confirmEmpty && emptyCount > 0 && filledCount > 0 && (
+          <div className="inline-confirm" role="group" aria-label="Empty boxes">
+            <p>
+              {emptyCount === 1 ? "One box is" : `${emptyCount} boxes are`}{" "}
+              still empty and will print blank.
+            </p>
+            <div className="inline-actions">
+              <button className="btn primary" onClick={commitDesign}>
+                Use it anyway
+              </button>
+              <button
+                className="btn"
+                autoFocus
+                onClick={() => setConfirmEmpty(false)}
+              >
+                Keep designing
+              </button>
+            </div>
+          </div>
+        )}
         {onSave && (
           <button
             className="btn primary block"
@@ -1124,23 +1437,47 @@ export default function Editor({
         )}
       </div>
 
+      {undo && (
+        <div className="editor-toast" role="status">
+          <span>Removed</span>
+          <button className="link-btn" onClick={undoRemove}>
+            Undo
+          </button>
+        </div>
+      )}
+
       {/* text edits in a fixed bottom sheet (16px input, no iOS zoom); the
           canvas text above is the live preview of what's typed */}
       {editingSlot && editingText !== null && (
         <div className="edit-sheet">
-          <textarea
-            autoFocus
-            rows={2}
-            placeholder="Type your message…"
-            value={editingSlot.text}
-            onChange={(e) => patchSlot(editingText, { text: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                doneEditingText();
-              }
-            }}
-          />
+          <div className="edit-sheet-field">
+            <textarea
+              autoFocus
+              rows={2}
+              placeholder="Type the words for the front"
+              aria-label="Words for the front of the box"
+              aria-describedby="edit-sheet-count"
+              value={editingSlot.text}
+              onChange={(e) => typeText(editingText, e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  doneEditingText();
+                }
+              }}
+            />
+            {/* The count is read on focus (describedby); only "full" is
+                announced — not every keystroke. */}
+            <span
+              id="edit-sheet-count"
+              className={"edit-count" + (textFull ? " full" : "")}
+            >
+              {`${editingSlot.text.length}/${Math.max(textRoom, editingSlot.text.length)} characters`}
+            </span>
+            <span className="edit-count full" role="status">
+              {textFull ? "That's all that fits in this box" : ""}
+            </span>
+          </div>
           <button className="btn primary" onClick={doneEditingText}>
             Done
           </button>
