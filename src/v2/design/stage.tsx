@@ -41,6 +41,7 @@ export default function Stage({
   onZoom,
   loading,
   empty,
+  fillingImage,
 }: {
   step: StepId;
   style: HubBodyStyle | null;
@@ -52,6 +53,8 @@ export default function Stage({
   onZoom?: () => void;
   loading?: boolean;
   empty?: ReactNode;
+  /** "When and where": the chosen filling's photo beside the piñata. */
+  fillingImage?: string | null;
 }) {
   const mode = step === "card" ? "open" : "closed";
   // Session replay: the gift message printed on the flap is masked, and a
@@ -59,13 +62,14 @@ export default function Stage({
   const privateArt = graphic?.type === "custom";
   const showBody = !loading && step === "design" && !!style && !!onBody;
   const showZoom = !loading && step === "design" && !!graphic && !!onZoom;
+  const showFilling = !loading && step === "deliver" && !!style && !!fillingImage && !!filling;
   return (
     <div
       className={`${f.stage}${privateArt ? " ph-no-capture" : ""}`}
       data-step={step}
       data-bar={showBody || showZoom || undefined}
     >
-      <div className={f.stageView}>
+      <div className={f.stageView} data-with={showFilling ? "filling" : undefined}>
         {loading ? (
           <Skeleton width="62%" height="78%" radius={16} />
         ) : style ? (
@@ -93,6 +97,17 @@ export default function Stage({
           </div>
         ) : (
           <div className={f.stageEmpty}>{empty}</div>
+        )}
+        {showFilling && fillingImage && (
+          <>
+            <span className={f.stagePlus} aria-hidden="true">
+              +
+            </span>
+            <figure className={f.fillingShot}>
+              <Image src={fillingImage} alt="" fill sizes="(min-width: 1024px) 260px, 36vw" />
+              <figcaption>{filling}</figcaption>
+            </figure>
+          </>
         )}
       </div>
 

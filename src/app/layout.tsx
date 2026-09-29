@@ -34,11 +34,16 @@ const arbotek = localFont({
   display: "swap",
 });
 
-export const viewport: Viewport = {
-  themeColor: "#f3e7e4",
-  // Lets the env(safe-area-inset-*) paddings take effect on notched phones.
-  viewportFit: "cover",
-};
+export async function generateViewport(): Promise<Viewport> {
+  const flow = flowFromHeaders(await headers());
+  return {
+    // The browser toolbar tint matches each flow's page colour (v1 cream,
+    // v2's lighter --pg-page) instead of a pink band over the v2 header.
+    themeColor: flow === "v2" ? "#faf8f6" : "#f3e7e4",
+    // Lets the env(safe-area-inset-*) paddings take effect on notched phones.
+    viewportFit: "cover",
+  };
+}
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://builder.pinatagrams.com"),

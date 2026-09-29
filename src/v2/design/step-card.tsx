@@ -1,26 +1,21 @@
 "use client";
 
-import { forwardRef, useId } from "react";
-import {
-  composeMessage,
-  FROM_MAX,
-  MESSAGE_LIMIT,
-  STARTERS,
-  TO_MAX,
-  type CardParts,
-} from "../lib/message";
+import { forwardRef, useEffect, useId } from "react";
+import { composeMessage, MESSAGE_LIMIT, STARTERS, type CardParts } from "../lib/message";
 import type { OccasionId } from "../lib/occasions";
 import { Callout, StepHeader } from "../ui/feedback";
-import { TextArea, TextField } from "../ui/field";
+import { TextArea } from "../ui/field";
+import { Pencil } from "../ui/icons";
 import u from "../ui/ui.module.css";
 import s from "./steps.module.css";
 
 /**
- * Step 2 · Card — "Write the card". To / Message / From are printed as ONE
- * message (composeMessage) inside the lid, held to checkout's 300-character
- * cap: the counter counts the COMBINED text and a change that would overflow
- * is refused (with a note) instead of being cut silently at checkout. The
- * preview shows the words at a size you can actually read.
+ * Step 2 · Card — "Write the card". One message box; the live preview is
+ * the Stage itself (the words on the box's inside flap), so there's no
+ * second preview here. A single line reminds them to sign it — there are
+ * no separate To / From fields. The message is held to checkout's
+ * 300-character cap: a change that would overflow is refused (with a note)
+ * instead of being cut silently at checkout.
  */
 const StepCard = forwardRef<
   HTMLHeadingElement,
@@ -33,18 +28,24 @@ const StepCard = forwardRef<
   }
 >(function StepCard({ parts, occasion, onParts, notice, onNotice }, h1Ref) {
   const counterId = useId();
+  const hintId = useId();
   const composed = composeMessage(parts);
   const left = MESSAGE_LIMIT - composed.length;
   const starters = STARTERS[occasion ?? "default"] ?? STARTERS.default;
 
-  const change = (field: keyof CardParts, value: string) => {
-    const next = { ...parts, [field]: value };
+  // A draft from before the To / From fields went away: fold them into the
+  // message itself, word for word, so nothing hidden prints on the flap.
+  const legacy = !!(parts.to || parts.from);
+  useEffect(() => {
+    if (legacy) onParts({ to: "", body: composeMessage(parts), from: "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legacy]);
+
+  const change = (value: string) => {
+    const next = { ...parts, body: value };
     // Deleting is always allowed; growing past the limit is refused whole —
     // a paste that doesn't fit never lands half-cut.
-    if (
-      composeMessage(next).length > MESSAGE_LIMIT &&
-      value.length > parts[field].length
-    ) {
+    if (composeMessage(next).length > MESSAGE_LIMIT && value.length > parts.body.length) {
       onNotice(`That won't fit — the card holds ${MESSAGE_LIMIT} characters in all.`);
       return;
     }
@@ -69,52 +70,26 @@ const StepCard = forwardRef<
         ref={h1Ref}
         index={1}
         title="Write the card"
-        sub="Printed inside the lid — the first thing they read."
+        sub="Message appears on the inside flap of the box."
       />
 
-      <figure className={s.cardPreview}>
-        <p className={s.eyebrow}>Printed inside the lid</p>
-        {/* the gift message: masked in session replay */}
-        <div className={s.note} aria-live="off" data-ph-mask>
-          {composed ? (
-            composed
-          ) : (
-            <span className={s.notePlaceholder}>Your words appear here, just as they’ll print.</span>
-          )}
-        </div>
-        <figcaption className={u.srOnly}>Preview of the printed card</figcaption>
-      </figure>
-
       <div className={s.fields}>
-        <TextField
-          label="To"
-          optional
-          value={parts.to}
-          maxLength={TO_MAX}
-          autoComplete="off"
-          enterKeyHint="next"
-          onChange={(e) => change("to", e.target.value.replace(/\n/g, " "))}
-        />
         <TextArea
           label="Message"
           value={parts.body}
           rows={5}
-          aria-describedby={counterId}
+          aria-describedby={`${hintId} ${counterId}`}
           placeholder="Say something they'll keep."
-          onChange={(e) => change("body", e.target.value)}
+          onChange={(e) => change(e.target.value)}
         />
-        <p id={counterId} className={s.counter} data-low={left <= 20}>
-          {left} character{left === 1 ? "" : "s"} left
-        </p>
-        <TextField
-          label="From"
-          optional
-          value={parts.from}
-          maxLength={FROM_MAX}
-          autoComplete="given-name"
-          enterKeyHint="done"
-          onChange={(e) => change("from", e.target.value.replace(/\n/g, " "))}
-        />
+        <div className={s.cardMeta}>
+          <p id={hintId} className={s.signHint}>
+            <Pencil size={15} /> Sign it so they know who it&apos;s from.
+          </p>
+          <p id={counterId} className={s.counter} data-low={left <= 20}>
+            {left} character{left === 1 ? "" : "s"} left
+          </p>
+        </div>
       </div>
 
       {notice && (

@@ -96,7 +96,15 @@ import DryRunResult from "./dry-run";
 import EditorView from "./editor-view";
 import FlowHeader from "./flow-header";
 import { focusAddressField } from "./recipient";
-import { BodySheet, LibrarySheet, LineDateSheet, loadLibrary, PriceSheet, ZoomSheet } from "./sheets";
+import {
+  BodySheet,
+  CarrierSwitchSheet,
+  LibrarySheet,
+  LineDateSheet,
+  loadLibrary,
+  PriceSheet,
+  ZoomSheet,
+} from "./sheets";
 import Stage from "./stage";
 import StepCard from "./step-card";
 import StepDeliver, { CARRIER_IDS, DATE_IDS, EMAIL_ID } from "./step-deliver";
@@ -111,9 +119,17 @@ type SheetState =
   | { kind: "library" }
   | { kind: "price" }
   | { kind: "lineDate"; lineId: string }
+  /** Switching carrier with piñatas already in the order: confirm first. */
+  | { kind: "carrier"; to: Carrier }
   | null;
 
-type Nav = { via: StepVia; history: "push" | "replace" | "none"; view?: "editor" | null };
+type Nav = {
+  via: StepVia;
+  history: "push" | "replace" | "none";
+  view?: "editor" | null;
+  /** false when the browser already animated it (iOS swipe-back) */
+  animate?: boolean;
+};
 
 type Problem = {
   kind: "carrier" | "date" | "design" | "line" | "address" | "email";
@@ -278,7 +294,7 @@ export default function DesignFlowV2(data: FlowData) {
         setView(nextView);
         setSheet(null);
       });
-    if ("startViewTransition" in document && !prefersReducedMotion()) {
+    if (opts.animate !== false && "startViewTransition" in document && !prefersReducedMotion()) {
       document.startViewTransition(apply);
     } else {
       apply();
@@ -374,18 +390,22 @@ export default function DesignFlowV2(data: FlowData) {
 
   // Back / forward: the URL's step (clamped to what the draft supports).
   useEffect(() => {
-    const onPop = () => {
+    const onPop = (e: PopStateEvent) => {
       const url = new URL(window.location.href);
       const target = parseStep(url.searchParams.get("step")) ?? "design";
       const wantsEditor = url.searchParams.get("view") === "editor";
       // Same step, same view: only a full-screen sheet's own history entry
       // came off (ui/sheet) — the sheet closes itself; stay put, no scroll.
       if (target === stepRef.current && wantsEditor === (viewRef.current === "editor")) return;
+      // Safari 18+ has already animated an edge swipe: a View Transition on
+      // top would play the step change a second time.
+      const animate = !(e as PopStateEvent & { hasUAVisualTransition?: boolean })
+        .hasUAVisualTransition;
       const d = draftRef.current;
       if (!d && target !== "deliver") {
         // Back from the order review into the design steps = a new piñata.
         setDraft(freshPiece(null));
-        navigate("design", { via: "back", history: "replace" });
+        navigate("design", { via: "back", history: "replace", animate });
         return;
       }
       const clamped = d && !graphicReady(d.graphic) ? "design" : target;
@@ -393,6 +413,7 @@ export default function DesignFlowV2(data: FlowData) {
         via: "back",
         history: clamped === target ? "none" : "replace",
         view: wantsEditor && clamped === "design" && d ? "editor" : null,
+        animate,
       });
     };
     window.addEventListener("popstate", onPop);
@@ -590,12 +611,24 @@ export default function DesignFlowV2(data: FlowData) {
     trackV2("addon_toggled", { addon: id, on });
   };
 
+  // One carrier per ORDER. With piñatas already in it travelling another
+  // way, a pop-up asks first ("switch them all?"); confirmed, they switch
+  // too — out loud (the notice names any whose date no longer works), never
+  // as a side effect of adding another piñata.
   const pickCarrier = (c: Carrier) => {
+    const lines = loadCart();
+    if (lines.length && cartCarrier(lines) !== c) {
+      setSheet({ kind: "carrier", to: c });
+      return;
+    }
     setPrefs((p) => ({ ...p, carrier: c }));
     trackV2("carrier_selected", { carrier: c });
-    // One carrier per ORDER: the piñatas already in it switch too — out
-    // loud (the notice names any whose date no longer works), never as a
-    // side effect of adding another piñata.
+  };
+
+  const confirmCarrier = (c: Carrier) => {
+    setSheet(null);
+    setPrefs((p) => ({ ...p, carrier: c }));
+    trackV2("carrier_selected", { carrier: c, switched_order: true });
     const lines = loadCart();
     if (lines.length && cartCarrier(lines) !== c) {
       if (saveCart(lines.map((l) => ({ ...l, carrier: c })))) {
@@ -604,6 +637,15 @@ export default function DesignFlowV2(data: FlowData) {
       }
     }
   };
+
+  // The calendar always shows on "When and where", so a carrier is always
+  // in place there: nothing chosen yet (and no order to follow) = FedEx,
+  // the one the "Soonest" promise on every step is quoted for. Steps 1–3
+  // keep their "From" price until then.
+  useEffect(() => {
+    if (step !== "deliver" || !hydrated || !uspsOffered || cart.length > 0 || prefs.carrier) return;
+    setPrefs((p) => (p.carrier ? p : { ...p, carrier: "fedex" }));
+  }, [step, hydrated, uspsOffered, cart.length, prefs.carrier]);
 
   const pickSoonest = () => {
     if (!carrier) return;
@@ -1118,6 +1160,7 @@ export default function DesignFlowV2(data: FlowData) {
         })
       : null);
   const stageGraphic = draft?.graphic ?? last?.graphic ?? null;
+  const stageFilling = draft?.filling ?? last?.filling ?? null;
   const idx = STEPS[step].index;
   const backLabel =
     view === "editor"
@@ -1381,7 +1424,8 @@ export default function DesignFlowV2(data: FlowData) {
                 style={stageStyle}
                 graphic={stageGraphic}
                 message={draft ? message : ""}
-                filling={draft?.filling ?? null}
+                filling={stageFilling}
+                fillingImage={fillings.find((x) => x.label === stageFilling)?.imageUrl ?? null}
                 box={data.box}
                 loading={loading}
                 onBody={draft ? () => setSheet({ kind: "body" }) : undefined}
@@ -1504,6 +1548,12 @@ export default function DesignFlowV2(data: FlowData) {
         carrier={lineCarrier}
         cfg={cfg}
         onPick={(ymd) => lineForSheet && fixLineDate(lineForSheet.id, ymd)}
+      />
+      <CarrierSwitchSheet
+        to={sheet?.kind === "carrier" ? sheet.to : null}
+        count={cart.length}
+        onConfirm={confirmCarrier}
+        onClose={() => setSheet(null)}
       />
 
       {toastRegion}

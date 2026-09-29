@@ -154,6 +154,10 @@ function encodeCanvas(
   if (!ctx) throw new Error("no-2d-context");
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   const out = canvas.toDataURL(type, quality);
+  // iOS caps the canvas memory a page may hold in total, and a detached
+  // canvas isn't freed promptly: release it now, or a few big photos later
+  // every encode fails as "data:,".
+  canvas.width = canvas.height = 0;
   // Over-limit canvases fail SILENTLY as "data:," — surface, don't store.
   if (out.length < 100) throw new Error("undecodable");
   return out;

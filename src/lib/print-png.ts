@@ -131,7 +131,10 @@ export async function toPrintBlob(
       format,
       format === "image/jpeg" ? 0.9 : undefined,
     ),
-  );
+  ).finally(() => {
+    // free the print-size canvas at once (iOS caps total canvas memory)
+    canvas.width = canvas.height = 0;
+  });
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const stamped =
     format === "image/png" ? withDpi(bytes, dpi) : withJpegDpi(bytes, dpi);

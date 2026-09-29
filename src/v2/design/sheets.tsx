@@ -202,6 +202,61 @@ export function LibrarySheet({
 
 /* --- Price breakdown ---------------------------------------------------------------- */
 
+/* --- Carrier switch ---------------------------------------------------------------- */
+
+const CARRIER_NAME: Record<Carrier, string> = { fedex: "FedEx 2-Day", usps: "USPS First Class" };
+
+/** One order travels one way: picking the other carrier while piñatas are
+ *  already in the order asks before switching them all. */
+export function CarrierSwitchSheet({
+  to,
+  count,
+  onConfirm,
+  onClose,
+}: {
+  to: Carrier | null;
+  count: number;
+  onConfirm: (c: Carrier) => void;
+  onClose: () => void;
+}) {
+  const from: Carrier = to === "usps" ? "fedex" : "usps";
+  const one = count === 1;
+  const them = one ? "the piñata" : `all ${count} piñatas`;
+  return (
+    <Sheet
+      open={!!to}
+      onClose={onClose}
+      title={to ? `Switch everything to ${CARRIER_NAME[to]}?` : ""}
+      footer={
+        to && (
+          <div className={s.sheetActions}>
+            <Button block onClick={() => onConfirm(to)}>
+              Switch all to {to === "usps" ? "USPS" : "FedEx"}
+            </Button>
+            <Button block variant="secondary" onClick={onClose}>
+              Keep {CARRIER_NAME[from]}
+            </Button>
+          </div>
+        )
+      }
+    >
+      {to && (
+        <p className={s.small} style={{ marginTop: 0 }}>
+          Everything in one order ships the same way. Switching moves {them} already in
+          your order from {CARRIER_NAME[from]} to {CARRIER_NAME[to]} too
+          {to === "usps"
+            ? one
+              ? " — it would arrive within 2–3 business days of its date."
+              : " — they'd arrive within 2–3 business days of their dates."
+            : one
+              ? " — it usually arrives on its exact day."
+              : " — each usually arrives on its exact day."}
+        </p>
+      )}
+    </Sheet>
+  );
+}
+
 export type BreakdownRow = { label: string; value: string };
 
 export function PriceSheet({

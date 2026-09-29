@@ -7,6 +7,12 @@
   box-sizing: border-box;
 }
 
+/* iOS: don't inflate text when a phone turns to landscape. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 :root {
   --ink: #180d38; /* navy — fg-primary */
   --muted: #4a4060; /* fg-secondary; lavender #b3b9ce is too light for text */
@@ -1893,7 +1899,9 @@ body:has(.bottom-stack) .site-footer {
   padding: 11px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
-  font-size: 15px;
+  /* 16px at every width: a big phone on its side is wider than 600px, and
+     iOS zooms into anything smaller on focus */
+  font-size: 16px;
   font-family: inherit;
   color: var(--ink);
   background: #fff;

@@ -232,29 +232,6 @@
 
 /* --- Step 2: the card ------------------------------------------------------------ */
 
-.cardPreview {
-  margin: 0 0 20px;
-  padding: 12px;
-  border-radius: var(--pg-r-card);
-  background: var(--pg-cream);
-}
-
-.note {
-  min-height: 96px;
-  padding: 14px 16px;
-  border: 1px solid rgba(24, 13, 56, 0.1);
-  border-radius: 8px;
-  background: #fffdf8;
-  font: italic 400 17px/1.5 var(--pg-font);
-  color: var(--pg-navy);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.notePlaceholder {
-  color: var(--pg-muted);
-}
-
 .fields {
   display: grid;
   gap: 16px;
@@ -265,8 +242,31 @@
   gap: 16px;
 }
 
+/* under the message: the sign-it reminder, and the characters left */
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  margin-top: -8px;
+}
+
+.signHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 500 14px/1.4 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.signHint svg {
+  flex: none;
+}
+
 .counter {
-  margin: -8px 0 0;
+  margin: 0 0 0 auto;
   font: 500 14px/1.4 var(--pg-font);
   color: var(--pg-muted);
   text-align: right;
@@ -345,6 +345,16 @@
 
 .calendar {
   margin-top: 12px;
+}
+
+.calendar:focus {
+  outline: none;
+}
+
+.calendarLabel {
+  margin: 0 0 8px;
+  font: 600 14px/1.4 var(--pg-font);
+  color: var(--pg-text-2);
 }
 
 .calendar :global(.cal) {
@@ -724,6 +734,11 @@
 }
 
 /* --- sheets ------------------------------------------------------------------------ */
+
+.sheetActions {
+  display: grid;
+  gap: 8px;
+}
 
 .sheetGroup + .sheetGroup {
   margin-top: 20px;

@@ -4,6 +4,21 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Close } from "./icons";
 import s from "./sheet.module.css";
 
+// iOS doesn't focus a button when it's tapped, so "what opened the sheet"
+// is the last thing pressed — focus goes back there when the sheet closes
+// (VoiceOver users keep their place instead of landing at the top).
+let lastPressed: HTMLElement | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      const t = (e.target as Element | null)?.closest?.("button, a, [role='button'], label");
+      if (t instanceof HTMLElement) lastPressed = t;
+    },
+    { capture: true, passive: true },
+  );
+}
+
 /**
  * Sheet = a native <dialog> opened with showModal(): the browser supplies
  * the focus trap, Esc-to-close, inertness of the page behind and the top
@@ -45,10 +60,9 @@ export default function Sheet({
   useEffect(() => {
     const d = ref.current;
     if (!d || !open) return;
+    const active = document.activeElement;
     const opener =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+      active instanceof HTMLElement && active !== document.body ? active : lastPressed;
     if (!d.open) d.showModal();
     // Keep the page behind from scrolling under a finger on the backdrop.
     const root = document.documentElement;
@@ -58,21 +72,23 @@ export default function Sheet({
     // edge swipe, which has no close-watcher) must close it — not leave the
     // step or the site. It gets its own history entry (same URL); Back pops
     // it, and any other way of closing takes the entry back off.
-    let entry = false;
+    // Each opening gets its own token: an old sheet entry left as a Forward
+    // entry must never pass for this one.
+    let entry: string | null = null;
     const onPop = () => {
-      if (entry && !window.history.state?.pgSheet) {
-        entry = false;
+      if (entry && window.history.state?.pgSheet !== entry) {
+        entry = null;
         onCloseRef.current();
       }
     };
     if (full) {
-      window.history.pushState({ ...window.history.state, pgSheet: true }, "");
-      entry = true;
+      entry = Math.random().toString(36).slice(2);
+      window.history.pushState({ ...window.history.state, pgSheet: entry }, "");
       window.addEventListener("popstate", onPop);
     }
     return () => {
       window.removeEventListener("popstate", onPop);
-      if (entry && window.history.state?.pgSheet) window.history.back();
+      if (entry && window.history.state?.pgSheet === entry) window.history.back();
       root.style.overflow = prevOverflow;
       if (d.open) d.close();
       opener?.focus({ preventScroll: true });

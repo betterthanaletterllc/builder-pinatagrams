@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useId, useState, type ComponentProps, type ReactNode } from "react";
+import { forwardRef, useId, type ComponentProps, type ReactNode } from "react";
 import DateCalendar from "@/app/design/date-calendar";
 import {
   formatWindow,
@@ -15,7 +15,7 @@ import { cutoffTonight, soonest } from "../lib/dates";
 import { OptionCard } from "../ui/controls";
 import { Callout, StepHeader } from "../ui/feedback";
 import { TextField } from "../ui/field";
-import { Alert, CheckCircle, Mail, Plus, Users } from "../ui/icons";
+import { Alert, Mail, Plus, Users } from "../ui/icons";
 import u from "../ui/ui.module.css";
 import DiscountBox from "./discount-box";
 import OrderSummary from "./order-summary";
@@ -33,10 +33,11 @@ type RecipientProps = Omit<ComponentProps<typeof Recipient>, "headingId">;
 
 /**
  * Step 4 · Deliver & pay — "When and where", and the order review. The
- * carrier (two-carrier stores only) applies to the WHOLE order; FedEx says
- * guaranteed, USPS never does and shows its window in words and on the
- * calendar. The date is never silently preselected — "Soonest" is one tap.
- * With no piñata in progress (arriving from the cart icon) it's just the
+ * carrier (two-carrier stores only) applies to the WHOLE order — switching
+ * with piñatas already in it asks first (the flow's pop-up); USPS shows its
+ * window in words and on the calendar. The date is never silently
+ * preselected: "Soonest" is one tap, and the calendar is always open below
+ * it. With no piñata in progress (arriving from the cart icon) it's just the
  * order: every line with its date, the recipient, and "Continue to payment".
  */
 const StepDeliver = forwardRef<
@@ -69,7 +70,6 @@ const StepDeliver = forwardRef<
     result: ReactNode;
   }
 >(function StepDeliver(p, h1Ref) {
-  const [picking, setPicking] = useState(!!p.date && !p.dateSoonest);
   const carrierH = useId();
   const dateH = useId();
   const whoH = useId();
@@ -95,7 +95,7 @@ const StepDeliver = forwardRef<
               checked={p.carrier === "fedex"}
               onChange={() => p.onCarrier("fedex")}
               title="FedEx 2-Day"
-              description="Arrives on the exact day you pick · Guaranteed"
+              description="Usually arrives on the exact day you pick"
               aside={perPiece(p.fedexCents)}
             />
             <OptionCard
@@ -105,11 +105,10 @@ const StepDeliver = forwardRef<
               checked={p.carrier === "usps"}
               onChange={() => p.onCarrier("usps")}
               title="USPS First Class"
-              description="Arrives within a few days of your date"
+              description="Arrives within 2–3 business days of your selected date"
               aside={perPiece(p.uspsCents)}
             />
           </fieldset>
-          <p className={s.small}>Applies to every piñata in this order; prices are per piñata.</p>
           {p.carrierError && (
             <p className={u.error} style={{ marginTop: 8 }}>
               <Alert size={16} />
@@ -129,67 +128,50 @@ const StepDeliver = forwardRef<
             <Callout>Choose how it travels to see delivery dates.</Callout>
           ) : (
             <>
-              <fieldset className={`${s.options} ${s.twoUp}`} aria-labelledby={dateH}>
+              {/* "Soonest" is one tap; the calendar right under it is always
+                  open for any other day. Neither is preselected. */}
+              <fieldset className={s.options} aria-labelledby={dateH}>
                 <OptionCard
                   inputId={DATE_IDS.soonest}
                   name="pg-date"
                   value="soonest"
-                  checked={p.dateSoonest && p.date === soonestYmd && !picking}
-                  onChange={() => {
-                    setPicking(false);
-                    p.onSoonest();
-                  }}
-                  title={
+                  checked={!!p.date && p.date === soonestYmd}
+                  onChange={p.onSoonest}
+                  title={`Soonest · ${
                     p.carrier === "usps"
-                      ? `Soonest: ${formatWindow(uspsWindow(soonestYmd, p.cfg))}`
+                      ? formatWindow(uspsWindow(soonestYmd, p.cfg))
                       : formatYmd(soonestYmd)
-                  }
+                  }`}
                   description={
                     cutoffTonight(p.cfg, p.carrier)
-                      ? "Soonest · order by midnight CT tonight"
-                      : "The soonest it can get there"
-                  }
-                />
-                <OptionCard
-                  inputId={DATE_IDS.pick}
-                  name="pg-date"
-                  value="pick"
-                  checked={picking || (!!p.date && !p.dateSoonest)}
-                  onChange={() => setPicking(true)}
-                  title="Pick a day"
-                  description={
-                    p.date && !p.dateSoonest
-                      ? p.carrier === "usps"
-                        ? `Target ${formatYmd(p.date)}`
-                        : formatYmd(p.date)
-                      : `Up to ${months} months out`
+                      ? "Order by midnight CT tonight"
+                      : "The earliest it can get there"
                   }
                 />
               </fieldset>
-              {(picking || (!!p.date && !p.dateSoonest)) && (
-                <div className={s.calendar}>
-                  <DateCalendar
-                    key={p.carrier}
-                    value={p.dateSoonest ? "" : p.date}
-                    onChange={p.onDate}
-                    cfg={p.cfg}
-                    carrier={p.carrier}
-                  />
-                  {p.carrier === "usps" && p.date && !p.dateError && (
-                    <ul className={s.legend}>
-                      <li>
-                        <span className={`${s.swatch} ${s.swatchTarget}`} aria-hidden="true" />
-                        Your target day
-                      </li>
-                      <li>
-                        <span className={`${s.swatch} ${s.swatchWindow}`} aria-hidden="true" />
-                        Days it may arrive
-                      </li>
-                    </ul>
-                  )}
-                </div>
-              )}
-              {p.carrier === "usps" ? (
+              <div id={DATE_IDS.pick} className={s.calendar} tabIndex={-1}>
+                <p className={s.calendarLabel}>Or pick a day — up to {months} months out</p>
+                <DateCalendar
+                  key={p.carrier}
+                  value={p.date}
+                  onChange={p.onDate}
+                  cfg={p.cfg}
+                  carrier={p.carrier}
+                />
+                {p.carrier === "usps" && p.date && !p.dateError && (
+                  <ul className={s.legend}>
+                    <li>
+                      <span className={`${s.swatch} ${s.swatchTarget}`} aria-hidden="true" />
+                      Your target day
+                    </li>
+                    <li>
+                      <span className={`${s.swatch} ${s.swatchWindow}`} aria-hidden="true" />
+                      Days it may arrive
+                    </li>
+                  </ul>
+                )}
+              </div>
+              {p.carrier === "usps" && (
                 <p className={s.assure} data-tone="window">
                   <Mail size={18} />
                   <span>
@@ -197,11 +179,6 @@ const StepDeliver = forwardRef<
                       ? `Usually arrives ${formatWindow(uspsWindow(p.date, p.cfg))} — First Class mail lands within ${uspsWindowLabel(p.cfg)} of the day you pick.`
                       : `First Class mail usually lands within ${uspsWindowLabel(p.cfg)} of the day you pick.`}
                   </span>
-                </p>
-              ) : (
-                <p className={s.assure}>
-                  <CheckCircle size={18} />
-                  <span>Guaranteed by FedEx on the day you pick.</span>
                 </p>
               )}
               {p.dateError && (
