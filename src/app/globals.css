@@ -3529,3 +3529,112 @@ body:has(.bottom-stack .cta-note) .site-footer {
 .carrier-switch p {
   margin: 0 0 6px;
 }
+
+/* --- the promise line: arrival · delivered price · rating ---------------- */
+.promise-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--ink);
+}
+
+.promise-part {
+  white-space: nowrap;
+}
+
+.promise-sep {
+  color: var(--muted);
+}
+
+.home-promise {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 12px;
+  padding: 8px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.landing-promise {
+  margin: 8px 0 0;
+  font-size: 15px;
+}
+
+@media (min-width: 900px) {
+  .landing-promise {
+    grid-column: 1 / -1;
+  }
+}
+
+/* --- landing overlay: a real dialog, CTA one thumb away on phones -------- */
+.landing-overlay:focus {
+  outline: none;
+}
+
+.landing-cta-bar {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+@media (max-width: 899px) {
+  .landing-scroll {
+    padding-bottom: 0;
+  }
+  .landing-cta-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 12px;
+    padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(
+      to top,
+      var(--paper) 72%,
+      rgba(243, 231, 228, 0)
+    );
+  }
+  .landing-cta-bar .landing-cta {
+    margin-top: 0;
+  }
+}
+
+@media (min-width: 900px) {
+  .landing-cta-bar {
+    grid-column: 1 / -1;
+    margin-top: 10px;
+  }
+  .landing-cta-bar .landing-cta {
+    margin-top: 0;
+  }
+}
+
+/* --- /reviews closes with a way forward ---------------------------------- */
+.reviews-cta {
+  max-width: 520px;
+  margin: 36px auto 0;
+  padding: 24px 16px;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.reviews-cta-line {
+  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.reviews-cta-btn {
+  padding: 12px 22px;
+  font-size: 16px;
+}
