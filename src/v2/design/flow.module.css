@@ -430,10 +430,12 @@
 }
 
 .bodyChipChange {
+  flex: none;
   color: var(--pg-peri-dark);
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
+  white-space: nowrap;
 }
 
 /* Phones: "Zoom"; desktop: the label size too. */
@@ -461,6 +463,27 @@
 
 .zoomDesk {
   display: none;
+}
+
+/* Narrow phones: zoom goes round (icon only, its name kept for screen
+   readers) so "Change piñata" keeps its room beside it. */
+@media (max-width: 379px) {
+  .zoomBtn {
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+  }
+
+  .zoomMobile {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .stageEmpty {

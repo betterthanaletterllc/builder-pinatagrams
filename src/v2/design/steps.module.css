@@ -232,6 +232,19 @@
   white-space: nowrap;
 }
 
+/* a phone's third-of-the-width tile: the words need all of it */
+@media (max-width: 419px) {
+  .makeOwnInner svg {
+    display: none;
+  }
+}
+
+@media (max-width: 359px) {
+  .makeOwnLabel {
+    font-size: 10.5px;
+  }
+}
+
 @media (min-width: 480px) {
   .makeOwnLabel {
     font-size: 14px;

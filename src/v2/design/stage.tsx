@@ -127,7 +127,7 @@ export default function Stage({
               </span>
               <strong>{style.name}</strong>
               <span aria-hidden="true">·</span>
-              <span className={f.bodyChipChange}>Change</span>
+              <span className={f.bodyChipChange}>Change piñata</span>
             </button>
           )}
           {showZoom && (
