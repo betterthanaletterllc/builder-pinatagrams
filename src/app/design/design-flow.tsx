@@ -62,6 +62,7 @@ import {
   type HubGraphicEntry,
   type HubPrice,
   type LogoZone,
+  withBoxZones,
 } from "@/lib/hub";
 import {
   deliveryProblem,
@@ -1198,7 +1199,7 @@ export default function DesignFlow({
     if (switcherStyles) return;
     try {
       const r = await fetch(`${HUB_URL}/api/public/catalog`);
-      if (r.ok) setSwitcherStyles((await r.json()).bodyStyles ?? []);
+      if (r.ok) setSwitcherStyles(withBoxZones((await r.json()).bodyStyles ?? []));
     } catch {}
   };
 

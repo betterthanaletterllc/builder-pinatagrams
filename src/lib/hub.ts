@@ -30,6 +30,39 @@ export function hubTimeout(ms = HUB_TIMEOUT_MS): AbortSignal | undefined {
 
 export type LogoZone = { x: number; y: number; w: number; h: number };
 
+// Label placements measured on box photos the hub serves without one (the
+// admin /catalog "Box placement" wasn't set), keyed by the photo's path.
+// Photos aren't all framed alike — Green's box is smaller and higher than
+// the rest — so a placement belongs to its photo, never borrowed.
+const MEASURED_LOGO_ZONES: Record<string, LogoZone> = {
+  // front panel x 224–836, y 656–952 of 1080 × 1080 (2026-09-30)
+  "/catalog/boxes/green.png": { x: 0.2074, y: 0.6074, w: 0.5667, h: 0.2741 },
+};
+
+function measuredZone(photoUrl: string): LogoZone | null {
+  try {
+    return MEASURED_LOGO_ZONES[new URL(photoUrl).pathname] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A style whose box photo is in the hub but whose label placement isn't
+ * (Green, 2026-09-30) showed a blank label — no zone, no design on the box.
+ * It gets its photo's measured placement; with none, it's shown like a
+ * style without a photo (the piñata over its label) rather than with the
+ * design at a guessed spot. The hub's own placement always wins.
+ */
+export function withBoxZones(styles: HubBodyStyle[]): HubBodyStyle[] {
+  if (!styles.some((b) => b.boxImageUrl && !b.logoZone)) return styles;
+  return styles.map((b) => {
+    if (!b.boxImageUrl || b.logoZone) return b;
+    const zone = measuredZone(b.boxImageUrl);
+    return zone ? { ...b, logoZone: zone } : { ...b, boxImageUrl: null };
+  });
+}
+
 export type HubBodyStyle = {
   id: string;
   name: string;
@@ -332,6 +365,7 @@ export async function getCatalog(opts?: {
     if (!Array.isArray(catalog?.bodyStyles)) {
       throw new Error("hub catalog: malformed response");
     }
+    catalog.bodyStyles = withBoxZones(catalog.bodyStyles);
     lastGoodCatalog.delete(url); // re-insert = most recent last
     lastGoodCatalog.set(url, { catalog, at: Date.now() });
     if (lastGoodCatalog.size > LAST_GOOD_MAX_KEYS) {
