@@ -16,8 +16,8 @@ import s from "./steps.module.css";
 
 /**
  * Step 2 · Card — "Write the card". The message box, the characters left
- * right under it, then an optional From line (printed as "— Name" under the
- * message). The live preview is the Stage itself (the words on the box's
+ * right under it, then an optional From line (printed as "From: Name" under
+ * the message). The live preview is the Stage itself (the words on the box's
  * inside flap). The message is required (the flow won't move on without
  * one) and the whole card is held to checkout's 300-character cap: a change
  * that would overflow is refused (with a note) instead of being cut

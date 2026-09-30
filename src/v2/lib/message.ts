@@ -2,7 +2,7 @@ import type { OccasionId } from "./occasions";
 
 /**
  * The card: To / Message / From, printed as ONE `message` line attribute —
- *   `${to ? to + ",\n" : ""}${message}${from ? "\n— " + from : ""}`
+ *   `${to ? to + ",\n" : ""}${message}${from ? "\nFrom: " + from : ""}`
  * Checkout keeps the first 300 UTF-16 units (route.ts str(message, 300)), so
  * the COMBINED text is held to that limit here: the counter counts it and
  * input past it is refused, never silently cut at checkout.
@@ -14,7 +14,7 @@ export const FROM_MAX = 40;
 
 export type CardParts = { to: string; body: string; from: string };
 
-/** Every piñata carries a message: words, not just a "— From" line. */
+/** Every piñata carries a message: words, not just a "From:" line. */
 export function hasMessage(d: { msgTo: string; msgBody: string }): boolean {
   return !!(d.msgBody.trim() || d.msgTo.trim());
 }
@@ -23,32 +23,38 @@ export function composeMessage({ to, body, from }: CardParts): string {
   const t = to.trim();
   const f = from.trim();
   const b = body.replace(/\s+$/, "").replace(/^\s*\n/, "");
-  return `${t ? `${t},\n` : ""}${b}${f ? `\n— ${f}` : ""}`.trim();
+  return `${t ? `${t},\n` : ""}${b}${f ? `\nFrom: ${f}` : ""}`.trim();
 }
 
 /**
  * Split a saved message back into parts (edit mode). The exact inverse of
  * composeMessage for v2-made lines; anything else (v1 free text) lands in
- * the body untouched, so re-composing never changes what prints.
+ * the body untouched. A sign-off saved before "From:" ("— Name") is read as
+ * the From line too, so it re-saves as "From: Name".
  */
 export function parseMessage(message: string): CardParts {
-  let rest = message ?? "";
+  const text = message ?? "";
+  let rest = text;
   let to = "";
   let from = "";
+  let dash = false;
   const head = /^([^\n,]{1,40}),\n/.exec(rest);
   if (head) {
     to = head[1];
     rest = rest.slice(head[0].length);
   }
-  const tail = /\n— ([^\n]{1,40})$/.exec(rest);
+  const tail = /\n(From: |— )([^\n]{1,40})$/.exec(rest);
   if (tail) {
-    from = tail[1];
+    from = tail[2];
+    dash = tail[1] === "— ";
     rest = rest.slice(0, tail.index);
   }
   const parts = { to, body: rest, from };
-  // Only accept the split if it round-trips exactly; otherwise keep the
-  // whole text as the message body.
-  return composeMessage(parts) === message.trim() ? parts : { to: "", body: message, from: "" };
+  // Only accept the split if it round-trips exactly (in the sign-off's own
+  // form); otherwise keep the whole text as the message body.
+  const again = composeMessage(parts);
+  const same = dash ? again.replace(/\nFrom: ([^\n]*)$/, "\n— $1") : again;
+  return same === text.trim() ? parts : { to: "", body: text, from: "" };
 }
 
 /** Cut a string to at most `max` UTF-16 units without splitting a
