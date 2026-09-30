@@ -59,14 +59,12 @@ export function BodySheet({
   // every arrow press would make the list unbrowsable by keyboard) — "Done"
   // or Esc closes.
   const viaPointer = useRef(false);
-  const groups = [
-    { id: "everyday", label: "Everyday", items: styles.filter((b) => bodyGroup(b.id) === "everyday") },
-    {
-      id: "occasions",
-      label: "Occasions & seasons",
-      items: styles.filter((b) => bodyGroup(b.id) === "occasions"),
-    },
-  ].filter((g) => g.items.length > 0);
+  // One grid, no category headings: everyday styles first, then the ones
+  // made for an occasion or season.
+  const ordered = [
+    ...styles.filter((b) => bodyGroup(b.id) === "everyday"),
+    ...styles.filter((b) => bodyGroup(b.id) === "occasions"),
+  ];
   return (
     <Sheet
       open={open}
@@ -90,11 +88,10 @@ export function BodySheet({
       <p className={s.small} style={{ margin: "0 0 12px" }}>
         Every piñata is {PINATA_HEIGHT_IN} inches tall.
       </p>
-      {groups.map((g) => (
-        <fieldset key={g.id} className={`${s.sheetGroup} ${s.legendReset}`}>
-          <legend className={s.eyebrow}>{g.label}</legend>
+      <fieldset className={s.legendReset}>
+        <legend className={s.srOnly}>Piñata styles</legend>
           <div className={s.bodyGrid}>
-            {g.items.map((b) => {
+            {ordered.map((b) => {
               const ok = wearable(b.id);
               return (
                 <label
@@ -132,8 +129,7 @@ export function BodySheet({
               );
             })}
           </div>
-        </fieldset>
-      ))}
+      </fieldset>
       </div>
     </Sheet>
   );

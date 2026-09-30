@@ -22,6 +22,7 @@ export default function FlowHeader({
   onBack,
   onStep,
   onCart,
+  cartExtra,
   reviewOnly,
 }: {
   step: StepId;
@@ -31,6 +32,8 @@ export default function FlowHeader({
   onBack: () => void;
   onStep: (s: StepId) => void;
   onCart: () => void;
+  /** added to the cart badge: the piñata in progress, when it counts */
+  cartExtra?: number;
   /** Order review with no piñata in progress: only Step 4 exists. */
   reviewOnly: boolean;
 }) {
@@ -47,7 +50,7 @@ export default function FlowHeader({
           </span>
           <span className={f.hName}>{STEPS[step].name}</span>
         </p>
-        <CartButton onClick={onCart} />
+        <CartButton onClick={onCart} extra={cartExtra} />
       </div>
       <div className={f.progress} aria-hidden="true">
         {STEP_IDS.map((id, i) => (
@@ -85,7 +88,7 @@ export default function FlowHeader({
             })}
           </ol>
         </nav>
-        <CartButton onClick={onCart} />
+        <CartButton onClick={onCart} extra={cartExtra} />
       </div>
     </header>
   );

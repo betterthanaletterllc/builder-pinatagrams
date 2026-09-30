@@ -1457,6 +1457,12 @@ export default function DesignFlowV2(data: FlowData) {
         )
       : null;
   const otherLines = cart.filter((l) => l.id !== draft?.editLineId).length;
+  // The piñata being built counts in the cart badge once it's part of the
+  // order as the shopper sees it: on the last step (it's listed in "Your
+  // order", and checkout includes it) or while other piñatas are already in
+  // the order ("Add another"). An edit replaces its line — never twice.
+  const cartExtra =
+    draft && !draft.editLineId && (step === "deliver" || cart.length > 0) ? 1 : 0;
 
   return (
     <main className={f.flow} data-pg-journey>
@@ -1470,6 +1476,7 @@ export default function DesignFlowV2(data: FlowData) {
           navigate(id, { via: "chip", history: "push" });
         }}
         onCart={goToOrder}
+        cartExtra={cartExtra}
         reviewOnly={!draft}
       />
 

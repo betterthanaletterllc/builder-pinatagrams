@@ -47,8 +47,16 @@ function label(n: number) {
  * piñatas in the cart the icon opens it there; an empty cart starts a new
  * piñata. Inside the flow the caller passes onClick to switch steps in place.
  */
-export default function CartButton({ onClick }: { onClick?: () => void }) {
-  const n = useCartCount();
+export default function CartButton({
+  onClick,
+  extra = 0,
+}: {
+  onClick?: () => void;
+  /** The piñata being built, when it already counts as part of the order
+   *  (the flow decides — see design-flow-v2 cartExtra). */
+  extra?: number;
+}) {
+  const n = useCartCount() + extra;
   const badge =
     n > 0 ? (
       <span className={c.count} aria-hidden="true">
