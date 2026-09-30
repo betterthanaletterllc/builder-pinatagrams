@@ -5,16 +5,15 @@ import type { CSSProperties, ReactNode } from "react";
 import BoxPreview from "@/app/design/box-preview";
 import type { GraphicChoice } from "@/lib/flow";
 import type { HubBodyStyle } from "@/lib/hub";
-import { PINATA_HEIGHT_IN, scopeText } from "../lib/text";
-import type { BoxInterior, StepId, Trust } from "../lib/types";
+import { PINATA_HEIGHT_IN } from "../lib/text";
+import type { BoxInterior, StepId } from "../lib/types";
 import { previewArt } from "../ui/box-thumb";
 import { Skeleton } from "../ui/feedback";
-import { Height, Star, ZoomIn } from "../ui/icons";
+import { Height, ZoomIn } from "../ui/icons";
 import f from "./flow.module.css";
 
-// Where the box's sides sit in its photo, as a share of the photo's width,
-// when a style has no label zone to measure from (the zones put them at
-// ~0.17 / ~0.83 for every style).
+// Where the box's left side sits in its photo, as a share of the photo's
+// width, when a style has no label zone to measure from (~0.17 for most).
 const BOX_EDGE = 0.17;
 
 // The brand confetti message card (Confetti Birthday's graphics/message):
@@ -34,8 +33,8 @@ export function messageCardFor(g: GraphicChoice | null): string | null {
  * (BoxPreview, shared with v1), on every step. The Card step opens the box
  * to show the message printed inside the lid. Step 1 adds a band ABOVE the
  * photo — the body chip ("Googly · Change piñata") and the zoom control —
- * and the size and rating in the white space either side of the box, so
- * nothing ever sits on the piñata or the box.
+ * and the size in the white space left of the box, so nothing ever sits on
+ * the piñata or the box.
  */
 export default function Stage({
   step,
@@ -44,7 +43,6 @@ export default function Stage({
   message,
   filling,
   box,
-  trust,
   onBody,
   onZoom,
   loading,
@@ -57,8 +55,6 @@ export default function Stage({
   message: string;
   filling: string | null;
   box: BoxInterior | null;
-  /** Step 1: the reviews' average, beside the box. */
-  trust?: Trust | null;
   onBody?: () => void;
   onZoom?: () => void;
   loading?: boolean;
@@ -73,12 +69,9 @@ export default function Stage({
   const showBody = !loading && step === "design" && !!style && !!onBody;
   const showZoom = !loading && step === "design" && !!graphic && !!onZoom;
   const showFilling = !loading && step === "deliver" && !!style && !!fillingImage && !!filling;
-  const showStats = !loading && step === "design" && !!style;
-  // The box's left and right edges in its photo (the label spans the front).
-  const zone = style?.logoZone;
-  const leftEdge = zone ? zone.x : BOX_EDGE;
-  const rightEdge = zone ? 1 - zone.x - zone.w : BOX_EDGE;
-  const rating = trust ? trust.rating.toFixed(1) : null;
+  const showSize = !loading && step === "design" && !!style;
+  // The box's left side in its photo (the label spans the front).
+  const leftEdge = style?.logoZone?.x ?? BOX_EDGE;
   return (
     <div
       className={`${f.stage}${privateArt ? " ph-no-capture" : ""}`}
@@ -154,22 +147,12 @@ export default function Stage({
             </figure>
           </>
         )}
-        {showStats && (
-          <p className={f.sideStat} data-side="left" style={{ "--edge": leftEdge } as CSSProperties}>
+        {showSize && (
+          <p className={f.sideStat} style={{ "--edge": leftEdge } as CSSProperties}>
             <Height />
             <strong aria-hidden="true">{PINATA_HEIGHT_IN}″</strong>
             <span aria-hidden="true">tall</span>
             <span className={f.srOnly}>Every piñata is {PINATA_HEIGHT_IN} inches tall.</span>
-          </p>
-        )}
-        {showStats && trust && rating && (
-          <p className={f.sideStat} data-side="right" style={{ "--edge": rightEdge } as CSSProperties}>
-            <Star className={f.sideStar} />
-            <strong aria-hidden="true">{rating}</strong>
-            <span aria-hidden="true">stars</span>
-            <span className={f.srOnly}>
-              Rated {rating} out of 5 {scopeText(trust.label)}.
-            </span>
           </p>
         )}
       </div>

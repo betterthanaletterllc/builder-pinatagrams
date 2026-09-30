@@ -1502,7 +1502,6 @@ export default function DesignFlowV2(data: FlowData) {
                 filling={stageFilling}
                 fillingImage={fillings.find((x) => x.label === stageFilling)?.imageUrl ?? null}
                 box={data.box}
-                trust={data.trust}
                 loading={loading}
                 onBody={draft ? () => setSheet({ kind: "body" }) : undefined}
                 onZoom={draft ? () => setSheet({ kind: "zoom" }) : undefined}

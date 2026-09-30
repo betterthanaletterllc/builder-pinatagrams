@@ -3,7 +3,6 @@ import { resolveDeliveryConfig } from "@/lib/delivery";
 import { resolveFillings } from "@/lib/flow";
 import {
   getCatalog,
-  getReviews,
   resolveBuilderPricing,
   resolveGraphicCategories,
   resolveHubGraphics,
@@ -24,7 +23,7 @@ import {
 import { candyFilling, fillingForGraphic } from "../lib/defaults";
 import { isOccasionId } from "../lib/occasions";
 import { UTM_PRESETS } from "../lib/presets";
-import { b2cPrice, param, requestContext, toV2Addons, trustFrom } from "../lib/server";
+import { b2cPrice, param, requestContext, toV2Addons } from "../lib/server";
 import { parseStep } from "../lib/steps";
 import type { FlowData, Preset } from "../lib/types";
 import DesignFlowV2 from "./design-flow-v2-lazy";
@@ -51,7 +50,7 @@ export default async function DesignPageV2({
     // Without the catalog there's no box, price or stock to build against.
     return <HubDown />;
   }
-  const [price, reviews] = await Promise.all([b2cPrice(), getReviews({ limit: 1 })]);
+  const price = await b2cPrice();
 
   const variant = resolveVariantProfile(catalog.variant);
   const fillings = resolveFillings(catalog.fillings);
@@ -125,7 +124,6 @@ export default async function DesignPageV2({
     requestedStep: parseStep(param(searchParams, "step")) ?? "design",
     editLineId: param(searchParams, "edit") || null,
     initialPrice: price,
-    trust: trustFrom(reviews),
     previewVariant,
   };
 

@@ -87,6 +87,5 @@ export type FlowData = {
   requestedStep: StepId;
   editLineId: string | null;
   initialPrice: HubPrice | null;
-  trust: Trust | null;
   previewVariant: string | null;
 };

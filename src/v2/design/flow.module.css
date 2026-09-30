@@ -378,17 +378,18 @@
   object-fit: fill;
 }
 
-/* Step 1: the size and the rating in the white space either side of the
-   box — the Stage's margin plus the photo's own white edge — centred in it,
-   never on the box. The area runs from the Stage's edge to the box's side:
-   the gap beside the square photo frame, the frame's padding, then --edge
-   (the box's side, as a share of the photo's width — from its label zone). */
+/* Step 1: the size in the white space left of the box — the Stage's margin
+   plus the photo's own white edge — centred in it, never on the box. The
+   area runs from the Stage's edge to the box's side: the gap beside the
+   square photo frame, the frame's padding, then --edge (the box's side, as
+   a share of the photo's width — from its label zone). */
 .sideStat {
   --side: min(100cqw, 100cqh);
   --pad: 6px;
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 0;
   width: calc(
     (100cqw - var(--side)) / 2 + var(--pad) + var(--edge) * (var(--side) - 2 * var(--pad))
   );
@@ -403,23 +404,11 @@
   pointer-events: none;
 }
 
-.sideStat[data-side="left"] {
-  left: 0;
-}
-
-.sideStat[data-side="right"] {
-  right: 0;
-}
-
 .sideStat svg {
   width: clamp(18px, 7.5cqh, 26px);
   height: auto;
   margin-bottom: 2px;
   color: var(--pg-muted);
-}
-
-.sideStat .sideStar {
-  color: #c98f00;
 }
 
 .sideStat strong {
