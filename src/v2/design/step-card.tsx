@@ -1,21 +1,26 @@
 "use client";
 
 import { forwardRef, useEffect, useId } from "react";
-import { composeMessage, MESSAGE_LIMIT, STARTERS, type CardParts } from "../lib/message";
+import {
+  composeMessage,
+  FROM_MAX,
+  MESSAGE_LIMIT,
+  STARTERS,
+  type CardParts,
+} from "../lib/message";
 import type { OccasionId } from "../lib/occasions";
 import { Callout, StepHeader } from "../ui/feedback";
-import { TextArea } from "../ui/field";
-import { Pencil } from "../ui/icons";
+import { TextArea, TextField } from "../ui/field";
 import u from "../ui/ui.module.css";
 import s from "./steps.module.css";
 
 /**
- * Step 2 · Card — "Write the card". One message box; the live preview is
- * the Stage itself (the words on the box's inside flap), so there's no
- * second preview here. A single line reminds them to say who it's from —
- * there are no separate To / From fields. The message is required (the flow
- * won't move on without one) and held to checkout's 300-character cap: a
- * change that would overflow is refused (with a note) instead of being cut
+ * Step 2 · Card — "Write the card". The message box, the characters left
+ * right under it, then an optional From line (printed as "— Name" under the
+ * message). The live preview is the Stage itself (the words on the box's
+ * inside flap). The message is required (the flow won't move on without
+ * one) and the whole card is held to checkout's 300-character cap: a change
+ * that would overflow is refused (with a note) instead of being cut
  * silently at checkout.
  */
 const StepCard = forwardRef<
@@ -31,24 +36,29 @@ const StepCard = forwardRef<
   }
 >(function StepCard({ parts, occasion, onParts, notice, onNotice, error }, h1Ref) {
   const counterId = useId();
-  const hintId = useId();
   const composed = composeMessage(parts);
   const left = MESSAGE_LIMIT - composed.length;
   const starters = STARTERS[occasion ?? "default"] ?? STARTERS.default;
 
-  // A draft from before the To / From fields went away: fold them into the
-  // message itself, word for word, so nothing hidden prints on the flap.
-  const legacy = !!(parts.to || parts.from);
+  // A draft from when there was a To field: fold it into the message, word
+  // for word, so nothing hidden prints on the flap.
+  const legacyTo = !!parts.to;
   useEffect(() => {
-    if (legacy) onParts({ to: "", body: composeMessage(parts), from: "" });
+    if (legacyTo) {
+      onParts({
+        to: "",
+        body: composeMessage({ to: parts.to, body: parts.body, from: "" }),
+        from: parts.from,
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [legacy]);
+  }, [legacyTo]);
 
-  const change = (value: string) => {
-    const next = { ...parts, body: value };
+  const change = (field: "body" | "from", value: string) => {
+    const next = { ...parts, [field]: value };
     // Deleting is always allowed; growing past the limit is refused whole —
     // a paste that doesn't fit never lands half-cut.
-    if (composeMessage(next).length > MESSAGE_LIMIT && value.length > parts.body.length) {
+    if (composeMessage(next).length > MESSAGE_LIMIT && value.length > parts[field].length) {
       onNotice(`That won't fit — the card holds ${MESSAGE_LIMIT} characters in all.`);
       return;
     }
@@ -77,27 +87,34 @@ const StepCard = forwardRef<
       />
 
       <div className={s.fields}>
-        <TextArea
-          id="pg-message"
-          label="Message"
-          value={parts.body}
-          rows={5}
-          error={error}
-          // (spread after the field's own ids, so the error id goes in too)
-          aria-describedby={[error ? "pg-message-error" : null, hintId, counterId]
-            .filter(Boolean)
-            .join(" ")}
-          placeholder="Say something they'll keep."
-          onChange={(e) => change(e.target.value)}
-        />
-        <div className={s.cardMeta}>
-          <p id={hintId} className={s.signHint}>
-            <Pencil size={15} /> Don&apos;t forget to say who this is from.
-          </p>
+        <div>
+          <TextArea
+            id="pg-message"
+            label="Message"
+            value={parts.body}
+            rows={5}
+            error={error}
+            // (spread after the field's own ids, so the error id goes in too)
+            aria-describedby={[error ? "pg-message-error" : null, counterId]
+              .filter(Boolean)
+              .join(" ")}
+            placeholder="Say something they'll keep."
+            onChange={(e) => change("body", e.target.value)}
+          />
           <p id={counterId} className={s.counter} data-low={left <= 20}>
             {left} character{left === 1 ? "" : "s"} left
           </p>
         </div>
+        <TextField
+          label="From"
+          optional
+          value={parts.from}
+          maxLength={FROM_MAX}
+          autoComplete="given-name"
+          enterKeyHint="done"
+          placeholder="Your name"
+          onChange={(e) => change("from", e.target.value.replace(/\n/g, " "))}
+        />
       </div>
 
       {notice && (

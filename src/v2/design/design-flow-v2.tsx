@@ -13,7 +13,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { trackAddToCart } from "@/lib/analytics";
-import { startCheckout } from "@/lib/checkout-client";
+import { reopenPendingOrder, startCheckout } from "@/lib/checkout-client";
 import { formatWindow, formatYmd, uspsWindow, type Carrier } from "@/lib/delivery";
 import { designKey, type DesignDocument } from "@/lib/design-document";
 import {
@@ -33,7 +33,9 @@ import {
   graphicTier,
   loadCart,
   loadDiscountCodes,
+  loadPendingOrder,
   newLineId,
+  pendingKey,
   rememberAddress,
   saveCart,
   saveDiscountCodes,
@@ -78,7 +80,7 @@ import {
   type DraftV2,
   type OrderPrefs,
 } from "../lib/draft";
-import { composeMessage, type CardParts } from "../lib/message";
+import { composeMessage, hasMessage, type CardParts } from "../lib/message";
 import { libraryViewFor, occasionDef, type OccasionId } from "../lib/occasions";
 import { computeOrder, designName, type OrderPiece } from "../lib/order";
 import { deliveredCents, priceRows, type PriceCtx } from "../lib/pricing";
@@ -99,6 +101,7 @@ import { focusAddressField } from "./recipient";
 import {
   BodySheet,
   CarrierSwitchSheet,
+  DateNeededSheet,
   LibrarySheet,
   LineDateSheet,
   loadLibrary,
@@ -121,6 +124,8 @@ type SheetState =
   | { kind: "lineDate"; lineId: string }
   /** Switching carrier with piñatas already in the order: confirm first. */
   | { kind: "carrier"; to: Carrier }
+  /** Checkout with no delivery date: pick one right in the pop-up. */
+  | { kind: "dateNeeded" }
   | null;
 
 type Nav = {
@@ -186,6 +191,9 @@ export default function DesignFlowV2(data: FlowData) {
   const [touched, setTouched] = useState<Partial<Record<AddressField | "email", boolean>>>({});
   const [editingAddress, setEditingAddress] = useState(false);
   const [busy, setBusy] = useState(false);
+  // the waiting order is coming back into the cart (reopenWaitingOrder)
+  const [reopening, setReopening] = useState(false);
+  const reopeningRef = useRef(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
   const [dryRun, setDryRun] = useState<Record<string, unknown> | null>(null);
@@ -254,9 +262,10 @@ export default function DesignFlowV2(data: FlowData) {
       : null;
   // A design that's still saving holds you on Step 1; an empty card holds
   // you on Step 2 (every piñata carries a message).
-  const maxReachable = draft ? (graphicReady(draft.graphic) ? (message.trim() ? 3 : 1) : 0) : 3;
+  const maxReachable = draft ? (graphicReady(draft.graphic) ? (hasMessage(draft) ? 3 : 1) : 0) : 3;
   const editing = !!draft?.editLineId;
-  const loading = !hydrated && (data.requestedStep !== "design" || !!data.editLineId);
+  const loading =
+    reopening || (!hydrated && (data.requestedStep !== "design" || !!data.editLineId));
 
   const patch = useCallback((p: Partial<DraftV2>) => {
     setDraft((d) => (d ? { ...d, ...p } : d));
@@ -345,6 +354,7 @@ export default function DesignFlowV2(data: FlowData) {
       stored: loadDraftV2(),
       parked: loadParked(),
       lines,
+      pendingWaiting: !!loadPendingOrder(),
       preset: data.preset,
       deepLink: data.deepLink,
       presetApplied: presetConsumed(sig),
@@ -355,6 +365,10 @@ export default function DesignFlowV2(data: FlowData) {
     setPrefs(loadOrderPrefs());
     setDraft(r.draft);
     setStep(r.step);
+    // the refs mirror state a render later — the commit tick below reads
+    // them first (the server render's placeholder draft must not linger)
+    draftRef.current = r.draft;
+    stepRef.current = r.step;
     setHydrated(true);
     // A background upload can't survive a reload: re-render the print file
     // from the saved document and upload it again (status shows on Step 1).
@@ -390,6 +404,8 @@ export default function DesignFlowV2(data: FlowData) {
         });
       }
       if (r.note) showToast(r.note);
+      // the order review with an empty cart = the waiting order comes back
+      if (!r.draft && r.step === "deliver" && !lines.length) void reopenRef.current();
     }, 0);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -420,7 +436,7 @@ export default function DesignFlowV2(data: FlowData) {
           ? "design"
           : d &&
               STEPS[target].index > STEPS.card.index &&
-              !composeMessage({ to: d.msgTo, body: d.msgBody, from: d.msgFrom }).trim()
+              !hasMessage(d)
             ? "card"
             : target;
       navigate(clamped, {
@@ -465,17 +481,47 @@ export default function DesignFlowV2(data: FlowData) {
   }, []);
 
   // Back from Shopify's invoice may restore this page from the bfcache,
-  // frozen mid-checkout: wake it up with the current cart.
+  // frozen mid-checkout: wake it up with the current cart — and the order
+  // that's waiting for payment comes back into it (below).
   useEffect(() => {
     const onShow = (e: PageTransitionEvent) => {
       if (!e.persisted) return;
       inFlight.current = false;
       setBusy(false);
       setCart(loadCart());
+      if (stepRef.current === "deliver") void reopenRef.current();
     };
     window.addEventListener("pageshow", onShow);
     return () => window.removeEventListener("pageshow", onShow);
   }, []);
+
+  /**
+   * Back from the invoice (or the cart icon) with nothing in progress: the
+   * order waiting for payment comes back into the cart — "When and where"
+   * with its piñatas, address and dates exactly as they were, ready to pay
+   * (the next checkout replaces the old draft). Shopify is asked first: a
+   * paid order is done, never reopened.
+   */
+  const reopenWaitingOrder = async () => {
+    if (draftRef.current || loadCart().length) return;
+    const waiting = loadPendingOrder();
+    if (!waiting || reopeningRef.current) return;
+    reopeningRef.current = true;
+    setReopening(true);
+    const result = await reopenPendingOrder(pendingKey(waiting));
+    reopeningRef.current = false;
+    setReopening(false);
+    const lines = loadCart();
+    setCart(lines);
+    if (result === "paid") showToast("That order is paid — thank you!");
+    if (!lines.length && !draftRef.current && !loadPendingOrder()) {
+      // nothing left to review: a new piñata
+      setDraft(freshPiece(null));
+      navigate("design", { via: "restore", history: "replace" });
+    }
+  };
+  const reopenRef = useRef(reopenWaitingOrder);
+  reopenRef.current = reopenWaitingOrder;
 
   // Prices: the server's copy first; if that failed, retry here (display
   // only — the flow never waits on it; prices read "—" meanwhile).
@@ -545,15 +591,18 @@ export default function DesignFlowV2(data: FlowData) {
   }, [draft?.dateSoonest, draft?.date, carrier, cfg, patch]);
 
   // Nothing in progress and nothing in the order: start a piñata. (Off the
-  // effect's commit — navigate() flushes synchronously.)
+  // effect's commit — navigate() flushes synchronously.) Not while the order
+  // waiting for payment is coming back into the review (back from its
+  // invoice): that decides for itself once Shopify has answered.
   useEffect(() => {
-    if (!hydrated || busy || draft || cart.length > 0) return;
+    if (!hydrated || busy || reopening || draft || cart.length > 0) return;
     const t = window.setTimeout(() => {
+      if (reopeningRef.current || (stepRef.current === "deliver" && loadPendingOrder())) return;
       setDraft(freshPiece(null));
       navigate("design", { via: "continue", history: "replace" });
     }, 0);
     return () => window.clearTimeout(t);
-  }, [hydrated, busy, draft, cart.length, freshPiece, navigate]);
+  }, [hydrated, busy, reopening, draft, cart.length, freshPiece, navigate]);
 
   // The upload for the design on the Stage landed (possibly after the editor
   // closed, a Retry, or a reload): stamp its art + hash onto the draft and
@@ -801,7 +850,7 @@ export default function DesignFlowV2(data: FlowData) {
   const problems = (): Problem[] => {
     const out: Problem[] = [];
     // the card comes first: it's an earlier step
-    if (draft && !message.trim()) {
+    if (draft && !hasMessage(draft)) {
       out.push({ kind: "message", message: MESSAGE_REQUIRED, focus: needMessage });
     }
     if (!carrier) {
@@ -809,7 +858,11 @@ export default function DesignFlowV2(data: FlowData) {
     }
     if (draft && carrier) {
       if (!draft.date) {
-        out.push({ kind: "date", message: "Pick a delivery date.", focus: byId(DATE_IDS.soonest) });
+        out.push({
+          kind: "date",
+          message: "Pick a delivery date.",
+          focus: () => setSheet({ kind: "dateNeeded" }),
+        });
       } else {
         const p = dateProblemText(draft.date, cfg, carrier);
         if (p) out.push({ kind: "date", message: p, focus: byId(DATE_IDS.pick) });
@@ -1087,7 +1140,7 @@ export default function DesignFlowV2(data: FlowData) {
   };
 
   const explainNotReady = () => {
-    if (draft && graphicReady(draft.graphic) && !message.trim()) {
+    if (draft && graphicReady(draft.graphic) && !hasMessage(draft)) {
       needMessage();
     } else if (saveStatus === "saving") {
       showToast("Your design is still saving — one moment.");
@@ -1108,7 +1161,7 @@ export default function DesignFlowV2(data: FlowData) {
         onClick: () => (ready ? navigate("card", { via: "continue", history: "push" }) : explainNotReady()),
       };
     } else if (step === "card" && draft) {
-      const empty = !message.trim();
+      const empty = !hasMessage(draft);
       cta = {
         label: STEPS.card.next,
         short: STEPS.card.nextShort,
@@ -1296,7 +1349,7 @@ export default function DesignFlowV2(data: FlowData) {
         onNotice={setCardNotice}
         error={messageError}
         onParts={(p, o) => {
-          if (composeMessage(p).trim()) setMessageError(null);
+          if (p.body.trim() || p.to.trim()) setMessageError(null);
           patch({
             msgTo: p.to,
             msgBody: p.body,
@@ -1321,6 +1374,9 @@ export default function DesignFlowV2(data: FlowData) {
     );
   } else if (step === "deliver") {
     content = (
+      <>
+      {/* a new piñata in progress while an older order waits for payment */}
+      {draft && <PendingBanner className={st.block} showView={false} />}
       <StepDeliver
         ref={h1Ref}
         hasPiece={!!draft}
@@ -1388,6 +1444,7 @@ export default function DesignFlowV2(data: FlowData) {
         onAddAnother={addAnother}
         result={dryRun && <DryRunResult payload={dryRun} />}
       />
+      </>
     );
   }
 
@@ -1592,6 +1649,21 @@ export default function DesignFlowV2(data: FlowData) {
         carrier={lineCarrier}
         cfg={cfg}
         onPick={(ymd) => lineForSheet && fixLineDate(lineForSheet.id, ymd)}
+      />
+      <DateNeededSheet
+        open={sheet?.kind === "dateNeeded"}
+        onClose={() => setSheet(null)}
+        carrier={carrier}
+        cfg={cfg}
+        soonestYmd={carrier ? soonest(cfg, carrier) : null}
+        onSoonest={() => {
+          pickSoonest();
+          setSheet(null);
+        }}
+        onPick={(ymd) => {
+          pickDate(ymd);
+          setSheet(null);
+        }}
       />
       <CarrierSwitchSheet
         to={sheet?.kind === "carrier" ? sheet.to : null}

@@ -149,23 +149,45 @@ export default function BoxPreview({
   // card (padding included). Runs after layout; opacity-hidden layers still
   // have geometry, so this works even before the crossfade reveals it.
   const msgRef = useRef<HTMLDivElement>(null);
+  const onCard = !!messageCard && !photoFailed;
   useLayoutEffect(() => {
     const el = msgRef.current;
     if (!el) return;
     const fit = () => {
+      if (onCard) {
+        // The padding is a percent of the CARD (the hub's numbers), not of
+        // the whole photo — CSS % padding measures the photo's width, which
+        // squeezed the text into a sliver. The box is the card's width and
+        // 78% of its height (it stops above the logo strip).
+        const padX = (el.offsetWidth * (messagePadding?.x ?? 12)) / 100;
+        const padY = (el.offsetHeight / 0.78) * ((messagePadding?.y ?? 7) / 100);
+        el.style.padding = `${padY}px ${padX}px`;
+        // Words that still don't fit are cut at the text box, never drawn
+        // over the card's border art (overflow alone clips at the padding).
+        el.style.clipPath = `inset(${padY}px ${padX}px)`;
+      } else {
+        el.style.padding = "";
+        el.style.clipPath = "";
+      }
       let size = 16;
       el.style.fontSize = `${size}px`;
-      while (size > 6 && el.scrollHeight > el.clientHeight) {
+      while (size > 5 && el.scrollHeight > el.clientHeight) {
         size -= 0.5;
         el.style.fontSize = `${size}px`;
       }
     };
     fit();
     // re-fit when the zone's rendered size changes (rotation, window resize)
+    // and once the web font has arrived (its glyphs are wider)
     const ro = new ResizeObserver(fit);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, [message, mode, zone.w, zone.h, messagePadding?.x, messagePadding?.y]);
+    let live = true;
+    void document.fonts?.ready.then(() => live && fit());
+    return () => {
+      live = false;
+      ro.disconnect();
+    };
+  }, [message, mode, onCard, zone.w, zone.h, messagePadding?.x, messagePadding?.y]);
 
   return (
     <div className="box-preview">
@@ -305,10 +327,9 @@ export default function BoxPreview({
                 // On the card, the text box stops ABOVE the Piñatagrams logo
                 // baked into the card art's bottom strip (~22% of the card) —
                 // placeholder and typed words both stay clear of it.
-                height: `${zone.h * (messageCard && !photoFailed ? 78 : 100)}%`,
-                ...(messageCard && !photoFailed && messagePadding
-                  ? { padding: `${messagePadding.y}% ${messagePadding.x}%` }
-                  : null),
+                height: `${zone.h * (onCard ? 78 : 100)}%`,
+                // on the card, the padding is set in px by the auto-fit
+                // above (a percent of the card, not of the photo)
               }}
             >
               {message || "Your message appears here, printed on the inside flap."}

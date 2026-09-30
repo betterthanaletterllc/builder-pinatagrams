@@ -4,7 +4,13 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRef, useState } from "react";
 import DateCalendar from "@/app/design/date-calendar";
-import { formatWindow, uspsWindow, type Carrier, type DeliveryConfig } from "@/lib/delivery";
+import {
+  formatWindow,
+  formatYmd,
+  uspsWindow,
+  type Carrier,
+  type DeliveryConfig,
+} from "@/lib/delivery";
 import type { CartLine, GraphicChoice } from "@/lib/flow";
 import type { HubBodyStyle, HubGraphicCategory, HubGraphicEntry } from "@/lib/hub";
 import { cdnThumb } from "@/lib/library-data";
@@ -299,6 +305,50 @@ export function PriceSheet({
 }
 
 /* --- A cart line's date (carrier switches, stale dates) ------------------------------ */
+
+/** Checkout tapped with no delivery date: a big, can't-miss ask instead of a
+ *  line of red text — "Soonest" in one tap, or any day on the calendar,
+ *  right here. */
+export function DateNeededSheet({
+  open,
+  onClose,
+  carrier,
+  cfg,
+  soonestYmd,
+  onSoonest,
+  onPick,
+}: {
+  open: boolean;
+  onClose: () => void;
+  carrier: Carrier | null;
+  cfg: DeliveryConfig;
+  soonestYmd: string | null;
+  onSoonest: () => void;
+  onPick: (ymd: string) => void;
+}) {
+  return (
+    <Sheet open={open} onClose={onClose} title="Pick a delivery date" tall>
+      <p className={s.small} style={{ marginTop: 0 }}>
+        When should it arrive? Choose a day to check out.
+      </p>
+      {carrier && soonestYmd && (
+        <>
+          <div style={{ marginTop: 12 }}>
+            <Button block onClick={onSoonest}>
+              Soonest ·{" "}
+              {carrier === "usps"
+                ? formatWindow(uspsWindow(soonestYmd, cfg))
+                : formatYmd(soonestYmd)}
+            </Button>
+          </div>
+          <div className={s.calendar}>
+            <DateCalendar key={carrier} value="" onChange={onPick} cfg={cfg} carrier={carrier} />
+          </div>
+        </>
+      )}
+    </Sheet>
+  );
+}
 
 export function LineDateSheet({
   open,

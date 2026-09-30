@@ -713,6 +713,14 @@ export function loadPendingOrder(): PendingOrder | null {
   return loadPendingOrders().find((p) => !p.expired) ?? null;
 }
 
+/** Piñatas in orders still waiting for payment — the cart icon counts them
+ *  too (it opens the order review, where the waiting order comes back). */
+export function pendingPieceCount(): number {
+  return loadPendingOrders()
+    .filter((p) => !p.expired)
+    .reduce((n, p) => n + p.lines.reduce((s, l) => s + l.qty, 0), 0);
+}
+
 /** Add or replace (by draft id / invoice URL). true = persisted. Checkout
  *  goes through recordCheckout (which also moves the lines); this is for
  *  records built elsewhere — `lines` defaults to none. */

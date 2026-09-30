@@ -5,6 +5,7 @@ import {
   type DeliveryAddress,
   type GraphicChoice,
 } from "@/lib/flow";
+import { composeMessage, parseMessage } from "./message";
 import { isOccasionId, type OccasionId } from "./occasions";
 import type { GraphicSource, Preset } from "./types";
 
@@ -116,9 +117,11 @@ export function applyPreset(
   return next;
 }
 
-/** Edit mode: a cart line back into a draft. The saved message comes back
- *  whole, as the one message box shows it — word for word what prints. */
+/** Edit mode: a cart line back into a draft. Its "— Name" line comes back
+ *  as the From field; anything else (an old "To," opening included) stays
+ *  in the message — word for word what prints. */
 export function draftFromLine(l: CartLine, occasion: OccasionId | null): DraftV2 {
+  const parts = parseMessage(l.message ?? "");
   return {
     v: 2,
     styleId: l.styleId,
@@ -126,8 +129,8 @@ export function draftFromLine(l: CartLine, occasion: OccasionId | null): DraftV2
     graphicSource: "default",
     occasion,
     msgTo: "",
-    msgBody: l.message ?? "",
-    msgFrom: "",
+    msgBody: composeMessage({ to: parts.to, body: parts.body, from: "" }),
+    msgFrom: parts.from,
     starterUsed: false,
     filling: l.filling,
     fillingAuto: false,

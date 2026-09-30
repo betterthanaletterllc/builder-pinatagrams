@@ -2,7 +2,7 @@ import type { CartLine, GraphicChoice } from "@/lib/flow";
 import type { HubFilling } from "@/lib/hub";
 import { fillingAfterDesignChange } from "./defaults";
 import { applyPreset, draftFromLine, draftFromPreset, type DraftV2 } from "./draft";
-import { composeMessage } from "./message";
+import { hasMessage } from "./message";
 import { parseStep, STEPS } from "./steps";
 import type { Preset, StepId, StepVia } from "./types";
 
@@ -24,14 +24,18 @@ export function graphicReady(g: GraphicChoice): boolean {
  *    cart line on save); a parked piñata comes back.
  *  - a NEW deep link applies its preset over the draft (only what it asked
  *    for); the same link again (a refresh) restores instead.
- *  - ?step=deliver with piñatas in the cart and nothing in progress = the
- *    order review (no draft).
+ *  - ?step=deliver with piñatas in the cart — or an order waiting for
+ *    payment (back from its invoice, the cart icon) — and nothing in
+ *    progress = the order review (no draft; the flow reopens the waiting
+ *    order into it). Never a fresh, empty piñata.
  */
 export function resolveRestore(input: {
   url: URL;
   stored: DraftV2 | null;
   parked: DraftV2 | null;
   lines: CartLine[];
+  /** An unpaid order is waiting (its lines left the cart at checkout). */
+  pendingWaiting?: boolean;
   preset: Preset;
   deepLink: boolean;
   presetApplied: boolean;
@@ -87,7 +91,12 @@ export function resolveRestore(input: {
       via = "deeplink";
     } else if (d) {
       via = "restore";
-    } else if (!(parseStep(url.searchParams.get("step")) === "deliver" && input.lines.length)) {
+    } else if (
+      !(
+        parseStep(url.searchParams.get("step")) === "deliver" &&
+        (input.lines.length || input.pendingWaiting)
+      )
+    ) {
       d = draftFromPreset(input.preset);
       fresh = true;
     }
@@ -104,7 +113,7 @@ export function resolveRestore(input: {
   // no message yet: nothing past the card (every piñata carries one)
   else if (
     STEPS[step].index > STEPS.card.index &&
-    !composeMessage({ to: d.msgTo, body: d.msgBody, from: d.msgFrom }).trim()
+    !hasMessage(d)
   ) {
     step = "card";
   }

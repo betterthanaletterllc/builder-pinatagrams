@@ -299,31 +299,9 @@
   gap: 16px;
 }
 
-/* under the message: the sign-it reminder, and the characters left */
-.cardMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 2px 12px;
-  margin-top: -8px;
-}
-
-.signHint {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font: 500 14px/1.4 var(--pg-font);
-  color: var(--pg-text-2);
-}
-
-.signHint svg {
-  flex: none;
-}
-
+/* the characters left, right under the message box */
 .counter {
-  margin: 0 0 0 auto;
+  margin: 6px 0 0;
   font: 500 14px/1.4 var(--pg-font);
   color: var(--pg-muted);
   text-align: right;

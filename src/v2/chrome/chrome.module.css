@@ -202,6 +202,38 @@
   text-decoration: none;
 }
 
+/* "Remove order" / "Keep it": text buttons like the links beside them */
+.keep,
+.remove {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pg-navy);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* the confirmed removal: a clear, solid button */
+.remove {
+  padding: 0 18px;
+  border-radius: var(--pg-r-pill);
+  background: var(--pg-error-text, #a4361f);
+  color: #fff;
+  text-decoration: none;
+}
+
+.keep:focus-visible,
+.remove:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
 @media (min-width: 1024px) {
   .inner {
     padding: 0 24px;

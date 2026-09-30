@@ -14,6 +14,11 @@ export const FROM_MAX = 40;
 
 export type CardParts = { to: string; body: string; from: string };
 
+/** Every piñata carries a message: words, not just a "— From" line. */
+export function hasMessage(d: { msgTo: string; msgBody: string }): boolean {
+  return !!(d.msgBody.trim() || d.msgTo.trim());
+}
+
 export function composeMessage({ to, body, from }: CardParts): string {
   const t = to.trim();
   const f = from.trim();

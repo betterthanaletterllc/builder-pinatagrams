@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { CART_EVENT, cartCount } from "@/lib/flow";
+import { CART_EVENT, cartCount, PENDING_EVENT, pendingPieceCount } from "@/lib/flow";
 import { checkPendingOrders } from "@/lib/checkout-client";
 import { Bag } from "../ui/icons";
 import c from "./chrome.module.css";
 
-/** Live piñata count (this tab via CART_EVENT, other tabs via "storage").
- *  0 on the server render; hydrates to the real count immediately.
+/** Live piñata count — the cart plus any order waiting for payment (this tab
+ *  via CART_EVENT / PENDING_EVENT, other tabs via "storage"). 0 on the
+ *  server render; hydrates to the real count immediately.
  *
  *  Both v2 headers (site + flow) render this instead of v1's <CartLink/>, so
  *  it also runs builder2's global "was the waiting order paid?" check — on
@@ -17,9 +18,10 @@ import c from "./chrome.module.css";
 export function useCartCount(): number {
   const [n, setN] = useState(0);
   useEffect(() => {
-    const update = () => setN(cartCount());
+    const update = () => setN(cartCount() + pendingPieceCount());
     update();
     window.addEventListener(CART_EVENT, update);
+    window.addEventListener(PENDING_EVENT, update);
     window.addEventListener("storage", update);
     void checkPendingOrders();
     const onVisible = () => {
@@ -28,6 +30,7 @@ export function useCartCount(): number {
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.removeEventListener(CART_EVENT, update);
+      window.removeEventListener(PENDING_EVENT, update);
       window.removeEventListener("storage", update);
       document.removeEventListener("visibilitychange", onVisible);
     };
