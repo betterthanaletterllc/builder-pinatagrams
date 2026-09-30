@@ -32,6 +32,65 @@ const BOX_PHOTO = { w: 1080, h: 1080 }; // hub catalog/boxes/*.webp
 const INTERIOR_PHOTO = { w: 900, h: 1251 }; // hub box-interior + box-open.jpg
 const LABEL_ART = { w: 2400, h: 1170 }; // 8 × 3.9 in @ 300 dpi
 
+// About half the message cards are SVG files (the default card for hub
+// graphics and custom designs too). Unlike a PNG/JPG, an SVG keeps its own
+// 2:1 shape inside the flap's wider box: it sat centred with a gap each side,
+// filled by whatever the file has past its page edge — Canva's bleed in the
+// border colour (sides ~2.5x thicker than top and bottom) or in white (white
+// strips beside the border). A copy with preserveAspectRatio="none" stretches
+// edge to edge like the other cards, the bleed cut off at the page edge.
+// Shopify's CDN allows the cross-origin read; any failure → the file as is.
+const stretchedCards = new Map<string, Promise<string>>();
+
+const isSvgUrl = (url: string) => /\.svg(?:[?#]|$)/i.test(url);
+
+function stretchSvg(svg: string): string {
+  return svg.replace(/<svg\b[^>]*>/, (tag) => {
+    let t = tag.replace(/\spreserveAspectRatio=(["'])[^"']*\1/, "");
+    // width/height from the viewBox where missing, so the card keeps its
+    // 2:1 shape wherever it is shown at its true aspect (desktop v1)
+    const vb = /\sviewBox=(["'])([^"']+)\1/.exec(t);
+    if (vb) {
+      const [, , w, h] = vb[2].trim().split(/[\s,]+/);
+      if (w && h && !/\swidth=/.test(t)) t = t.replace(/^<svg/, `<svg width="${w}"`);
+      if (w && h && !/\sheight=/.test(t)) t = t.replace(/^<svg/, `<svg height="${h}"`);
+    }
+    return t.replace(/^<svg/, '<svg preserveAspectRatio="none"');
+  });
+}
+
+function stretchedCard(url: string): Promise<string> {
+  let p = stretchedCards.get(url);
+  if (!p) {
+    p = fetch(url)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`card ${r.status}`))))
+      .then((svg) => URL.createObjectURL(new Blob([stretchSvg(svg)], { type: "image/svg+xml" })))
+      .catch(() => url);
+    stretchedCards.set(url, p);
+  }
+  return p;
+}
+
+/** The card's src: PNG/JPG as they are; an SVG once its stretching copy is
+ *  ready (null until then — the card shows plain white under the words). */
+function useCardSrc(url: string | null, active: boolean): string | null {
+  const svg = !!url && isSvgUrl(url);
+  const [ready, setReady] = useState<{ url: string; src: string } | null>(null);
+  useEffect(() => {
+    if (!url || !svg || !active) return;
+    let live = true;
+    void stretchedCard(url).then((src) => {
+      if (live) setReady({ url, src });
+    });
+    return () => {
+      live = false;
+    };
+  }, [url, svg, active]);
+  if (!url) return null;
+  if (!svg) return url;
+  return ready?.url === url ? ready.src : null;
+}
+
 function whenIdle(cb: () => void): () => void {
   if (typeof window.requestIdleCallback === "function") {
     const id = window.requestIdleCallback(cb, { timeout: 3000 });
@@ -128,6 +187,7 @@ export default function BoxPreview({
   // then — never in the way of the closed box, the page's LCP image.
   const [openWarm, setOpenWarm] = useState(false);
   const showOpen = openWarm || mode === "open";
+  const cardSrc = useCardSrc(photoFailed ? null : (messageCard ?? null), showOpen);
   useEffect(() => {
     if (mode === "open") setOpenWarm(true); // stays mounted afterwards
   }, [mode]);
@@ -314,19 +374,24 @@ export default function BoxPreview({
             )}
             {showOpen && messageCard && !photoFailed && (
               // The matching card sits in the flap zone, text painted on top.
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={messageCard}
-                alt=""
+              // Its art is laid out 3x and scaled back down (.flap-card-art):
+              // Safari draws the masked pictures inside an SVG — the logo on
+              // most cards — at one pixel per CSS pixel of the image's box,
+              // so at 1x they blur on a phone's 3x screen.
+              <span
                 className="flap-card"
-                decoding="async"
                 style={{
                   left: `${zone.x * 100}%`,
                   top: `${zone.y * 100}%`,
                   width: `${zone.w * 100}%`,
                   height: `${zone.h * 100}%`,
                 }}
-              />
+              >
+                {cardSrc && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={cardSrc} alt="" className="flap-card-art" decoding="async" />
+                )}
+              </span>
             )}
             <div
               ref={msgRef}

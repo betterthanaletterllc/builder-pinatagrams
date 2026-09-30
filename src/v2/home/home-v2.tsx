@@ -93,7 +93,7 @@ export default async function HomeV2({
     : [];
   const pitch =
     variant.landingLines?.[0] ??
-    `A ${PINATA_HEIGHT_IN}-inch piñata packed with candy, your design on the box and your message on the inside flap delivered straight to their door.`;
+    `A ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, your design on the box and your message on the inside flap delivered straight to their door.`;
 
   return (
     <main className={s.home}>
@@ -129,7 +129,7 @@ export default async function HomeV2({
             )}
           </ul>
           <h1 id="home-title" className={s.title}>
-            Send a party in a box.
+            Send the party!
           </h1>
           <p className={s.pitch}>{pitch}</p>
           <div className={s.ctaRow}>

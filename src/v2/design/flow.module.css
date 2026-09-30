@@ -375,6 +375,13 @@
   border-radius: 0;
 }
 
+/* Every message card fills the flap zone edge to edge at every size, the
+   way it looks on phones (v1's desktop keeps its true-aspect "contain" —
+   white strips beside a card's border). */
+.stageBox :global(.box-composite .flap-card-art) {
+  object-fit: fill;
+}
+
 /* Step 1's band under the photo: nothing ever sits on the piñata or box. */
 .stageBar {
   flex: none;

@@ -2685,7 +2685,7 @@ body:has(.bottom-stack) .site-footer {
      Mobile keeps fill: the compact preview hides the distortion and Nathan
      prefers its look there. (Parent-scoped: the base .flap-card rule sits
      LATER in this file and would win a same-specificity fight.) */
-  .box-composite .flap-card {
+  .box-composite .flap-card-art {
     object-fit: contain;
   }
 }
@@ -2823,10 +2823,26 @@ body:has(.bottom-stack) .site-footer {
    transparent backgrounds read as printed cards, not floating borders. */
 .flap-card {
   position: absolute;
-  object-fit: fill;
+  overflow: hidden;
   background: #ffffff;
   border-radius: 4px;
   box-shadow: 0 1px 5px rgba(24, 13, 56, 0.14);
+}
+
+/* The card's art, laid out at 3x and scaled back to the card: Safari draws
+   the masked pictures inside an SVG card (most cards' logo) at one pixel per
+   CSS pixel of the image box — soft on a 3x phone screen unless the box is
+   3x too. (box-preview.tsx) */
+.flap-card-art {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 300%;
+  height: 300%;
+  max-width: none;
+  object-fit: fill;
+  transform: scale(0.333333);
+  transform-origin: 0 0;
 }
 
 @media (min-width: 1024px) {
@@ -2834,7 +2850,7 @@ body:has(.bottom-stack) .site-footer {
      size the stretched border shows. contain keeps the card's true aspect;
      the white background fills the sliver of zone beside it seamlessly.
      Mobile stays fill (smaller render hides the stretch; Nathan likes it). */
-  .flap-card {
+  .flap-card-art {
     object-fit: contain;
   }
 }
