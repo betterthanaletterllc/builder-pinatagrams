@@ -39,8 +39,9 @@ function tileName(g: GraphicChoice, categories: HubGraphicCategory[], hub: HubGr
 /**
  * Step 1 · Design — "Pick your design". Occasion chips filter a filmstrip of
  * best sellers (radio tiles: tapping swaps the art on the Stage at once, no
- * confirm screen). Tiered stores lead with the Classic ("Included") and
- * label every other tile with its upcharge at the moment of choice. "Make
+ * confirm screen). Tiered stores lead with the Classic (no extra cost, so no
+ * badge) and label every other tile with its upcharge at the moment of
+ * choice. "Make
  * your own" is a tile too — always second. Under the grid: the whole
  * occasion in the library, and the whole library.
  */
@@ -158,11 +159,9 @@ const StepDesign = forwardRef<
               ) : (
                 <span className={s.srOnly}>{tileName(g, p.hubCategories, p.hubGraphics)}</span>
               )}
-              {tier && (
-                <span className={s.tier} data-included={tier.included}>
-                  {tier.text}
-                </span>
-              )}
+              {/* only an upcharge gets a badge — a design at no extra cost
+                  shows just its art */}
+              {tier && !tier.included && <span className={s.tier}>{tier.text}</span>}
               <span className={s.tileCheck} aria-hidden="true">
                 <Check size={12} />
               </span>
