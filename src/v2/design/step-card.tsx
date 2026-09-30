@@ -107,7 +107,6 @@ const StepCard = forwardRef<
         </div>
         <TextField
           label="From"
-          optional
           value={parts.from}
           maxLength={FROM_MAX}
           autoComplete="given-name"

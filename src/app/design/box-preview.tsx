@@ -159,8 +159,13 @@ export default function BoxPreview({
         // the whole photo — CSS % padding measures the photo's width, which
         // squeezed the text into a sliver. The box is the card's width and
         // 78% of its height (it stops above the logo strip).
-        const padX = (el.offsetWidth * (messagePadding?.x ?? 12)) / 100;
-        const padY = (el.offsetHeight / 0.78) * ((messagePadding?.y ?? 7) / 100);
+        // Floors under the hub's numbers: a long message fills the box to
+        // its edges, and the card's border art needs at least this much
+        // clear space (percent of the card) above and beside the words.
+        const px = Math.max(messagePadding?.x ?? 0, 16);
+        const py = Math.max(messagePadding?.y ?? 0, 14);
+        const padX = (el.offsetWidth * px) / 100;
+        const padY = (el.offsetHeight / 0.78) * (py / 100);
         el.style.padding = `${padY}px ${padX}px`;
         // Words that still don't fit are cut at the text box, never drawn
         // over the card's border art (overflow alone clips at the padding).
@@ -169,11 +174,20 @@ export default function BoxPreview({
         el.style.padding = "";
         el.style.clipPath = "";
       }
+      // Shrink until it fits. Once the words are small, tighter line spacing
+      // goes first (a many-line message on a phone-sized card) so every line
+      // shows instead of the first and last being cut at the box.
       let size = 16;
+      let leading = 1.35;
       el.style.fontSize = `${size}px`;
-      while (size > 5 && el.scrollHeight > el.clientHeight) {
-        size -= 0.5;
+      el.style.lineHeight = String(leading);
+      while (el.scrollHeight > el.clientHeight) {
+        if (size > 8) size -= 0.5;
+        else if (leading > 1.12) leading = Math.round((leading - 0.05) * 100) / 100;
+        else if (size > 4) size -= 0.25;
+        else break;
         el.style.fontSize = `${size}px`;
+        el.style.lineHeight = String(leading);
       }
     };
     fit();
