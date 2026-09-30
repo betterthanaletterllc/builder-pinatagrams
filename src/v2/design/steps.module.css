@@ -51,38 +51,6 @@
   color: var(--pg-text-2);
 }
 
-/* --- promise line (Step 1) ------------------------------------------------- */
-
-/* One line on a phone: each item leads with its own icon, so no dots. */
-.promise {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 2px 16px;
-  margin: 0 0 8px;
-  padding: 6px 10px;
-  border-radius: var(--pg-r-card);
-  background: var(--pg-cream);
-  list-style: none;
-  font: 500 14px/1.4 var(--pg-font);
-}
-
-.promise li {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-
-.promise strong {
-  font-weight: 600;
-}
-
-.star {
-  color: #c98f00;
-}
-
 /* --- Step 1: occasions + filmstrip ------------------------------------------- */
 
 .occasions {

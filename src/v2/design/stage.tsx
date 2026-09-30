@@ -1,15 +1,21 @@
 "use client";
 
 import Image from "next/image";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import BoxPreview from "@/app/design/box-preview";
 import type { GraphicChoice } from "@/lib/flow";
 import type { HubBodyStyle } from "@/lib/hub";
-import type { BoxInterior, StepId } from "../lib/types";
+import { PINATA_HEIGHT_IN, scopeText } from "../lib/text";
+import type { BoxInterior, StepId, Trust } from "../lib/types";
 import { previewArt } from "../ui/box-thumb";
 import { Skeleton } from "../ui/feedback";
-import { ZoomIn } from "../ui/icons";
+import { Height, Star, ZoomIn } from "../ui/icons";
 import f from "./flow.module.css";
+
+// Where the box's sides sit in its photo, as a share of the photo's width,
+// when a style has no label zone to measure from (the zones put them at
+// ~0.17 / ~0.83 for every style).
+const BOX_EDGE = 0.17;
 
 // The brand confetti message card (Confetti Birthday's graphics/message):
 // custom designs and hub graphics preview AND print on it (v1's rule —
@@ -26,8 +32,9 @@ export function messageCardFor(g: GraphicChoice | null): string | null {
 /**
  * The Stage: the real box photo with the chosen art composited on it
  * (BoxPreview, shared with v1), on every step. The Card step opens the box
- * to show the message printed inside the lid. Step 1 adds a band UNDER the
- * photo — the body chip ("Googly · Change") and the zoom control — so
+ * to show the message printed inside the lid. Step 1 adds a band ABOVE the
+ * photo — the body chip ("Googly · Change piñata") and the zoom control —
+ * and the size and rating in the white space either side of the box, so
  * nothing ever sits on the piñata or the box.
  */
 export default function Stage({
@@ -37,6 +44,7 @@ export default function Stage({
   message,
   filling,
   box,
+  trust,
   onBody,
   onZoom,
   loading,
@@ -49,6 +57,8 @@ export default function Stage({
   message: string;
   filling: string | null;
   box: BoxInterior | null;
+  /** Step 1: the reviews' average, beside the box. */
+  trust?: Trust | null;
   onBody?: () => void;
   onZoom?: () => void;
   loading?: boolean;
@@ -63,12 +73,47 @@ export default function Stage({
   const showBody = !loading && step === "design" && !!style && !!onBody;
   const showZoom = !loading && step === "design" && !!graphic && !!onZoom;
   const showFilling = !loading && step === "deliver" && !!style && !!fillingImage && !!filling;
+  const showStats = !loading && step === "design" && !!style;
+  // The box's left and right edges in its photo (the label spans the front).
+  const zone = style?.logoZone;
+  const leftEdge = zone ? zone.x : BOX_EDGE;
+  const rightEdge = zone ? 1 - zone.x - zone.w : BOX_EDGE;
+  const rating = trust ? trust.rating.toFixed(1) : null;
   return (
     <div
       className={`${f.stage}${privateArt ? " ph-no-capture" : ""}`}
       data-step={step}
       data-bar={showBody || showZoom || undefined}
     >
+      {(showBody || showZoom) && (
+        <div className={f.stageBar}>
+          {showBody && style && (
+            <button type="button" className={f.bodyChip} onClick={onBody} aria-haspopup="dialog">
+              <span className={f.srOnly}>Piñata style: </span>
+              <span className={f.bodyChipArt} aria-hidden="true">
+                <Image
+                  src={style.cutoutUrl ?? `/pinatas/${style.id}.png`}
+                  alt=""
+                  width={64}
+                  height={64}
+                  sizes="32px"
+                />
+              </span>
+              <strong>{style.name}</strong>
+              <span aria-hidden="true">·</span>
+              <span className={f.bodyChipChange}>Change piñata</span>
+            </button>
+          )}
+          {showZoom && (
+            <button type="button" className={f.zoomBtn} onClick={onZoom} aria-haspopup="dialog">
+              <ZoomIn size={18} />
+              <span className={f.zoomMobile}>Zoom</span>
+              <span className={f.zoomDesk}>8 × 3.9 in label · Zoom</span>
+            </button>
+          )}
+        </div>
+      )}
+
       <div className={f.stageView} data-with={showFilling ? "filling" : undefined}>
         {loading ? (
           <Skeleton width="62%" height="78%" radius={16} />
@@ -109,36 +154,25 @@ export default function Stage({
             </figure>
           </>
         )}
+        {showStats && (
+          <p className={f.sideStat} data-side="left" style={{ "--edge": leftEdge } as CSSProperties}>
+            <Height />
+            <strong aria-hidden="true">{PINATA_HEIGHT_IN}″</strong>
+            <span aria-hidden="true">tall</span>
+            <span className={f.srOnly}>Every piñata is {PINATA_HEIGHT_IN} inches tall.</span>
+          </p>
+        )}
+        {showStats && trust && rating && (
+          <p className={f.sideStat} data-side="right" style={{ "--edge": rightEdge } as CSSProperties}>
+            <Star className={f.sideStar} />
+            <strong aria-hidden="true">{rating}</strong>
+            <span aria-hidden="true">stars</span>
+            <span className={f.srOnly}>
+              Rated {rating} out of 5 {scopeText(trust.label)}.
+            </span>
+          </p>
+        )}
       </div>
-
-      {(showBody || showZoom) && (
-        <div className={f.stageBar}>
-          {showBody && style && (
-            <button type="button" className={f.bodyChip} onClick={onBody} aria-haspopup="dialog">
-              <span className={f.srOnly}>Piñata style: </span>
-              <span className={f.bodyChipArt} aria-hidden="true">
-                <Image
-                  src={style.cutoutUrl ?? `/pinatas/${style.id}.png`}
-                  alt=""
-                  width={64}
-                  height={64}
-                  sizes="32px"
-                />
-              </span>
-              <strong>{style.name}</strong>
-              <span aria-hidden="true">·</span>
-              <span className={f.bodyChipChange}>Change piñata</span>
-            </button>
-          )}
-          {showZoom && (
-            <button type="button" className={f.zoomBtn} onClick={onZoom} aria-haspopup="dialog">
-              <ZoomIn size={18} />
-              <span className={f.zoomMobile}>Zoom</span>
-              <span className={f.zoomDesk}>8 × 3.9 in label · Zoom</span>
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

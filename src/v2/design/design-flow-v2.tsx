@@ -86,12 +86,11 @@ import { computeOrder, designName, type OrderPiece } from "../lib/order";
 import { deliveredCents, priceRows, type PriceCtx } from "../lib/pricing";
 import { graphicReady, resolveRestore } from "../lib/restore";
 import { parseStep, stepAt, STEPS } from "../lib/steps";
-import { PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import type { FlowData, GraphicSource, StepId, StepVia } from "../lib/types";
 import BoxThumb from "../ui/box-thumb";
 import { confettiBurst, prefersReducedMotion } from "../ui/confetti";
 import { Callout, PriceTag, useAnnouncer, useToast } from "../ui/feedback";
-import { Alert, Check, Height, Spinner, Star, Truck } from "../ui/icons";
+import { Alert, Check, Spinner, Truck } from "../ui/icons";
 import u from "../ui/ui.module.css";
 import ActionBar, { type Cta } from "./action-bar";
 import DryRunResult from "./dry-run";
@@ -1493,30 +1492,6 @@ export default function DesignFlowV2(data: FlowData) {
       ) : (
         <div className={f.layout}>
           <div className={f.stageCol}>
-            {/* One line: what the bar below can't say. Price and soonest
-                arrival are already in the sticky bar on every step. */}
-            {step === "design" && !loading && (
-              <ul className={st.promise} aria-label="Size and rating">
-                <li>
-                  <Height size={16} />
-                  <span>
-                    <strong>
-                      <span aria-hidden="true">{PINATA_HEIGHT_IN}″</span>
-                      <span className={st.srOnly}>{PINATA_HEIGHT_IN} inches</span>
-                    </strong>{" "}
-                    tall
-                  </span>
-                </li>
-                {data.trust && (
-                  <li>
-                    <Star size={15} className={st.star} />
-                    <span>
-                      {data.trust.rating.toFixed(1)} {scopeText(data.trust.label)}
-                    </span>
-                  </li>
-                )}
-              </ul>
-            )}
             {/* Phones pin Step 1's Stage under the header (see .stagePin). */}
             <div className={f.stagePin} data-step={step}>
               <Stage
@@ -1527,6 +1502,7 @@ export default function DesignFlowV2(data: FlowData) {
                 filling={stageFilling}
                 fillingImage={fillings.find((x) => x.label === stageFilling)?.imageUrl ?? null}
                 box={data.box}
+                trust={data.trust}
                 loading={loading}
                 onBody={draft ? () => setSheet({ kind: "body" }) : undefined}
                 onZoom={draft ? () => setSheet({ kind: "zoom" }) : undefined}

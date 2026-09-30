@@ -196,13 +196,9 @@
 
 /* Phones: the Stage column dissolves into the layout (display: contents), so
    Step 1's Stage can stay pinned under the header while the designs scroll
-   beneath it — a pick always shows on the box. The strip above scrolls away. */
+   beneath it — a pick always shows on the box. */
 .stageCol {
   display: contents;
-}
-
-.stageCol > ul {
-  margin: 8px 16px 0;
 }
 
 /* An opaque page-coloured frame: options scrolling under the pinned Stage
@@ -252,7 +248,7 @@
   view-transition-name: pg-stage;
 }
 
-/* Step 1: the photo plus the band under it (body chip + zoom). Pinned on
+/* Step 1: the photo plus the band above it (body chip + zoom). Pinned on
    phones, so it never grows past what leaves ~220px of designs visible
    under it (a small iPhone inside the Instagram browser is ~560px tall). */
 .stage[data-step="design"] {
@@ -382,14 +378,68 @@
   object-fit: fill;
 }
 
-/* Step 1's band under the photo: nothing ever sits on the piñata or box. */
+/* Step 1: the size and the rating in the white space either side of the
+   box — the Stage's margin plus the photo's own white edge — centred in it,
+   never on the box. The area runs from the Stage's edge to the box's side:
+   the gap beside the square photo frame, the frame's padding, then --edge
+   (the box's side, as a share of the photo's width — from its label zone). */
+.sideStat {
+  --side: min(100cqw, 100cqh);
+  --pad: 6px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(
+    (100cqw - var(--side)) / 2 + var(--pad) + var(--edge) * (var(--side) - 2 * var(--pad))
+  );
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  margin: 0;
+  color: var(--pg-navy);
+  text-align: center;
+  pointer-events: none;
+}
+
+.sideStat[data-side="left"] {
+  left: 0;
+}
+
+.sideStat[data-side="right"] {
+  right: 0;
+}
+
+.sideStat svg {
+  width: clamp(18px, 7.5cqh, 26px);
+  height: auto;
+  margin-bottom: 2px;
+  color: var(--pg-muted);
+}
+
+.sideStat .sideStar {
+  color: #c98f00;
+}
+
+.sideStat strong {
+  font: 600 clamp(19px, 8.5cqh, 30px) / 1.1 var(--pg-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.sideStat span {
+  font: 500 clamp(12px, 4.6cqh, 15px) / 1.25 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+/* Step 1's band above the photo: nothing ever sits on the piñata or box. */
 .stageBar {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 2px 6px 6px;
+  padding: 6px 6px 2px;
 }
 
 .bodyChip {
@@ -695,10 +745,6 @@ button.barPrice {
     padding: 24px;
   }
 
-  .stageCol > ul {
-    margin: 0;
-  }
-
   .stagePin,
   .stagePin[data-step="design"] {
     position: static;
@@ -721,6 +767,10 @@ button.barPrice {
     padding: 24px;
   }
 
+  .sideStat {
+    --pad: 24px;
+  }
+
   /* room to show the whole open box at a readable size: fit, centred */
   .stageBox[data-mode="open"] {
     position: relative;
@@ -731,7 +781,7 @@ button.barPrice {
   }
 
   .stageBar {
-    padding: 4px 12px 12px;
+    padding: 12px 12px 4px;
   }
 
   .zoomMobile {
