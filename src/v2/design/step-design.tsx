@@ -59,6 +59,8 @@ const StepDesign = forwardRef<
     pricing: BuilderPricing;
     libraryCount: number;
     allowCustom: boolean;
+    /** false on folders-only stores: they sell their own folders, not the Classic. */
+    classic: boolean;
     onOccasion: (id: OccasionId) => void;
     onPick: (g: GraphicChoice) => void;
     /** The library, opened on the chosen occasion — or on everything. */
@@ -77,9 +79,9 @@ const StepDesign = forwardRef<
     return !rec || rec.bodyStyles === "all" || rec.bodyStyles.includes(p.style.id);
   };
   let tiles: GraphicChoice[] = (active?.designs ?? p.hubStrip).filter(wearable);
-  // The Classic is always on offer: first (and included) on tiered stores,
-  // at the end on flat ones (same price there).
-  tiles = p.tiered ? [CLASSIC_GRAPHIC, ...tiles] : [...tiles, CLASSIC_GRAPHIC];
+  // The Classic is on offer everywhere but folders-only stores: first (and
+  // included) on tiered stores, at the end on flat ones (same price there).
+  if (p.classic) tiles = p.tiered ? [CLASSIC_GRAPHIC, ...tiles] : [...tiles, CLASSIC_GRAPHIC];
   tiles = tiles.filter((g, i) => tiles.findIndex((x) => sameGraphic(x, g)) === i);
   // The current pick is always visible and selected, even if it came from
   // the library, a deep link or the editor.

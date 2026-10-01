@@ -697,6 +697,14 @@ export async function POST(req: Request) {
     const g = l?.graphic;
     const styleName = style?.name ?? "";
     if (g?.type === "shopify") {
+      // Storefront rule, enforced where the money is: a folders-only store
+      // sells its hub folders — no Shopify library, no Classic.
+      if (variant.library === "none")
+        return {
+          ok: false,
+          code: "graphic_unavailable",
+          message: "that graphic isn't offered on this store — edit the piñata and pick another.",
+        };
       const design = str(g.design, 24).toUpperCase();
       const art = str(g.art, 500);
       if (!DESIGN_RE.test(design) || !ART_RE.test(art))

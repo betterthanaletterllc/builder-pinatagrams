@@ -1327,7 +1327,7 @@ export default function DesignFlowV2(data: FlowData) {
       <Callout tone={affected.length ? "warning" : "info"} role="status">
         <p>
           Everything in this order now travels by{" "}
-          {carrierNotice === "usps" ? "USPS First Class" : "FedEx 2-Day"}.
+          {carrierNotice === "usps" ? "USPS First Class" : "FedEx"}.
         </p>
         {affected.length > 0 && (
           <p>
@@ -1357,6 +1357,7 @@ export default function DesignFlowV2(data: FlowData) {
         pricing={pricing}
         libraryCount={data.libraryCount}
         allowCustom={variant.allowCustom}
+        classic={variant.library !== "none"}
         onOccasion={(id) => {
           if (id === draft.occasion) return;
           patch({ occasion: id });

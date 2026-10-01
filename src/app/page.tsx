@@ -68,7 +68,7 @@ function clipBody(s: string, max = 200): string {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ variant?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // Flow v2 (every host): the inline-hero home in src/v2 — same hub data
   // (catalog, price, reviews), fetched there under the v2 preview rules.
@@ -81,7 +81,7 @@ export default async function Home({
     const host = normalizeHost((await headers()).get("host"));
     const previewVariant =
       process.env.VERCEL_ENV !== "production"
-        ? ((await searchParams).variant ?? null)
+        ? ([(await searchParams).variant].flat()[0] ?? null)
         : null;
     const [catalog, price, reviews] = await Promise.all([
       getCatalog({ host, previewVariant }),

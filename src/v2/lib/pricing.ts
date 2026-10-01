@@ -120,7 +120,7 @@ export function priceRows(
       carrier === "usps"
         ? "USPS First Class"
         : carrier === "fedex"
-          ? "Guaranteed FedEx delivery"
+          ? "FedEx delivery"
           : "Delivery (you choose at the last step)",
     value: ship === null ? "—" : `${carrier ? "" : "from "}${formatCents(ship)}`,
   });

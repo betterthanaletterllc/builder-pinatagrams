@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { formatYmd, resolveDeliveryConfig } from "@/lib/delivery";
 import {
   formatCents,
@@ -34,7 +35,7 @@ import s from "./home.module.css";
 export default async function HomeV2({
   searchParams,
 }: {
-  searchParams: { variant?: string | string[] };
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
   const variantParam = Array.isArray(searchParams.variant)
     ? searchParams.variant[0]
@@ -55,6 +56,16 @@ export default async function HomeV2({
   ]);
 
   const variant = resolveVariantProfile(catalog.variant);
+  // A storefront without a landing (a client store whose own site already
+  // made the pitch, e.g. froggle) opens straight on the builder — never on
+  // the generic Piñatagrams home. The query (UTMs, a discount) rides along.
+  if (!variant.showLanding) {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(searchParams)) {
+      for (const one of [v].flat()) if (one != null) q.append(k, one);
+    }
+    redirect(q.size ? `/design?${q}` : "/design");
+  }
   const pricing = resolveBuilderPricing(catalog.pricing);
   const deliveryCfg = resolveDeliveryConfig(catalog.delivery);
   const tiered = variant.pricing === "tiered";

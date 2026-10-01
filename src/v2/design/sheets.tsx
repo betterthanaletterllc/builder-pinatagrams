@@ -212,7 +212,7 @@ export function LibrarySheet({
 
 /* --- Carrier switch ---------------------------------------------------------------- */
 
-const CARRIER_NAME: Record<Carrier, string> = { fedex: "FedEx 2-Day", usps: "USPS First Class" };
+const CARRIER_NAME: Record<Carrier, string> = { fedex: "FedEx", usps: "USPS First Class" };
 
 /** One order travels one way: picking the other carrier while piñatas are
  *  already in the order asks before switching them all. */
@@ -257,8 +257,8 @@ export function CarrierSwitchSheet({
               ? " — it would arrive within 2–3 business days of its date."
               : " — they'd arrive within 2–3 business days of their dates."
             : one
-              ? " — it usually arrives on its exact day."
-              : " — each usually arrives on its exact day."}
+              ? " — it should arrive on its exact date."
+              : " — each should arrive on its exact date."}
         </p>
       )}
     </Sheet>

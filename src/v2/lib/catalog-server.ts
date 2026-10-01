@@ -109,8 +109,9 @@ export function resolveDesign(
 ): GraphicChoice | null {
   const c = code.trim().toUpperCase();
   if (!/^[A-Z0-9]{2,24}$/.test(c)) return null;
-  // The branded Classic prices at tier 0 everywhere (checkout matches by code).
-  if (c === CLASSIC_GRAPHIC.design) return CLASSIC_GRAPHIC;
+  // The branded Classic prices at tier 0 everywhere (checkout matches by
+  // code) — except folders-only stores, which sell their folders and nothing else.
+  if (c === CLASSIC_GRAPHIC.design) return variant.library === "none" ? null : CLASSIC_GRAPHIC;
   // hubGraphics already holds only the folders this storefront may sell.
   const h = hub.find((x) => x.design === c);
   if (h) return hubChoice(h);
@@ -152,7 +153,10 @@ function designsForOccasion(
 /** The filmstrip per occasion chip showing today (empty chips dropped). */
 export function occasionStrips(variant: VariantProfile, now = new Date()): OccasionStrip[] {
   const lib = libraryFor(variant);
+  // A birthday-only store shows the Birthday chip alone: Thank you / Just
+  // because would only repeat its birthday designs.
   return activeOccasions(now)
+    .filter((def) => variant.library !== "birthday" || def.id === "birthday")
     .map((def) => ({
       id: def.id,
       label: def.label,

@@ -165,7 +165,7 @@ export function computeOrder(input: {
       carrier === "usps"
         ? "USPS First Class"
         : carrier === "fedex"
-          ? "Guaranteed FedEx delivery"
+          ? "FedEx delivery"
           : "Shipping",
     shipTotal,
     codeRows,
