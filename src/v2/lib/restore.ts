@@ -21,7 +21,8 @@ export function graphicReady(g: GraphicChoice): boolean {
  *  - ?edit=<line>: that cart line becomes the draft (a new piñata in
  *    progress is parked, not lost); a line that's gone is dropped quietly.
  *  - an abandoned edit never leaks into a new piñata (it would REPLACE a
- *    cart line on save); a parked piñata comes back.
+ *    cart line on save); a parked piñata comes back. A piñata reopened by
+ *    going Back from the order step stays while its line does.
  *  - a NEW deep link applies its preset over the draft (only what it asked
  *    for); the same link again (a refresh) restores instead.
  *  - ?step=deliver with piñatas in the cart — or an order waiting for
@@ -79,7 +80,11 @@ export function resolveRestore(input: {
       }
     }
   } else {
-    if (d?.editLineId) d = null;
+    // An edit left unsaved never comes back on its own — except the piñata
+    // reopened by going Back from the order step: it IS that line, and stays
+    // while the line does (a refresh mid-way keeps its message and all).
+    const resumedLine = d?.resumed && input.lines.some((l) => l.id === d?.editLineId);
+    if (d?.editLineId && !resumedLine) d = null;
     if (!d && input.parked) {
       d = input.parked;
       unpark = true;

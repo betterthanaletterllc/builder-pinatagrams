@@ -36,6 +36,11 @@ export type DraftV2 = {
   date: string; // YYYY-MM-DD, "" = not picked (never silently preselected)
   dateSoonest: boolean; // picked via "Soonest" → follows carrier changes
   editLineId: string | null;
+  /** The piñata added last, reopened by going Back from the order step
+   *  (after Checkout too): it saves over its own line like an edit, but the
+   *  steps and the order read as the piñata in progress — no "Editing",
+   *  Checkout and Add another as before. */
+  resumed?: boolean;
 };
 
 /** Order-level: one carrier, one recipient, one receipt email per order. */
@@ -168,6 +173,7 @@ function read(key: string): DraftV2 | null {
       msgFrom: String(d.msgFrom ?? ""),
       date: typeof d.date === "string" ? d.date : "",
       editLineId: typeof d.editLineId === "string" ? d.editLineId : null,
+      resumed: d.resumed === true || undefined,
     };
   } catch {
     return null;

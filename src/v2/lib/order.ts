@@ -77,8 +77,10 @@ export function pieceFromLine(l: CartLine): OrderPiece {
 export function computeOrder(input: {
   /** A NEW piñata in progress (not in the cart yet). */
   current: OrderPiece | null;
-  /** A cart line being edited: shown with its live, unsaved values. */
-  editing: { lineId: string; piece: OrderPiece } | null;
+  /** A cart line being edited: shown with its live, unsaved values.
+   *  `resumed` (reopened by going Back from the order step) reads as the
+   *  piñata in progress, not "Editing". */
+  editing: { lineId: string; piece: OrderPiece; resumed?: boolean } | null;
   cart: CartLine[];
   carrier: Carrier | null;
   uspsOffered: boolean;
@@ -121,7 +123,7 @@ export function computeOrder(input: {
   if (input.current) add("current", input.current, "current");
   for (const l of input.cart) {
     if (input.editing && l.id === input.editing.lineId) {
-      add(l.id, { ...input.editing.piece, qty: l.qty }, "editing");
+      add(l.id, { ...input.editing.piece, qty: l.qty }, input.editing.resumed ? "current" : "editing");
     } else {
       add(l.id, pieceFromLine(l), "line");
     }

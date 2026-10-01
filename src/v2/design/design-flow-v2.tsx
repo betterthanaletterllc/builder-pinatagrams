@@ -262,7 +262,9 @@ export default function DesignFlowV2(data: FlowData) {
   // A design that's still saving holds you on Step 1; an empty card holds
   // you on Step 2 (every piñata carries a message).
   const maxReachable = draft ? (graphicReady(draft.graphic) ? (hasMessage(draft) ? 3 : 1) : 0) : 3;
-  const editing = !!draft?.editLineId;
+  // An explicit Edit of a cart line ("Save changes"); a piñata reopened by
+  // going Back from the order step reads as the one in progress instead.
+  const editing = !!draft?.editLineId && !draft.resumed;
   const loading =
     reopening || (!hydrated && (data.requestedStep !== "design" || !!data.editLineId));
 
@@ -289,6 +291,23 @@ export default function DesignFlowV2(data: FlowData) {
     },
     [data.preset, data.strips, tiered, fillings],
   );
+
+  /**
+   * Back from the order step with nothing in progress (after Checkout too,
+   * back from the invoice): the piñata added last comes back — design,
+   * message, filling as they were — instead of a blank one. It saves over
+   * its own line (never a copy, no second add-to-cart); "Add another" is how
+   * a new piñata starts. Null when the order is empty (or its style is gone).
+   */
+  const resumeLastLine = useCallback((): DraftV2 | null => {
+    const lines = loadCart();
+    const last = lines[lines.length - 1];
+    if (!last || !stylesById.has(last.styleId)) return null;
+    const d: DraftV2 = { ...draftFromLine(last, data.preset.occasion), resumed: true };
+    draftRef.current = d;
+    setDraft(d);
+    return d;
+  }, [stylesById, data.preset.occasion]);
 
   /* --- navigation (history-backed, View Transitions, focus to the h1) ---- */
 
@@ -423,12 +442,16 @@ export default function DesignFlowV2(data: FlowData) {
       // top would play the step change a second time.
       const animate = !(e as PopStateEvent & { hasUAVisualTransition?: boolean })
         .hasUAVisualTransition;
-      const d = draftRef.current;
+      let d = draftRef.current;
       if (!d && target !== "deliver") {
-        // Back from the order review into the design steps = a new piñata.
-        setDraft(freshPiece(null));
-        navigate("design", { via: "back", history: "replace", animate });
-        return;
+        // Back from the order review into the design steps: the piñata
+        // added last, as it was — a new one only when the order is empty.
+        d = resumeLastLine();
+        if (!d) {
+          setDraft(freshPiece(null));
+          navigate("design", { via: "back", history: "replace", animate });
+          return;
+        }
       }
       const clamped =
         d && !graphicReady(d.graphic)
@@ -447,7 +470,7 @@ export default function DesignFlowV2(data: FlowData) {
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [navigate, freshPiece]);
+  }, [navigate, freshPiece, resumeLastLine]);
 
   /* --- persistence + outside changes -------------------------------------- */
 
@@ -798,7 +821,7 @@ export default function DesignFlowV2(data: FlowData) {
     !!cartAddress && Object.keys(validateAddress(cartAddress, carrier, uspsOffered)).length === 0;
   const usingCartAddress = cartAddressOk && !editingAddress;
   const shipTo: DeliveryAddress = usingCartAddress ? cartAddress! : prefs.address;
-  const someoneElse = !!draft && !editing && !!cartAddress && prefs.recipient === "new";
+  const someoneElse = !!draft && !draft.editLineId && !!cartAddress && prefs.recipient === "new";
   const addressErrors: AddressErrors =
     usingCartAddress || someoneElse ? {} : validateAddress(prefs.address, carrier, uspsOffered);
   const shownAddressErrors: AddressErrors = Object.fromEntries(
@@ -833,7 +856,10 @@ export default function DesignFlowV2(data: FlowData) {
         : null;
     return computeOrder({
       current: live && !draft?.editLineId ? live : null,
-      editing: live && draft?.editLineId ? { lineId: draft.editLineId, piece: live } : null,
+      editing:
+        live && draft?.editLineId
+          ? { lineId: draft.editLineId, piece: live, resumed: !!draft.resumed }
+          : null,
       cart,
       carrier,
       uspsOffered,
@@ -1065,14 +1091,16 @@ export default function DesignFlowV2(data: FlowData) {
   };
 
   const editLine = (id: string) => {
-    if (id === "current") {
+    // the piñata in progress (or the line already open) — straight to it
+    if (id === "current" || draftRef.current?.editLineId === id) {
       navigate("design", { via: "chip", history: "push" });
       return;
     }
     const line = cart.find((l) => l.id === id);
     if (!line) return;
     const d = draftRef.current;
-    if (d && !d.editLineId) saveParked(d); // set the new piñata aside
+    // set the piñata in progress aside (a reopened one too: it's unsaved)
+    if (d && (!d.editLineId || d.resumed)) saveParked(d);
     setDraft(draftFromLine(line, d?.occasion ?? data.preset.occasion));
     resetStep4();
     const url = new URL(window.location.href);
@@ -1247,10 +1275,13 @@ export default function DesignFlowV2(data: FlowData) {
   const stageGraphic = draft?.graphic ?? last?.graphic ?? null;
   const stageFilling = draft?.filling ?? last?.filling ?? null;
   const idx = STEPS[step].index;
+  // The order review with nothing in progress steps back into the piñata
+  // added last (resumeLastLine), not out to the home page.
+  const backIntoOrder = !draft && step === "deliver" && cart.length > 0;
   const backLabel =
     view === "editor"
       ? "Close the editor"
-      : idx === 0 || !draft
+      : idx === 0 || (!draft && !backIntoOrder)
         ? "Back to the home page"
         : `Back to ${STEPS[stepAt(idx - 1)].name}`;
 
@@ -1258,6 +1289,10 @@ export default function DesignFlowV2(data: FlowData) {
     if (view === "editor") return closeEditor();
     if (Number(window.history.state?.pgDepth ?? 0) > 0) {
       window.history.back();
+      return;
+    }
+    if (backIntoOrder && resumeLastLine()) {
+      navigate(stepAt(idx - 1), { via: "back", history: "replace" });
       return;
     }
     if (idx === 0 || !draft) {
@@ -1405,7 +1440,7 @@ export default function DesignFlowV2(data: FlowData) {
         recipient={{
           cartAddress: cartAddressOk ? cartAddress : null,
           cartCount: cart.length,
-          allowSomeoneElse: !!draft && !editing,
+          allowSomeoneElse: !!draft && !draft.editLineId,
           mode: prefs.recipient,
           onMode: (m) => setPrefs((p) => ({ ...p, recipient: m })),
           editing: editingAddress,
