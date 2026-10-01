@@ -3959,6 +3959,15 @@ ul.addr-sugs {
   background: #eef1fd;
 }
 
+/* "Google Maps" credit under Google's suggestions (their terms). */
+.addr-credit {
+  padding: 6px 14px;
+  border-top: 1px solid var(--line);
+  color: #5f6368;
+  font-size: 12px;
+  text-align: right;
+}
+
 .several-link {
   margin-top: 14px;
 }

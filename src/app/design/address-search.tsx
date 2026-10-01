@@ -6,16 +6,17 @@ import { stateCode, US_STATES } from "@/lib/flow";
 /**
  * Shopify-checkout-style address autocomplete: the Address field ITSELF
  * suggests as you type — pick one and street/city/state/ZIP fill in.
- * Backed by Photon (OpenStreetMap's geocoder) — free, keyless, CORS-open;
- * the query is boxed to the US, house-number results sort first, and a
+ * Backed by Google Places through /api/address (one billed session per
+ * address: the keystrokes and the final pick share a session token). No
+ * key configured, or Google unreachable → Photon (OpenStreetMap's geocoder,
+ * free, keyless): boxed to the US, house-number results first, and a
  * suggestion needs a street + city + state to be offered.
- * Service down or address unknown → the field is just a normal input (and
- * the browser's own address autofill works on it too).
+ * Both down or address unknown → the field is just a normal input (and the
+ * browser's own address autofill works on it too).
  *
  * An ARIA 1.2 combobox: arrows move through the list, Enter picks, Escape
  * closes, and a pointer pick lands on click — so taps work on touch screens
  * and in in-app browsers, not just mouse presses.
- * (Upgrade path: swap the fetch for Google Places behind the same UI.)
  */
 
 export type PickedAddress = {
@@ -25,7 +26,68 @@ export type PickedAddress = {
   zip: string;
 };
 
-type Suggestion = PickedAddress & { label: string };
+// A Google suggestion carries only its place id until it's picked; the
+// address parts come from the pick's Details call.
+type Suggestion = PickedAddress & { label: string; placeId?: string };
+
+// Set once /api/address says Google isn't configured: Photon from then on.
+let googleOff = false;
+
+const newSession = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+
+/** Google's suggestions for the typed line — null means "use Photon". */
+async function googleSuggest(value: string, session: string): Promise<Suggestion[] | null> {
+  if (googleOff) return null;
+  const r = await fetch(
+    `/api/address?q=${encodeURIComponent(value)}&session=${encodeURIComponent(session)}`,
+  );
+  if (r.status === 503) googleOff = true;
+  if (!r.ok) return null;
+  const j: { suggestions?: { id: string; main: string; secondary: string }[] } = await r.json();
+  return (j.suggestions ?? []).map((s) => ({
+    label: s.secondary ? `${s.main}, ${s.secondary}` : s.main,
+    address1: s.main,
+    city: "",
+    province: "",
+    zip: "",
+    placeId: s.id,
+  }));
+}
+
+/** A picked Google suggestion → its address parts, or null on any hiccup. */
+async function googleDetails(
+  s: Suggestion,
+  session: string,
+  typed: { number: string; dir: string },
+): Promise<PickedAddress | null> {
+  try {
+    const r = await fetch(
+      `/api/address?place=${encodeURIComponent(s.placeId!)}&session=${encodeURIComponent(session)}`,
+    );
+    if (!r.ok) return null;
+    const j: {
+      address: { number: string; street: string; city: string; province: string; zip: string } | null;
+    } = await r.json();
+    const a = j.address;
+    if (!a || !a.street || !a.city || !US_STATES.some(([code]) => code === a.province)) return null;
+    // Same rule as Photon's: a pick only ADDS to what was typed.
+    if (typed.number && a.number && a.number.toLowerCase() !== typed.number.toLowerCase())
+      return null;
+    const number = a.number || typed.number;
+    return {
+      address1: number ? `${number} ${a.street}` : a.street,
+      city: a.city,
+      province: a.province,
+      // a street without a door spans several ZIPs: never guess theirs
+      zip: a.number ? a.zip : "",
+    };
+  } catch {
+    return null;
+  }
+}
 
 // The 50 states + DC live once, in lib/flow (the cart's State select uses
 // them too); re-exported here for the flow's existing imports.
@@ -132,6 +194,11 @@ export default function AddressLine1({
   const reqId = useRef(0);
   // After a pick, the field holds the chosen street — don't re-search it.
   const picked = useRef<string | null>(null);
+  // One Google session per address: renewed after every pick.
+  const session = useRef(newSession());
+  const [fromGoogle, setFromGoogle] = useState(false);
+  const latestValue = useRef(value);
+  latestValue.current = value;
   const listId = `${inputId}-sugs`;
 
   useEffect(() => {
@@ -147,6 +214,15 @@ export default function AddressLine1({
     }
     timer.current = window.setTimeout(async () => {
       try {
+        const g = await googleSuggest(value, session.current).catch(() => null);
+        if (id !== reqId.current) return;
+        if (g) {
+          setSugs(g);
+          setFromGoogle(true);
+          setActive(-1);
+          setOpen(g.length > 0);
+          return;
+        }
         const r = await fetch(
           `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=8&lang=en&layer=house&layer=street&bbox=${US_BBOX}`,
         );
@@ -183,6 +259,7 @@ export default function AddressLine1({
           zip: s.zip,
         }));
         setSugs(list);
+        setFromGoogle(false);
         setActive(-1);
         setOpen(list.length > 0);
       } catch {
@@ -194,13 +271,25 @@ export default function AddressLine1({
 
   useEffect(() => () => window.clearTimeout(closeTimer.current), []);
 
-  const choose = (s: Suggestion) => {
+  const choose = async (s: Suggestion) => {
     window.clearTimeout(closeTimer.current);
-    picked.current = s.address1;
-    onPick(s);
     setOpen(false);
     setSugs([]);
     setActive(-1);
+    if (!s.placeId) {
+      picked.current = s.address1;
+      onPick(s);
+      return;
+    }
+    // Google: the address parts come with the pick (which also closes the
+    // billed session). A typed line that changed meanwhile wins; a failed
+    // lookup leaves what was typed alone.
+    const typedAt = value;
+    const a = await googleDetails(s, session.current, typedStreet(value));
+    session.current = newSession();
+    if (!a || typedAt !== latestValue.current) return;
+    picked.current = a.address1;
+    onPick(a);
   };
 
   // A list from before the house number changed (the new answer still on
@@ -299,6 +388,13 @@ export default function AddressLine1({
                 {s.label}
               </li>
             ))}
+            {/* Google's terms: suggestions shown without a map credit
+                "Google Maps" (exact wording). */}
+            {fromGoogle && (
+              <li role="presentation" className="addr-credit" aria-hidden="true">
+                Google Maps
+              </li>
+            )}
           </ul>
         )}
       </div>
