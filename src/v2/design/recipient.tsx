@@ -126,7 +126,8 @@ export function AddressForm({
             address1: p.address1,
             city: p.city,
             province: toStateCode(p.province) || p.province,
-            zip: p.zip,
+            // a street-only pick carries no ZIP: keep the one typed
+            ...(p.zip ? { zip: p.zip } : {}),
           })
         }
         onBlur={() => onBlurField("address1")}

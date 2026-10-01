@@ -179,7 +179,8 @@ export default function RecipientForm({
         inputId={`${idPrefix}-address1`}
         value={value.address1}
         onChange={(v) => set("address1", v)}
-        onPick={(picked) => onChange({ ...value, ...picked })}
+        // a street-only pick carries no ZIP: keep the one typed
+        onPick={(picked) => onChange({ ...value, ...picked, zip: picked.zip || value.zip })}
         error={shown("address1")}
         onBlur={leave("address1")}
       />
