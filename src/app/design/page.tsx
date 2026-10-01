@@ -27,7 +27,7 @@ import dynamicImport from "next/dynamic";
 import VariantBoot from "../variant-boot";
 
 // v1's flow (and the graphic library it pulls in) as its own chunk, so
-// builder2 visitors — who get the v2 journey above — never download it.
+// v2 visitors — everyone in production since v1's sunset — never download it.
 const DesignFlow = dynamicImport(() => import("./design-flow"));
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export default async function DesignPage({
 }: {
   searchParams: Promise<{ style?: string; variant?: string; edit?: string }>;
 }) {
-  // builder2 (flow v2): the four-step journey in src/v2. It resolves its own
+  // Flow v2 (every host): the four-step journey in src/v2. It resolves its own
   // defaults, so a missing or unknown ?style= never dead-ends there.
   if (flowFromHeaders(await headers()) === "v2") {
     return (

@@ -17,22 +17,27 @@ project memory / ROADMAP.md (workstream #7).
 | Fulfillment | Paper (internal monorepo) — meets this app ONLY at Shopify order → webhook → print |
 | Brand identity (colors, logos, fonts) | **`design-system/`** (github.com/betterthanaletterllc/pinatagrams-design-system) — official tokens in `colors_and_type.css` (navy/periwinkle/cream; Arbotek display + Poppins); this app's `globals.css` carries the semantic subset. NOTE: quote/gift still ship an older pink/teal palette — alignment is a separate decision |
 
-## Two flows, one app (2026-09 overhaul)
+## One flow: v2 (v1 sunset 2026-09-30)
 
-The request HOSTNAME picks the journey — `src/lib/flow-version.ts`
-(`V2_HOSTS`), stamped by `src/middleware.ts` as the `x-pg-flow` request header
-and on `<body data-flow>`:
+Every host runs the four-step journey in `src/v2/` — Design → Card → Inside →
+Deliver & pay. `src/lib/flow-version.ts` decides it, stamped by
+`src/middleware.ts` as the `x-pg-flow` request header and on
+`<body data-flow>`. It ran on builder2.pinatagrams.com first and replaced the
+original flow (v1) on builder.pinatagrams.com on 2026-09-30; builder2 keeps
+serving it.
 
-| Host | Flow | What it is |
+| Host | Hub variant profile | Pricing |
 |---|---|---|
-| builder.pinatagrams.com | **v1** | Today's flow (body → graphic → message → filling → add-ons → delivery → send-to → cart), with the overhaul's fixes |
-| builder2.pinatagrams.com | **v2** | The four-step journey in `src/v2/` — Design → Card → Inside → Deliver & pay — on hub variant `version-b` (tiered + FedEx/USPS) |
+| builder.pinatagrams.com | whichever profile lists the host (admin → Builder → Storefronts) | from that profile |
+| builder2.pinatagrams.com | `version-b` | tiered + FedEx/USPS |
 
-Both flows share the cart, `/cart`, `/api/checkout` and everything Paper
-receives. Locally, `?flow=v2` (remembered in a cookie; `?flow=` resets) plus
-`?variant=version-b` previews builder2: `http://localhost:3006/?flow=v2&variant=version-b`.
-Production ignores both overrides. Switching the main site to v2 later =
-add its host to `V2_HOSTS` (or move the switch into the hub's variant rows).
+Prices and carriers come from each host's variant profile in the hub, and
+checkout re-resolves them per host. v1's code (`src/app/design/design-flow.tsx`,
+`/cart`'s cart view, the v1 home) is no longer served in production — `/cart`
+redirects to `/design?step=deliver` — and stays only until it's removed.
+Locally, `?flow=v1` still previews it (remembered in a cookie; `?flow=` resets),
+and `?variant=<name>` previews a hub profile, e.g.
+`http://localhost:3006/?variant=version-b`. Production ignores both overrides.
 
 Server pieces added with the overhaul:
 

@@ -67,7 +67,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   // Which journey this request gets (src/middleware.ts → x-pg-flow). v2
-  // (builder2) swaps the site chrome for its own header/footer and scopes
+  // (every host since v1's sunset) swaps the site chrome for its own header/footer and scopes
   // its design tokens to <body>; client code reads body[data-flow].
   const flow = flowFromHeaders(await headers());
   const v2 = flow === "v2";

@@ -70,7 +70,7 @@ export default async function Home({
 }: {
   searchParams: Promise<{ variant?: string }>;
 }) {
-  // builder2 (flow v2): the inline-hero home in src/v2 — same hub data
+  // Flow v2 (every host): the inline-hero home in src/v2 — same hub data
   // (catalog, price, reviews), fetched there under the v2 preview rules.
   if (flowFromHeaders(await headers()) === "v2") {
     return <HomeV2 searchParams={await searchParams} />;

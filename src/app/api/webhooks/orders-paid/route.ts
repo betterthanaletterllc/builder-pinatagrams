@@ -161,7 +161,8 @@ export async function POST(req: Request) {
     carrier: attr(pinatas[0]?.properties, "_carrier") ?? "fedex",
     lead_time_days: leadDays,
     store_host: host,
-    flow_version: host === "builder2.pinatagrams.com" ? "v2" : "v1",
+    // stamped by checkout since v1's sunset; older orders: builder2 ran v2
+    flow_version: attr(notes, "_builderFlow") ?? (host === "builder2.pinatagrams.com" ? "v2" : "v1"),
     variant: tags.find((t) => t.startsWith("variant-"))?.slice("variant-".length),
     joined_to_session: Boolean(attr(notes, "_phDistinctId")),
     ...(sessionId ? { $session_id: sessionId } : {}),

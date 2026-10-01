@@ -1,15 +1,17 @@
 /**
- * Which customer journey a request gets. builder.pinatagrams.com keeps the
- * original flow ("v1"); builder2.pinatagrams.com runs the four-step journey
- * ("v2", everything under src/v2). ONE codebase, ONE deployment: the request
- * HOSTNAME picks the flow, exactly as it picks the variant profile
- * (lib/variant) — builder2 also resolves to the version-b profile in the hub.
+ * Which customer journey a request gets. Since 2026-09-30 every host runs
+ * the four-step journey ("v2", everything under src/v2) — it replaced the
+ * original flow ("v1") on builder.pinatagrams.com after running on
+ * builder2.pinatagrams.com. v1 is sunset: production never serves it, and
+ * its code stays only until it's removed, reachable through the preview
+ * override below. (Prices and carriers still follow each host's variant
+ * profile in the hub, resolved by hostname — lib/variant.)
  *
  * src/middleware.ts stamps the decision on every request as the x-pg-flow
  * header; server components read it back with flowFromHeaders(). Outside
- * production, ?flow=v1|v2 overrides the host and is remembered in a cookie
- * so the v2 journey can be walked on localhost / Vercel previews (combine
- * with ?variant=version-b for the builder2 profile). Production ignores both.
+ * production, ?flow=v1|v2 overrides it and is remembered in a cookie, so v1
+ * can still be walked on localhost / Vercel previews (and ?variant=<name>
+ * previews a hub profile, e.g. version-b). Production ignores both.
  *
  * The flow is PRESENTATION only: checkout re-prices and re-validates every
  * line from the hub either way, and variant identity stays advisory.
@@ -20,9 +22,6 @@
 
 export type FlowVersion = "v1" | "v2";
 
-/** Hostnames that serve the v2 journey in production. */
-export const V2_HOSTS = ["builder2.pinatagrams.com"];
-
 /** Request header carrying the middleware's decision to server components. */
 export const FLOW_HEADER = "x-pg-flow";
 
@@ -30,17 +29,14 @@ export const FLOW_HEADER = "x-pg-flow";
 export const FLOW_COOKIE = "pg-flow";
 export const VARIANT_COOKIE = "pg-variant";
 
-function hostOnly(host: string | null | undefined): string {
-  return (host ?? "").trim().toLowerCase().replace(/:\d+$/, "");
-}
-
 export function parseFlow(v: string | null | undefined): FlowVersion | null {
   return v === "v1" || v === "v2" ? v : null;
 }
 
-/** The flow a hostname serves when no preview override applies. */
-export function flowForHost(host: string | null | undefined): FlowVersion {
-  return V2_HOSTS.includes(hostOnly(host)) ? "v2" : "v1";
+/** The flow a hostname serves when no preview override applies: v2, on
+ *  every host (v1 is sunset). */
+export function flowForHost(_host?: string | null): FlowVersion {
+  return "v2";
 }
 
 /** Preview overrides (?flow=, ?variant= cookies) — the same gate v1 uses for

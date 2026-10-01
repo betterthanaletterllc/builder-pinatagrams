@@ -32,6 +32,7 @@ import {
   uspsWindow,
   type Carrier,
 } from "@/lib/delivery";
+import { flowFromHeaders } from "@/lib/flow-version";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { ensureOrdersPaidWebhookOnce } from "@/lib/webhooks";
 import {
@@ -1085,6 +1086,9 @@ export async function POST(req: Request) {
         // Underscore keys keep them out of customer-facing surfaces.
         customAttributes: [
           { key: "_builderHost", value: reqHost || "unknown-host" },
+          // which journey placed it (v1 was sunset 2026-09-30) — the
+          // orders/paid event's flow_version, whatever host it came from
+          { key: "_builderFlow", value: flowFromHeaders(req.headers) },
           {
             key: "_builderVariant",
             value: `${variant.name} (${variant.pricing}/${variant.carriers.join("+")})`,

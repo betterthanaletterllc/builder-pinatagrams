@@ -33,9 +33,9 @@ export function middleware(req: NextRequest) {
     .toLowerCase()
     .replace(/:\d+$/, "");
 
-  // Which journey this request gets (lib/flow-version): the hostname
-  // decides; outside production ?flow=v1|v2 overrides it and is remembered
-  // in a cookie so the preview survives navigation (?flow= alone clears it).
+  // Which journey this request gets (lib/flow-version): v2 on every host;
+  // outside production ?flow=v1|v2 overrides it and is remembered in a
+  // cookie so the preview survives navigation (?flow= alone clears it).
   let flow: FlowVersion = flowForHost(host);
   let flowCookie: FlowVersion | null | undefined; // undefined = untouched
   let variantCookie: string | null | undefined;
