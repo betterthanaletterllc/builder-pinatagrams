@@ -257,8 +257,8 @@ export function CarrierSwitchSheet({
               ? " — it would arrive within 2–3 business days of its date."
               : " — they'd arrive within 2–3 business days of their dates."
             : one
-              ? " — it should arrive on its exact date."
-              : " — each should arrive on its exact date."}
+              ? " — it’s expected to arrive on its exact date."
+              : " — each is expected to arrive on its exact date."}
         </p>
       )}
     </Sheet>

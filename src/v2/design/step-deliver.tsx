@@ -97,7 +97,7 @@ const StepDeliver = forwardRef<
               checked={p.carrier === "fedex"}
               onChange={() => p.onCarrier("fedex")}
               title="FedEx"
-              description="Should arrive on the exact date you pick"
+              description="Expected to arrive on the exact date you pick"
               aside={perPiece(p.fedexCents)}
             />
             <OptionCard

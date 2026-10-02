@@ -1,7 +1,7 @@
 import { STEP_IDS, type StepId } from "./types";
 
-/** The four steps: titles (Arbotek h1), header names, CTA labels. Phones
- *  under 480px get the short label — a plain "Next" ("Next: Card" read as
+/** The four steps: titles (Arbotek h1), header names, CTA labels. Every
+ *  step but the last says a plain "Next" at every width ("Next: Card" read as
  *  "the next card"); the header's progress bar already says where it goes. */
 export const STEPS: Record<
   StepId,
@@ -11,21 +11,21 @@ export const STEPS: Record<
     index: 0,
     title: "Pick your design",
     name: "Design",
-    next: "Next: Write the card",
+    next: "Next",
     nextShort: "Next",
   },
   card: {
     index: 1,
     title: "Write the card",
     name: "Card",
-    next: "Next: What's inside",
+    next: "Next",
     nextShort: "Next",
   },
   inside: {
     index: 2,
     title: "What goes inside?",
     name: "Inside",
-    next: "Next: Delivery",
+    next: "Next",
     nextShort: "Next",
   },
   deliver: {
