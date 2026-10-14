@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isMcpMode, mcpModeAllows } from "@/lib/app-mode";
 import {
   FLOW_COOKIE,
   FLOW_HEADER,
@@ -29,6 +30,19 @@ const PREVIEW_COOKIE = {
 };
 
 export function middleware(req: NextRequest) {
+  // The MCP face (mcp.pinatagrams.com, APP_MODE=mcp): only the MCP endpoint
+  // exists; every storefront page, cart, checkout and cron route is a 404 so
+  // the second deployment can never act as a duplicate storefront.
+  if (isMcpMode()) {
+    const robots = "noindex, nofollow";
+    if (!mcpModeAllows(req.nextUrl.pathname)) {
+      return new NextResponse("Not found", { status: 404, headers: { "X-Robots-Tag": robots } });
+    }
+    const res = NextResponse.next();
+    res.headers.set("X-Robots-Tag", robots);
+    return res;
+  }
+
   const host = (req.headers.get("host") ?? "")
     .toLowerCase()
     .replace(/:\d+$/, "");

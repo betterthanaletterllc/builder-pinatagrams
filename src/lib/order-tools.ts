@@ -1,0 +1,183 @@
+import { getCatalog, type HubCatalog } from "@/lib/hub";
+import {
+  deliveryProblem,
+  maxDeliveryDate,
+  minDeliveryDate,
+  resolveDeliveryConfig,
+  type Carrier,
+} from "@/lib/delivery";
+import { toolError, toolText, type McpToolListing, type ToolAnnotations } from "@/lib/mcp-http";
+
+/**
+ * The ordering MCP's tool registry — transport-agnostic so the same table
+ * can feed the MCP shell today and a REST twin later. Every tool validates
+ * its own arguments (no zod in the builder; schemas are hand-written JSON
+ * Schema and checked by the handler), reads the hub's PUBLIC plane only,
+ * and returns JSON as MCP text content.
+ *
+ * Phase 0 ships the two reads that can never be wrong about money: the
+ * catalog and the delivery calendar. Pricing and checkout follow once the
+ * golden Paper-contract test guards the checkout route.
+ */
+
+const READ_ONLY: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
+type ToolDef = {
+  description: string;
+  inputSchema: Record<string, unknown>;
+  annotations: ToolAnnotations;
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+};
+
+const CARRIERS: Carrier[] = ["fedex", "usps"];
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+function num(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function str(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/** Customer-safe projection of the hub catalog: nothing here is a cost,
+ *  a margin or an exact stock count — the hub's public plane already
+ *  withholds those, and this narrows further to what an agent needs. */
+function projectCatalog(catalog: HubCatalog) {
+  const raw = catalog as unknown as Record<string, unknown>;
+  const shipping = (raw.shipping ?? {}) as Record<string, unknown>;
+  const pricing = (raw.pricing ?? {}) as Record<string, unknown>;
+  const cfg = resolveDeliveryConfig(catalog.delivery);
+  return {
+    as_of: catalog.asOf,
+    ...(catalog.stale ? { stale: catalog.stale } : {}),
+    body_styles: catalog.bodyStyles.map((s) => ({
+      id: s.id,
+      name: s.name,
+      in_stock: !!s.inStock,
+      image_url: s.imageUrl ?? null,
+    })),
+    fillings: (catalog.fillings ?? []).map((f) => ({
+      id: f.id,
+      label: f.label,
+      blurb: f.blurb ?? "",
+      price_cents: num(f.priceCents) ?? 0,
+    })),
+    add_ons: (catalog.addons ?? []).map((a) => ({
+      id: a.id,
+      label: a.label,
+      price_cents: num(a.priceCents) ?? 0,
+    })),
+    shipping_per_unit_cents: {
+      fedex_2day: num(shipping.fedexCents),
+      usps_first_class: num(shipping.uspsCents),
+    },
+    graphic_upcharge_cents: {
+      library_design: num(pricing.graphicLibraryUpchargeCents),
+      custom_art: num(pricing.graphicCustomUpchargeCents),
+    },
+    delivery: {
+      timezone: "America/Chicago",
+      earliest_fedex: minDeliveryDate(cfg, "fedex"),
+      earliest_usps: minDeliveryDate(cfg, "usps"),
+      latest: maxDeliveryDate(cfg),
+    },
+    currency: "USD",
+    note: "All amounts are integer cents before tax. Every piñata is a gift box with a printed message card inside; the recipient keeps the piñata and pulls the treats out.",
+  };
+}
+
+export const orderTools: Record<string, ToolDef> = {
+  get_catalog: {
+    description:
+      "What Piñatagrams can send right now: body styles with in-stock status, fillings, add-ons, per-unit shipping (FedEx 2-Day guaranteed date vs USPS First Class window), graphic upcharges, and the earliest and latest delivery dates. Amounts are integer cents. Call this before quoting anything.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: READ_ONLY,
+    handler: async () => projectCatalog(await getCatalog()),
+  },
+
+  get_delivery_options: {
+    description:
+      "Delivery-date rules for a carrier (fedex = 2-Day with a guaranteed arrival date; usps = First Class, arrives in a window around the chosen day). Returns the earliest and latest selectable dates, and if you pass a date, whether that exact date works and why not.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        carrier: {
+          type: "string",
+          enum: CARRIERS,
+          description: "fedex (default) or usps",
+        },
+        date: {
+          type: "string",
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+          description: "Optional YYYY-MM-DD arrival date to validate",
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: READ_ONLY,
+    handler: async (args) => {
+      const carrierArg = str(args.carrier) ?? "fedex";
+      if (!CARRIERS.includes(carrierArg as Carrier)) {
+        return toolError(`carrier must be one of: ${CARRIERS.join(", ")}`);
+      }
+      const carrier = carrierArg as Carrier;
+      const date = str(args.date);
+      if (date !== null && !YMD.test(date)) {
+        return toolError("date must be YYYY-MM-DD");
+      }
+      const catalog = await getCatalog();
+      const cfg = resolveDeliveryConfig(catalog.delivery);
+      const problem = date ? deliveryProblem(date, cfg, carrier) : null;
+      return {
+        carrier,
+        timezone: "America/Chicago",
+        earliest: minDeliveryDate(cfg, carrier),
+        latest: maxDeliveryDate(cfg),
+        ...(date
+          ? { requested: date, ok: problem === null, ...(problem ? { reason: problem } : {}) }
+          : {}),
+        promise:
+          carrier === "fedex"
+            ? "Arrives on the exact date you pick (FedEx 2-Day)."
+            : `Arrives within about ${cfg.uspsWindowDays} mailing days either side of the date you pick (USPS First Class).`,
+      };
+    },
+  },
+};
+
+export function orderToolList(): McpToolListing[] {
+  return Object.entries(orderTools).map(([name, def]) => ({
+    name,
+    description: def.description,
+    inputSchema: def.inputSchema,
+    annotations: def.annotations,
+  }));
+}
+
+/** Execute a tool call; returns MCP content. Throws only on unknown tool. */
+export async function executeOrderTool(name: string, args: unknown) {
+  const def = orderTools[name];
+  if (!def) throw new Error(`Unknown tool: ${name}`);
+  const input =
+    args && typeof args === "object" && !Array.isArray(args)
+      ? (args as Record<string, unknown>)
+      : {};
+  try {
+    const result = await def.handler(input);
+    // Handlers may return a ready-made refusal (isError) or plain JSON.
+    if (result && typeof result === "object" && "content" in result) return result;
+    return toolText(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[mcp] ${name} failed: ${message}`);
+    return toolError(
+      "The catalog is temporarily unavailable. Try again in a minute; nothing was ordered.",
+    );
+  }
+}
