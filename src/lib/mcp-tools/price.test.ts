@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import catalogFixture from "./__fixtures__/hub-catalog.json";
 import priceFixture from "./__fixtures__/hub-price.json";
-import { CHECKOUT_PRICE_QUERY, MCP_HOST, priceTools } from "./price";
+import { CHECKOUT_PRICE_QUERY, MAX_ADDONS, MCP_HOST, priceTools } from "./price";
 import { catalogUrl, HUB_URL, priceUrl } from "@/lib/hub";
 
 /**
@@ -133,6 +133,8 @@ describe("price_order — registry shape", () => {
     expect(lines.maxItems).toBe(20);
     const item = lines.items as Json;
     expect((item.properties as Json).qty).toMatchObject({ type: "integer", minimum: 1, maximum: 25 });
+    expect(MAX_ADDONS).toBe(10);
+    expect((item.properties as Json).add_ons).toMatchObject({ type: "array", maxItems: 10 });
     expect(item.additionalProperties).toBe(false);
   });
 });
@@ -433,6 +435,17 @@ describe("price_order — refusals", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("refuses add_ons by COUNT before reading a single entry — 20,000 entries come back as one short line, no hub call", async () => {
+    const fetchMock = stubHub();
+    const err = await refused(order([line({ add_ons: Array.from({ length: 20_000 }, (_, i) => `addon-${i}`) })]));
+    expect(err).toBe(`Line 1: add_ons lists 20000 entries; at most ${MAX_ADDONS} per line.`);
+    expect(err.length).toBeLessThan(120);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // the cap itself is still fine, and the per-entry check still runs under it
+    await quote(order([line({ add_ons: Array.from({ length: MAX_ADDONS }, () => "double-candy") })]));
+    expect(await refused(order([line({ add_ons: Array.from({ length: MAX_ADDONS }, () => 7) })]))).toMatch(/add_ons must be an array of add-on ids/);
+  });
+
   it("reports every problem across every line at once, shape and catalog together, in line order", async () => {
     stubHub();
     const err = await refused({
@@ -563,6 +576,17 @@ describe("price_order — catalog host (MCP_HOST)", () => {
     expect(refusal(res)).toBeNull();
     const catalogCall = fetchMock.mock.calls.map((c) => String(c[0])).find((u) => u.includes("/api/public/catalog"))!;
     expect(new URL(catalogCall).searchParams.get("host")).toBe("preview.example.test");
+  });
+
+  it("the tool description says what create_checkout can actually buy: at most 5 lines and 10 per line, never custom artwork", () => {
+    const d = priceTools.price_order.description;
+    expect(d).toMatch(/create_checkout accepts at most 5 lines and 10 piñatas per line/);
+    expect(d).toMatch(/Custom artwork is NOT orderable through this connector/);
+    expect(d).toContain("https://builder.pinatagrams.com");
+    expect(d).toMatch(/quote_bulk for 15 or more/);
+    expect(d).not.toMatch(/a design the customer will make/);
+    const graphicType = ((((((priceTools.price_order.inputSchema.properties as Json).lines as Json).items as Json).properties as Json).graphic as Json).properties as Json).type as Json;
+    expect(String(graphicType.description)).toMatch(/NOT orderable through this connector/);
   });
 
   it("the tool description tells the checkout tool to reuse this quote's normalized ids and labels", () => {

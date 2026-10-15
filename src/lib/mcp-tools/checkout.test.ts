@@ -820,14 +820,9 @@ describe("create_checkout — confirm", () => {
     for (const c of catalogReads) expect(c.url.searchParams.get("host")).toBe(MCP_HOST);
   });
 
-  it("tags the draft `mcp` and stamps _orderSource / _orderAgent right after _builderNonce (route edit landing concurrently)", async (ctx) => {
+  it("tags the draft `mcp` and stamps _orderSource / _orderAgent right after _builderNonce", async () => {
     const res = await createFedex({ agent: "Test Assistant" });
     const input = store.draftInputs[0] as Json & { tags: string[]; customAttributes: { key: string; value: string }[] };
-    if (!input.tags.includes("mcp")) {
-      ctx.skip(
-        "src/app/api/checkout/route.ts does not yet emit source:\"mcp\" (tag + _orderSource/_orderAgent) — the route builder's additive edit; re-run once the integrator combines the branches",
-      );
-    }
     expect(input.tags).toEqual(["builder", "variant-default", "mcp"]);
     const keys = input.customAttributes.map((a) => a.key);
     const nonceAt = keys.indexOf("_builderNonce");
@@ -902,10 +897,12 @@ describe("create_checkout — confirm", () => {
     routeFault.throwAfter = true;
     const text = await refused("create_checkout", confirmArgs({ ...FEDEX_ARGS, idempotency_key: key }));
     expect(text).toBe(
-      "The store didn't confirm whether a checkout was created — nothing has been charged. Don't retry immediately: ask the customer whether a Shopify invoice link appeared, then retry with a NEW idempotency_key after a minute.",
+      "The store didn't confirm whether a checkout was created — nothing has been charged. Don't retry immediately: wait a minute, then retry with a NEW idempotency_key; if two checkouts end up existing, cancel_checkout can delete the unpaid duplicate.",
     );
     expect(text).not.toContain("continue_url");
     expect(text).not.toMatch(/try again in a minute/);
+    // the link is returned to the agent, never shown to the customer by the store
+    expect(text).not.toMatch(/ask the customer|invoice link appeared/);
     // the hazard the wording exists for: the draft IS in the store, payable,
     // and the key was never bound — an immediate same-key retry has nothing to
     // replay and mints a second one
@@ -963,7 +960,7 @@ describe("create_checkout — idempotency_key", () => {
     expect(store.drafts.size).toBe(createdBefore);
   });
 
-  it("a replay re-checks the draft: cancelled or paid → refusal naming a NEW key; store down → honest, names get_checkout_status; never a stale ready_for_complete", async () => {
+  it("a replay re-checks the draft: cancelled → refusal naming a NEW key; paid → 'the order is placed, do not create another' (never a new key); store down → honest, names get_checkout_status; never a stale ready_for_complete", async () => {
     // cancelled (through the connector, with its nonce)
     const key = `idem-${crypto.randomUUID()}`;
     const first = await createFedex({ idempotency_key: key });
@@ -971,7 +968,8 @@ describe("create_checkout — idempotency_key", () => {
     await ok("cancel_checkout", { draft_order_id: id, nonce: first.nonce });
     resetObserved();
     const afterCancel = await refused("create_checkout", confirmArgs({ ...FEDEX_ARGS, idempotency_key: key }));
-    expect(afterCancel).toBe("That checkout was cancelled or already paid; start again with a new idempotency_key. Nothing was created.");
+    expect(afterCancel).toBe("That checkout was cancelled, replaced or expired; start again with a new idempotency_key. Nothing was created.");
+    expect(afterCancel).not.toContain("paid");
     expect(store.gqlCalls("draftOrder(id: $id)")).toHaveLength(1);
     expect(store.gqlCalls("draftOrderCreate(")).toHaveLength(0);
     expect(routeCalls).toHaveLength(0);
@@ -979,14 +977,25 @@ describe("create_checkout — idempotency_key", () => {
     expect(await refused("create_checkout", confirmArgs({ ...FEDEX_ARGS, idempotency_key: key }))).toContain("new idempotency_key");
     expect(store.gqlCalls("draftOrderCreate(")).toHaveLength(0);
 
-    // paid
+    // paid: the order exists — the answer must never invite a new key (that
+    // retry would place a duplicate order)
     const key2 = `idem-${crypto.randomUUID()}`;
     const second = await createFedex({ idempotency_key: key2 });
     store.drafts.get(String(second.draft_order_id))!.status = "COMPLETED";
     resetObserved();
-    expect(await refused("create_checkout", confirmArgs({ ...FEDEX_ARGS, idempotency_key: key2 }))).toContain("cancelled or already paid");
+    const afterPaid = await refused("create_checkout", confirmArgs({ ...FEDEX_ARGS, idempotency_key: key2 }));
+    expect(afterPaid).toBe(
+      "That checkout was already paid, so the order is placed — do not create another one. Use get_checkout_status with the draft_order_id for details. Nothing new was created.",
+    );
+    expect(afterPaid).not.toContain("new idempotency_key");
+    expect(afterPaid).not.toContain("start again");
+    expect(afterPaid).toContain("get_checkout_status");
+    expect(afterPaid).not.toContain("continue_url");
     expect(store.gqlCalls("draftOrderCreate(")).toHaveLength(0);
     expect(routeCalls).toHaveLength(0);
+    // the key stays bound after payment too: repeating the request can't mint a duplicate order
+    expect(await refused("create_checkout", confirmArgs({ ...FEDEX_ARGS, idempotency_key: key2 }))).toContain("do not create another one");
+    expect(store.gqlCalls("draftOrderCreate(")).toHaveLength(0);
 
     // the store doesn't answer: no stale success, no new draft, a pointer to get_checkout_status
     const key3 = `idem-${crypto.randomUUID()}`;

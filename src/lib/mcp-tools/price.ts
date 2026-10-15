@@ -62,6 +62,10 @@ const READ_ONLY: ToolAnnotations = {
 // Same bounds as the checkout route (MAX_LINES / MAX_QTY there).
 const MAX_LINES = 20;
 const MAX_QTY = 25;
+/** Distinct add-ons per line — refused by COUNT before a single entry is read,
+ *  so a refusal never echoes thousands of values back. The single source of
+ *  truth: checkout.ts imports and re-exports it (never the other way round). */
+export const MAX_ADDONS = 10;
 const CARRIERS: Carrier[] = ["fedex", "usps"];
 const GRAPHIC_TYPES = ["classic", "library", "custom"] as const;
 type GraphicType = (typeof GRAPHIC_TYPES)[number];
@@ -261,7 +265,13 @@ function parseLine(raw: unknown, at: number, problems: Problem[]): LineInput | n
 
   let add_ons: string[] = [];
   if (raw.add_ons !== undefined) {
-    if (!Array.isArray(raw.add_ons) || raw.add_ons.some((a) => typeof a !== "string" || !a.trim())) {
+    if (!Array.isArray(raw.add_ons)) {
+      problems.push({ at, text: `${label}: add_ons must be an array of add-on ids (strings), e.g. ["double-candy"].` });
+    } else if (raw.add_ons.length > MAX_ADDONS) {
+      // By COUNT, before looking at a single entry (as create_checkout does):
+      // the refusal names the number, never the values.
+      problems.push({ at, text: `${label}: add_ons lists ${raw.add_ons.length} entries; at most ${MAX_ADDONS} per line.` });
+    } else if (raw.add_ons.some((a) => typeof a !== "string" || !a.trim())) {
       problems.push({ at, text: `${label}: add_ons must be an array of add-on ids (strings), e.g. ["double-candy"].` });
     } else {
       add_ons = (raw.add_ons as string[]).map((a) => a.trim());
@@ -617,7 +627,7 @@ function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice) {
 export const priceTools: Record<string, ToolDef> = {
   price_order: {
     description:
-      "Price a single-address order exactly as checkout will charge it, before tax. Give the carrier (fedex = 2-Day with a guaranteed arrival date; usps = First Class, arrives in a window) and 1–20 lines, each with a body style id from get_catalog (must be in stock), qty 1–25, a filling (id or label from get_catalog), a graphic — {\"type\":\"classic\"} for the included Classic Piñatagrams design, {\"type\":\"library\",\"design\":\"HBD06\"} for a design-library code, or {\"type\":\"custom\"} for a design the customer will make — and optional add-on ids. Returns each line's unit and line total with a base / graphic upcharge / filling breakdown, add-on lines, shipping by carrier, the subtotal and the total before tax, all in integer cents USD. Sales tax and any discount code are applied by Shopify at checkout and are not included. Refusals name every problem at once and list the allowed values, and a filling or add-on whose price is negative or not whole cents is refused rather than quoted. When placing the order, pass this quote's normalized style_id, filling.label and add_ons values to the checkout tool — never the caller's raw strings — because checkout matches them exactly. Nothing is ordered or reserved.",
+      "Price a single-address order exactly as checkout will charge it, before tax — a quote only; nothing is ordered or reserved. Give the carrier (fedex = 2-Day with a guaranteed arrival date; usps = First Class, arrives in a window) and 1–20 lines, each with a body style id from get_catalog (must be in stock), qty 1–25, a filling (id or label from get_catalog), a graphic — {\"type\":\"classic\"} for the included Classic Piñatagrams design, {\"type\":\"library\",\"design\":\"HBD06\"} for a design-library code, or {\"type\":\"custom\"} for custom artwork — and optional add-on ids (up to 10 per line). Returns each line's unit and line total with a base / graphic upcharge / filling breakdown, add-on lines, shipping by carrier, the subtotal and the total before tax, all in integer cents USD. Sales tax and any discount code are applied by Shopify at checkout and are not included. Refusals name every problem at once and list the allowed values, and a filling or add-on whose price is negative or not whole cents is refused rather than quoted. WHAT CAN BE BOUGHT HERE: create_checkout accepts at most 5 lines and 10 piñatas per line. Custom artwork is NOT orderable through this connector — quote it only as a reference and send the customer to https://builder.pinatagrams.com to design and order it. A quote above 5 lines or 10 per line is reference-only too: order it at https://builder.pinatagrams.com, or use quote_bulk for 15 or more piñatas. For an order that fits, pass this quote's normalized style_id, filling.label and add_ons values to create_checkout — never the caller's raw strings — because checkout matches them exactly. Nothing is ordered or reserved.",
     inputSchema: {
       type: "object",
       required: ["carrier", "lines"],
@@ -645,7 +655,7 @@ export const priceTools: Record<string, ToolDef> = {
                 type: "integer",
                 minimum: 1,
                 maximum: MAX_QTY,
-                description: `How many of this exact piñata (1–${MAX_QTY}).`,
+                description: `How many of this exact piñata (1–${MAX_QTY} here; create_checkout accepts at most 10 per line — above that the quote is reference-only).`,
               },
               filling: {
                 type: "string",
@@ -659,7 +669,7 @@ export const priceTools: Record<string, ToolDef> = {
                     type: "string",
                     enum: GRAPHIC_TYPES,
                     description:
-                      "classic = the included Classic Piñatagrams design (no upcharge); library = a design-library code (set design); custom = a design the customer will make in the builder.",
+                      "classic = the included Classic Piñatagrams design (no upcharge); library = a design-library code (set design); custom = custom artwork — priced here for reference only, NOT orderable through this connector (the customer designs and orders it at builder.pinatagrams.com).",
                   },
                   design: {
                     type: "string",
@@ -671,7 +681,8 @@ export const priceTools: Record<string, ToolDef> = {
               add_ons: {
                 type: "array",
                 items: { type: "string" },
-                description: 'Optional add-on ids from get_catalog, e.g. ["double-candy"]. Some fillings allow no add-ons.',
+                maxItems: MAX_ADDONS,
+                description: `Optional add-on ids from get_catalog, e.g. ["double-candy"] — up to ${MAX_ADDONS} per line. Some fillings allow no add-ons.`,
               },
             },
             additionalProperties: false,

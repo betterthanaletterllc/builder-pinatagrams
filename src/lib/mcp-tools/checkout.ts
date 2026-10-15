@@ -23,7 +23,7 @@ import { EXCLUDED_PREFIXES } from "@/lib/library-data";
 import { shopifyAdmin, supersedeAllowed, unpaidBuilderDraft, type Attr } from "@/lib/shopify";
 import { rateLimit } from "@/lib/rate-limit";
 import { toolError, type ToolAnnotations } from "@/lib/mcp-http";
-import { MCP_HOST, priceTools } from "@/lib/mcp-tools/price";
+import { MAX_ADDONS, MCP_HOST, priceTools } from "@/lib/mcp-tools/price";
 import type { ToolDef } from "@/lib/order-tools";
 
 /**
@@ -106,7 +106,10 @@ export const MAX_LINES = 5;
 export const MAX_QTY = 10;
 const MESSAGE_MAX = 300; // the route's str(message, 300) — refused here, never clipped
 const MAX_CODES = 2; // the route keeps at most two native codes
-export const MAX_ADDONS = 10; // distinct add-ons per line; refused by COUNT before any lookup
+// MAX_ADDONS (distinct add-ons per line, refused by COUNT before any lookup)
+// is defined once in price.ts so the quote and the checkout share the cap;
+// re-exported here for callers that read the checkout caps together.
+export { MAX_ADDONS };
 const MAX_CODE_ENTRIES = 10; // raw discount_codes entries examined before refusing by COUNT
 const STATUS_READS_PER_MIN = 30; // mirrors api/order-status: Shopify draft reads per client IP
 const CARRIERS: Carrier[] = ["fedex", "usps"];
@@ -156,12 +159,17 @@ const STORE_UNREACHABLE =
 // request scope is the realistic cause): the answer is lost, the key is not
 // bound, and "try again" would invite a second payable draft.
 const ROUTE_THREW =
-  "The store didn't confirm whether a checkout was created — nothing has been charged. Don't retry immediately: ask the customer whether a Shopify invoice link appeared, then retry with a NEW idempotency_key after a minute.";
+  "The store didn't confirm whether a checkout was created — nothing has been charged. Don't retry immediately: wait a minute, then retry with a NEW idempotency_key; if two checkouts end up existing, cancel_checkout can delete the unpaid duplicate.";
 const TOO_MANY_CHECKS = "too many status checks — try again in a minute";
 const TOO_MANY_CHECKS_CANCEL = "Too many status checks — try again in a minute. Nothing was changed.";
 const TOO_MANY_CHECKS_CREATE = "Too many status checks — try again in a minute. Nothing was created.";
-const REPLAY_CLOSED =
-  "That checkout was cancelled or already paid; start again with a new idempotency_key. Nothing was created.";
+// A replay whose draft is already PAID: the order exists. This is the one
+// answer that must never read as "start again" — that retry would place a
+// second order for the same customer.
+const REPLAY_PAID =
+  "That checkout was already paid, so the order is placed — do not create another one. Use get_checkout_status with the draft_order_id for details. Nothing new was created.";
+const REPLAY_GONE =
+  "That checkout was cancelled, replaced or expired; start again with a new idempotency_key. Nothing was created.";
 const REPLAY_UNVERIFIED =
   "A checkout was created earlier under this idempotency_key, but the store couldn't confirm it is still open just now — nothing new was created. Check it with get_checkout_status, or retry in a minute.";
 const CATALOG_UNAVAILABLE =
@@ -975,7 +983,8 @@ async function replay(hit: Stored): Promise<unknown> {
   if (await statusReadThrottled()) return toolError(TOO_MANY_CHECKS_CREATE);
   const s = await readDraftStatus(gql, id);
   if (s.status === "open") return { ...hit.result, replayed: true };
-  if (s.status === "gone" || s.status === "paid") return toolError(REPLAY_CLOSED);
+  if (s.status === "paid") return toolError(REPLAY_PAID);
+  if (s.status === "gone") return toolError(REPLAY_GONE);
   return toolError(REPLAY_UNVERIFIED);
 }
 
@@ -1415,7 +1424,7 @@ const ORDER_PROPERTIES = {
     type: "string",
     minLength: IDEMPOTENCY_KEY_MIN,
     maxLength: IDEMPOTENCY_KEY_MAX,
-    description: `Recommended on every confirm: a UUID (${IDEMPOTENCY_KEY_MIN}–${IDEMPOTENCY_KEY_MAX} printable characters, no spaces). Repeating a confirm with the same key and the same request returns the same checkout instead of creating a second one — after re-checking that its draft is still open (a cancelled or paid one is refused: start again with a new key). Best effort: replays live per server instance for 24h, and anyone presenting the same key with the identical request gets the stored result, so keep keys random and private. The same key with a different request is refused.`,
+    description: `Recommended on every confirm: a UUID (${IDEMPOTENCY_KEY_MIN}–${IDEMPOTENCY_KEY_MAX} printable characters, no spaces). Repeating a confirm with the same key and the same request returns the same checkout instead of creating a second one — after re-checking that its draft is still open (a cancelled or paid one is refused: after a cancellation start again with a new key; after payment the order already exists — never create another). Best effort: replays live per server instance for 24h, and anyone presenting the same key with the identical request gets the stored result, so keep keys random and private. The same key with a different request is refused.`,
   },
   agent: { type: "string", description: "Optional: who is ordering (e.g. the assistant's name). Analytics only." },
 };
