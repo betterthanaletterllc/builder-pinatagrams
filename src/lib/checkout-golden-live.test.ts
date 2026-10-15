@@ -18,16 +18,21 @@ import {
   LINE_B_UNIT,
   LINE_C_ATTRS,
   LINE_C_UNIT,
+  MCP_AGENT,
+  MCP_AGENT_CLEAN,
+  MCP_AGENT_DIRTY,
   SHIPPING_FEDEX,
   SHIPPING_USPS,
   SHIP_TO_AUSTIN,
   SHIP_TO_PORTLAND,
   TAGS,
+  TAGS_MCP,
   USPS_BODY,
   USPS_GROUP,
   checkoutRequest,
   fetchedUrl,
   hubResponse,
+  mcpBody,
   orderAttrs,
 } from "./__fixtures__/golden-carts";
 
@@ -417,5 +422,69 @@ describe("checkout live golden payload (DraftOrderInput sent to Shopify)", () =>
     } finally {
       globalThis.fetch = previous;
     }
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Ordering MCP (Phase 2): the live DraftOrderInput with source "mcp" — the
+ * "mcp" tag last, the provenance pair right after _builderNonce, every line
+ * (variantId, priceOverride, attributes) byte-identical to the storefront's.
+ * ------------------------------------------------------------------------- */
+
+describe("checkout live golden payload — ordering MCP source", () => {
+  it('FedEx + agent: tag "mcp" after builder + variant-*, _orderSource/_orderAgent between the nonce and the visit ids', async () => {
+    const { status, json } = await checkout(mcpBody(FEDEX_BODY, MCP_AGENT));
+    expect(status).toBe(200);
+    expect(json).toEqual({
+      dryRun: false,
+      orders: [
+        {
+          ...FEDEX_GROUP,
+          draftOrderId: "gid://shopify/DraftOrder/900001",
+          invoiceUrl: `https://${SHOPIFY_HOST}/invoices/golden-1`,
+          invoiceSent: false,
+          nonce: NONCE,
+        },
+      ],
+    });
+    expect(draftInputs).toHaveLength(1);
+    const input = draftInputs[0] as typeof EXPECTED_FEDEX_INPUT & Record<string, unknown>;
+    expect(input).toEqual({
+      ...EXPECTED_FEDEX_INPUT,
+      tags: TAGS_MCP,
+      customAttributes: orderAttrs(NONCE, true, MCP_AGENT),
+    });
+    const keys = input.customAttributes.map((a) => a.key);
+    const i = keys.indexOf("_builderNonce");
+    expect(keys.slice(i, i + 4)).toEqual(["_builderNonce", "_orderSource", "_orderAgent", "_phDistinctId"]);
+    expect(input.tags[input.tags.length - 1]).toBe("mcp");
+    expect(assertPaperDraft(input, { addonVariantIds: ADDON_VARIANT_IDS })).toEqual({
+      carrier: "fedex",
+      pinataLines: 2,
+      addonLines: 2,
+    });
+    // Warm instance: only the create reaches Shopify — an MCP-sourced body
+    // changes nothing about the call pattern, the invoice email or after().
+    expect(shopifyCalls().map((c) => c.url.pathname)).toEqual([GRAPHQL_PATH]);
+    expect(gqlCalls("draftOrderCreate(")).toHaveLength(1);
+    expect(gqlCalls("draftOrderInvoiceSend(")).toHaveLength(0);
+    expect(afterTasks).toHaveLength(1);
+  });
+
+  it("USPS + a dirty agent: sanitized to the 64-char literal; no visit ids → the pair closes the list", async () => {
+    const { status } = await checkout(mcpBody(USPS_BODY, MCP_AGENT_DIRTY));
+    expect(status).toBe(200);
+    expect(draftInputs).toHaveLength(1);
+    const input = draftInputs[0] as typeof EXPECTED_USPS_INPUT & Record<string, unknown>;
+    expect(input).toEqual({
+      ...EXPECTED_USPS_INPUT,
+      tags: TAGS_MCP,
+      customAttributes: orderAttrs(NONCE, false, MCP_AGENT_CLEAN),
+    });
+    const keys = input.customAttributes.map((a) => a.key);
+    expect(keys.slice(-3)).toEqual(["_builderNonce", "_orderSource", "_orderAgent"]);
+    expect(input.customAttributes[input.customAttributes.length - 1].value).toBe(MCP_AGENT_CLEAN);
+    expect(MCP_AGENT_CLEAN).toHaveLength(64);
+    expect(assertPaperDraft(input, { addonVariantIds: ADDON_VARIANT_IDS }).carrier).toBe("usps");
   });
 });

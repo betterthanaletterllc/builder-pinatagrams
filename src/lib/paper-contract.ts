@@ -258,6 +258,30 @@ export const ORDER_TAG_BUILDER = "builder";
 export const ORDER_TAG_VARIANT_PREFIX = "variant-";
 export const ORDER_TAG_VARIANT_RE = /^variant-[a-z0-9-]{1,32}$/;
 
+/** Ordering-MCP provenance (Phase 2, 2026-10-15): emitted TOGETHER,
+ *  immediately after _builderNonce and before any analytics key, only when
+ *  the draft was placed through the MCP (CheckoutBody.source === "mcp") — and
+ *  then the draft also carries ORDER_TAG_MCP after builder + variant-*.
+ *  Absent on storefront drafts; Paper ignores both.
+ *  - _orderSource: the literal ORDER_SOURCE_MCP.
+ *  - _orderAgent: the connector's self-reported client name as checkout
+ *    sanitized it (ORDER_AGENT_RE; ORDER_AGENT_UNKNOWN when nothing
+ *    survived). ATTACKER-CONTROLLED and analytics-only — never a trust input
+ *    anywhere (not here, not in Paper, not in the hub). */
+export const ORDER_MCP_ATTR = Object.freeze({
+  source: "_orderSource",
+  agent: "_orderAgent",
+} as const);
+export const ORDER_MCP_ATTR_KEYS: readonly string[] = Object.freeze(Object.values(ORDER_MCP_ATTR));
+export const ORDER_SOURCE_MCP = "mcp";
+export const ORDER_TAG_MCP = "mcp";
+export const ORDER_AGENT_MAX_CHARS = 64;
+/** What survives checkout's sanitizer: the allowlisted characters, 1–64 of
+ *  them, never a leading or trailing space (checkout trims after slicing, so
+ *  the contract is exactly as tight as what the route can emit). */
+export const ORDER_AGENT_RE = /^[A-Za-z0-9._/:-](?:[A-Za-z0-9 ._/:-]{0,62}[A-Za-z0-9._/:-])?$/;
+export const ORDER_AGENT_UNKNOWN = "unknown";
+
 /** Never on a builder draft. `note`: Paper prints the order note as the
  *  recipient's message on any line without a `message` attribute.
  *  `corp_ref`: a corporate-portal rail that B2C drafts must not carry. */
@@ -534,7 +558,10 @@ export function assertPaperDraft(
   if (nonForensic.length)
     fail("order_attr_visible", `order-level attributes must all start with "_" — got ${nonForensic.join(", ")}`);
   const unknownOrder = Object.keys(orderAttrs).filter(
-    (k) => !ORDER_ATTR_REQUIRED.includes(k) && !ORDER_ANALYTICS_ATTR_KEYS.includes(k),
+    (k) =>
+      !ORDER_ATTR_REQUIRED.includes(k) &&
+      !ORDER_ANALYTICS_ATTR_KEYS.includes(k) &&
+      !ORDER_MCP_ATTR_KEYS.includes(k),
   );
   if (unknownOrder.length)
     fail("order_attr_unknown", `order-level attribute key(s) outside the frozen contract: ${unknownOrder.join(", ")}`);
@@ -543,6 +570,47 @@ export function assertPaperDraft(
     fail("order_attr_missing", `missing order-level attribute(s): ${missingOrder.join(", ")}`);
   if (!NONCE_RE.test(orderAttrs[ORDER_ATTR.builderNonce]))
     fail("nonce_invalid", `${ORDER_ATTR.builderNonce} must be 32 lowercase hex chars`);
+
+  // Ordering-MCP provenance: both rails or neither, travelling with the "mcp"
+  // tag; _orderSource is the literal channel, _orderAgent whatever checkout's
+  // sanitizer let through — checked for SHAPE only, never read as a fact.
+  const source = orderAttrs[ORDER_MCP_ATTR.source];
+  const agent = orderAttrs[ORDER_MCP_ATTR.agent];
+  const mcpTagged = (tags as unknown[]).includes(ORDER_TAG_MCP);
+  if ((source === undefined) !== (agent === undefined))
+    fail("mcp_attrs_pairing", `${ORDER_MCP_ATTR.source} and ${ORDER_MCP_ATTR.agent} must be emitted together or not at all`);
+  if (source !== undefined && source !== ORDER_SOURCE_MCP)
+    fail("order_source_invalid", `${ORDER_MCP_ATTR.source} must be "${ORDER_SOURCE_MCP}" — got "${source}"`);
+  if (agent !== undefined && !ORDER_AGENT_RE.test(agent))
+    fail(
+      "order_agent_invalid",
+      `${ORDER_MCP_ATTR.agent} must match ${ORDER_AGENT_RE} (checkout strips everything else and caps at ${ORDER_AGENT_MAX_CHARS}; "${ORDER_AGENT_UNKNOWN}" when nothing survives) — got ${JSON.stringify(agent)}`,
+    );
+  if (mcpTagged !== (source !== undefined))
+    fail(
+      "mcp_tag_pairing",
+      mcpTagged
+        ? `tag "${ORDER_TAG_MCP}" without ${ORDER_MCP_ATTR.source} — an MCP draft carries both`
+        : `${ORDER_MCP_ATTR.source} without the "${ORDER_TAG_MCP}" tag — an MCP draft carries both`,
+    );
+  // POSITION is part of the contract: the pair sits IMMEDIATELY after
+  // _builderNonce (before any analytics key) and the tag is LAST (after
+  // builder + variant-*). readAttrs already proved the array-of-{key} shape.
+  if (source !== undefined) {
+    const orderKeys = (input.customAttributes as { key: string }[]).map((a) => a.key);
+    const n = orderKeys.indexOf(ORDER_ATTR.builderNonce);
+    if (orderKeys[n + 1] !== ORDER_MCP_ATTR.source || orderKeys[n + 2] !== ORDER_MCP_ATTR.agent)
+      fail(
+        "mcp_attrs_position",
+        `${ORDER_MCP_ATTR.source}, ${ORDER_MCP_ATTR.agent} must follow ${ORDER_ATTR.builderNonce} immediately — got ${orderKeys.join(", ")}`,
+      );
+    const tagList = tags as unknown[];
+    if (tagList[tagList.length - 1] !== ORDER_TAG_MCP)
+      fail(
+        "mcp_tag_position",
+        `tag "${ORDER_TAG_MCP}" must be last (after ${ORDER_TAG_BUILDER} + ${ORDER_TAG_VARIANT_PREFIX}<name>) — got ${JSON.stringify(tags)}`,
+      );
+  }
 
   const ship = input.shippingLine;
   if (!isRecord(ship) || typeof ship.title !== "string")

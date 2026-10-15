@@ -32,6 +32,10 @@ import {
   LINE_C_ATTRS,
   LINE_C_TITLE,
   LINE_C_UNIT,
+  MCP_AGENT,
+  MCP_AGENT_CLEAN,
+  MCP_AGENT_DIRTY,
+  MCP_AGENT_UNKNOWN,
   MESSAGE_300,
   MESSAGE_320,
   SHIPPING_FEDEX,
@@ -41,6 +45,7 @@ import {
   SHIP_TO_AUSTIN,
   SHIP_TO_PORTLAND,
   TAGS,
+  TAGS_MCP,
   UNIT,
   USPS_BODY,
   USPS_GROUP,
@@ -49,8 +54,10 @@ import {
   checkoutRequest,
   fetchedUrl,
   hubResponse,
+  mcpBody,
   money,
   orderAttrs,
+  type Attr,
 } from "./__fixtures__/golden-carts";
 
 /**
@@ -367,5 +374,100 @@ describe("checkout dry-run golden payload (Paper contract)", () => {
     const { status, json } = await checkout({ lines: [line] });
     expect(status).toBe(400);
     expect((json.lineErrors as { code: string }[]).map((e) => e.code)).toEqual(["design_not_saved"]);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Ordering MCP (Phase 2): CheckoutBody.source === "mcp" adds the "mcp" tag
+ * and the _orderSource / _orderAgent provenance pair — and NOTHING else.
+ * ------------------------------------------------------------------------- */
+
+const keysOf = (attrs: unknown) => (attrs as Attr[]).map((a) => a.key);
+
+/** The provenance pair sits IMMEDIATELY after _builderNonce; whatever follows
+ *  it (the visit ids, or nothing) is unchanged. The tag is LAST. */
+function expectMcpProvenance(input: Record<string, unknown>, agent: string, followedBy: string | null) {
+  const attrs = input.customAttributes as Attr[];
+  const keys = keysOf(attrs);
+  const i = keys.indexOf("_builderNonce");
+  expect(i).toBeGreaterThan(-1);
+  expect(keys.slice(i, i + 3)).toEqual(["_builderNonce", "_orderSource", "_orderAgent"]);
+  expect(keys[i + 3] ?? null).toBe(followedBy);
+  expect(attrs[i + 1]).toEqual({ key: "_orderSource", value: "mcp" });
+  expect(attrs[i + 2]).toEqual({ key: "_orderAgent", value: agent });
+  expect(input.tags).toEqual(TAGS_MCP);
+  const tags = input.tags as string[];
+  expect(tags[tags.length - 1]).toBe("mcp");
+}
+
+describe("checkout dry-run golden payload — ordering MCP source", () => {
+  it("FedEx + analytics: tag + provenance pair after the nonce and before the visit ids; everything else byte-identical", async () => {
+    const { status, json } = await checkout(mcpBody(FEDEX_BODY, MCP_AGENT));
+    expect(status).toBe(200);
+    expect(json).toEqual({
+      ...EXPECTED_FEDEX,
+      draftOrders: [
+        {
+          ...FEDEX_GROUP,
+          nonce: NONCE,
+          lines: expect.any(Array),
+          input: { ...FEDEX_INPUT, tags: TAGS_MCP, customAttributes: orderAttrs(NONCE, true, MCP_AGENT) },
+        },
+      ],
+    });
+    const [draft] = json.draftOrders as Draft[];
+    expectMcpProvenance(draft.input, MCP_AGENT, "_phDistinctId");
+    expect(draft.input).not.toHaveProperty("note");
+    // the same two hub reads as the storefront; Shopify still never reachable
+    expect(fetched).toHaveLength(2);
+    expect(assertPaperDraft(draft.input)).toEqual({ carrier: "fedex", pinataLines: 2, addonLines: 2 });
+  });
+
+  it('USPS, no agent, no analytics: _orderAgent is "unknown" and the pair closes the list', async () => {
+    const { status, json } = await checkout(mcpBody(USPS_BODY));
+    expect(status).toBe(200);
+    const [draft] = json.draftOrders as Draft[];
+    expect(draft.input).toEqual({
+      ...USPS_INPUT,
+      tags: TAGS_MCP,
+      customAttributes: orderAttrs(NONCE, false, MCP_AGENT_UNKNOWN),
+    });
+    expectMcpProvenance(draft.input, MCP_AGENT_UNKNOWN, null);
+    expect(assertPaperDraft(draft.input)).toEqual({ carrier: "usps", pinataLines: 1, addonLines: 0 });
+  });
+
+  it('sanitizes the agent: disallowed characters stripped first, then capped at 64; nothing left (or not a string) → "unknown"', async () => {
+    expect(MCP_AGENT_DIRTY.length).toBeGreaterThan(64);
+    expect(MCP_AGENT_CLEAN).toHaveLength(64);
+    for (const [agent, expected] of [
+      [MCP_AGENT_DIRTY, MCP_AGENT_CLEAN],
+      ["\u{1F389}\u{1F389} (party)", "party"],
+      ["\u{1F389}\u{1F389}", MCP_AGENT_UNKNOWN],
+      ["   ", MCP_AGENT_UNKNOWN],
+      [42, MCP_AGENT_UNKNOWN],
+      [{ name: "x" }, MCP_AGENT_UNKNOWN],
+    ] as const) {
+      const { status, json } = await checkout(mcpBody(USPS_BODY, agent));
+      expect(status).toBe(200);
+      const [draft] = json.draftOrders as Draft[];
+      expectMcpProvenance(draft.input, expected, null);
+      expect(assertPaperDraft(draft.input).carrier).toBe("usps");
+    }
+  });
+
+  it('without source "mcp" the payload is byte-identical to the storefront\'s — an agent alone or a foreign source changes nothing', async () => {
+    for (const body of [
+      { ...FEDEX_BODY, agent: MCP_AGENT },
+      { ...FEDEX_BODY, source: "storefront", agent: MCP_AGENT },
+      { ...FEDEX_BODY, source: "MCP" },
+    ]) {
+      const { status, json } = await checkout(body);
+      expect(status).toBe(200);
+      expect(json).toEqual(EXPECTED_FEDEX);
+      const [draft] = json.draftOrders as Draft[];
+      expect(keysOf(draft.input.customAttributes)).not.toContain("_orderSource");
+      expect(keysOf(draft.input.customAttributes)).not.toContain("_orderAgent");
+      expect(draft.input.tags).toEqual(TAGS);
+    }
   });
 });

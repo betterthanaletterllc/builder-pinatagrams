@@ -242,17 +242,46 @@ export const USPS_BODY = {
 export type Attr = { key: string; value: string };
 
 export const TAGS = ["builder", "variant-default"];
+/** An MCP-placed draft: "mcp" AFTER builder + variant-*. */
+export const TAGS_MCP = [...TAGS, "mcp"];
+
+/** The ordering MCP's self-reported client name exactly as an agent sends
+ *  it — every allowed character class (letters, digits, space . _ / : -). */
+export const MCP_AGENT = "Claude Desktop 1.2/mcp-client_v3:test";
+/** 109 characters: a trademark sign, parentheses, angle brackets and a
+ *  semicolon (all disallowed) plus 60 x's past the cap. Checkout strips the
+ *  disallowed characters FIRST, then trims and cuts at 64, so exactly the
+ *  first 64 surviving characters ride on _orderAgent (MCP_AGENT_CLEAN). */
+export const MCP_AGENT_DIRTY =
+  "Claude Desktop™ 1.2 (beta) <mcp-client_v3:test>; " + "x".repeat(60);
+export const MCP_AGENT_CLEAN = "Claude Desktop 1.2 beta mcp-client_v3:test xxxxxxxxxxxxxxxxxxxxx";
+/** _orderAgent when no agent was sent, or nothing allowed survived. */
+export const MCP_AGENT_UNKNOWN = "unknown";
+
+/** The body the ordering MCP sends: a storefront cart plus source "mcp"
+ *  (+ the agent's self-report when it gave one). */
+export function mcpBody<T extends object>(body: T, agent?: unknown): T & { source: "mcp"; agent?: unknown } {
+  return { ...body, source: "mcp", ...(agent !== undefined ? { agent } : {}) };
+}
 
 /** Order-level forensics, in emission order; `nonce` is the caller's matcher
- *  (or the exact value). The five analytics keys follow only when the client
- *  sent them (FEDEX_BODY does, USPS_BODY doesn't). */
-export function orderAttrs(nonce: unknown, withAnalytics: boolean) {
+ *  (or the exact value). An MCP-placed draft (`mcpAgent` given) carries
+ *  _orderSource + _orderAgent IMMEDIATELY after the nonce; the five analytics
+ *  keys follow only when the client sent them (FEDEX_BODY does, USPS_BODY
+ *  doesn't). */
+export function orderAttrs(nonce: unknown, withAnalytics: boolean, mcpAgent?: string) {
   return [
     { key: "_builderHost", value: "builder.pinatagrams.com" },
     { key: "_builderFlow", value: "v2" },
     { key: "_builderVariant", value: "default (tiered/fedex+usps)" },
     { key: "_builderCatalog", value: "2026-10-15T14:38:44.115Z" },
     { key: "_builderNonce", value: nonce },
+    ...(mcpAgent !== undefined
+      ? [
+          { key: "_orderSource", value: "mcp" },
+          { key: "_orderAgent", value: mcpAgent },
+        ]
+      : []),
     ...(withAnalytics
       ? [
           { key: "_phDistinctId", value: ANALYTICS.phDistinctId },

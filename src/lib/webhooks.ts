@@ -1,3 +1,4 @@
+import { isMcpMode } from "./app-mode";
 import { shopifyAdmin, shopifyTokenScope } from "./shopify";
 
 /**
@@ -12,6 +13,15 @@ import { shopifyAdmin, shopifyTokenScope } from "./shopify";
  * Idempotent: a subscription to the same address is left alone. Runs from the
  * daily ensure-webhooks cron and once per server instance after a production
  * checkout, so a fresh deploy registers itself within its first orders.
+ *
+ * NEVER on the mcp face (APP_MODE=mcp, mcp.pinatagrams.com). That deployment
+ * IS VERCEL_ENV=production and has its own Shopify app, and webhook
+ * subscriptions are per-app: the list check would miss the storefront's
+ * subscription and register a SECOND orders/paid hook — signed with the MCP
+ * app's secret, aimed at the storefront URL — which the storefront handler
+ * rejects (401) on every paid order store-wide. The checkout route's after()
+ * reaches ensureOrdersPaidWebhookOnce on every MCP confirm; the isMcpMode()
+ * guard below is what keeps it inert there (src/lib/app-mode.ts).
  */
 
 export const ORDERS_PAID_WEBHOOK_URI =
@@ -91,6 +101,9 @@ export async function ordersPaidWebhookStatus(): Promise<
 
 /** Subscribe orders/paid to the builder unless it already is. */
 export async function ensureOrdersPaidWebhook(): Promise<WebhookEnsure> {
+  // The mcp face never registers anything — checked before every other gate,
+  // so a production MCP deployment can't fall through to the Shopify calls.
+  if (isMcpMode()) return { status: "skipped", reason: "mcp face" };
   // Previews and local dev never register their own URLs on the live store.
   if (process.env.VERCEL_ENV !== "production") {
     return { status: "skipped", reason: "not production" };

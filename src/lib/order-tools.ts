@@ -7,6 +7,7 @@ import {
   type Carrier,
 } from "@/lib/delivery";
 import { toolError, toolText, type McpToolListing, type ToolAnnotations } from "@/lib/mcp-http";
+import { checkoutTools } from "@/lib/mcp-tools/checkout";
 import { designTools } from "@/lib/mcp-tools/designs";
 import { priceTools } from "@/lib/mcp-tools/price";
 import { quoteTools } from "@/lib/mcp-tools/quote";
@@ -100,6 +101,7 @@ export const orderTools: Record<string, ToolDef> = {
   ...priceTools,
   ...designTools,
   ...quoteTools,
+  ...checkoutTools,
   get_catalog: {
     description:
       "What Piñatagrams can send right now: body styles with in-stock status, fillings, add-ons, per-unit shipping (FedEx 2-Day guaranteed date vs USPS First Class window), graphic upcharges, and the earliest and latest delivery dates. Amounts are integer cents. Call this before quoting anything.",

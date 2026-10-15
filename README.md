@@ -123,3 +123,18 @@ workspace-root `ORDERING-MCP-SCOPE-2026-10.md`.
 Connector URL: `https://mcp.pinatagrams.com/api/mcp`. Local run of this face:
 `APP_MODE=mcp` in `.env.local`, then `next start`, and POST JSON-RPC
 (`initialize`, `tools/list`, `tools/call`) to `/api/mcp`.
+
+Tools (`src/lib/mcp-tools/*`): `get_catalog`, `get_delivery_options`,
+`list_designs`, `price_order`, `quote_bulk` (read-only) and, since Phase 2,
+`create_checkout`, `update_checkout`, `cancel_checkout`, `get_checkout_status`.
+Writes are gated on `MCP_ORDERING_ENABLED === "true"` and on the two-step
+rule (`dry_run` preview first, then `dry_run:false` + `confirm:true` with a
+UUID `idempotency_key`). A confirmed checkout calls `/api/checkout` in-process
+(Host = `MCP_STOREFRONT_HOST`, default `mcp.pinatagrams.com`) and returns
+Shopify's hosted invoice URL as `continue_url`; the server only ever creates
+or deletes unpaid draft orders — it never completes or marks one paid, never
+sends Shopify emails, and never registers webhooks (`src/lib/webhooks.ts`
+skips in mcp mode). MCP-placed orders carry the `mcp` tag plus the
+`_orderSource` / `_orderAgent` order attributes right after `_builderNonce`;
+`src/lib/paper-contract.ts` pins that shape. Idempotency is per instance
+(in-memory, 24 h, 200 keys) until Phase 3 moves it to Upstash.

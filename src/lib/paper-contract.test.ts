@@ -7,7 +7,14 @@ import {
   LINE_ATTR_KEYS,
   LINE_ATTR_REQUIRED,
   MESSAGE_MAX_CHARS,
+  ORDER_AGENT_MAX_CHARS,
+  ORDER_AGENT_RE,
+  ORDER_AGENT_UNKNOWN,
   ORDER_ATTR_REQUIRED,
+  ORDER_MCP_ATTR,
+  ORDER_MCP_ATTR_KEYS,
+  ORDER_SOURCE_MCP,
+  ORDER_TAG_MCP,
   PaperContractError,
   SHA256_RE,
   SHIPPING_LINE_TITLE,
@@ -179,6 +186,33 @@ describe("paper-contract constants", () => {
     expect(isCalendarDate("2026-02-30")).toBe(false);
     expect(isCalendarDate("2026-13-01")).toBe(false);
     expect(isCalendarDate("10/29/2026")).toBe(false);
+  });
+
+  it("freezes the ordering-MCP provenance rails (conditional, analytics-only, never required)", () => {
+    expect(ORDER_MCP_ATTR).toEqual({ source: "_orderSource", agent: "_orderAgent" });
+    expect(ORDER_MCP_ATTR_KEYS).toEqual(["_orderSource", "_orderAgent"]);
+    expect(ORDER_SOURCE_MCP).toBe("mcp");
+    expect(ORDER_TAG_MCP).toBe("mcp");
+    expect(ORDER_ATTR_REQUIRED).not.toContain("_orderSource");
+    expect(ORDER_ATTR_REQUIRED).not.toContain("_orderAgent");
+    expect(ORDER_AGENT_MAX_CHARS).toBe(64);
+    expect(ORDER_AGENT_UNKNOWN).toBe("unknown");
+    expect(ORDER_AGENT_RE.test(ORDER_AGENT_UNKNOWN)).toBe(true);
+    expect(ORDER_AGENT_RE.test("Claude Desktop 1.2/mcp-client_v3:test")).toBe(true);
+    expect(ORDER_AGENT_RE.test("x".repeat(64))).toBe(true);
+    expect(ORDER_AGENT_RE.test("x".repeat(65))).toBe(false);
+    expect(ORDER_AGENT_RE.test("")).toBe(false);
+    for (const bad of ["Claude (beta)", "<script>", "agent;drop", "Claué", "a\nb", "a,b", "a@b"]) {
+      expect(ORDER_AGENT_RE.test(bad)).toBe(false);
+    }
+    // no edge spaces: checkout trims after slicing, so the route can never
+    // emit them and the contract must not accept them either
+    for (const edge of [" x ", " x", "x ", " ", "  ", " unknown"]) expect(ORDER_AGENT_RE.test(edge)).toBe(false);
+    expect(ORDER_AGENT_RE.test("x")).toBe(true);
+    expect(ORDER_AGENT_RE.test("xy")).toBe(true);
+    expect(ORDER_AGENT_RE.test("x y")).toBe(true);
+    expect(ORDER_AGENT_RE.test(`a${" ".repeat(62)}b`)).toBe(true); // 64 chars, interior spaces fine
+    expect(ORDER_AGENT_RE.test(`a${" ".repeat(63)}b`)).toBe(false); // 65
   });
 });
 
@@ -541,6 +575,97 @@ describe("assertPaperDraft", () => {
       /_corpRef/,
     );
     expectRefusal(() => assertPaperDraft(order({ tags: ["variant-default"] })), "tag_builder", /"builder"/);
+  });
+
+  it("accepts an ordering-MCP draft: the mcp tag after builder + variant-*, _orderSource/_orderAgent after the nonce", () => {
+    const mcp = (agent: string, extra: Attr[] = []) =>
+      order({
+        tags: ["builder", "variant-default", "mcp"],
+        customAttributes: [
+          ...order().customAttributes,
+          { key: "_orderSource", value: "mcp" },
+          { key: "_orderAgent", value: agent },
+          ...extra,
+        ],
+      });
+    expect(assertPaperDraft(mcp("Claude Desktop 1.2/mcp-client_v3:test"))).toEqual({
+      carrier: "fedex",
+      pinataLines: 1,
+      addonLines: 0,
+    });
+    expect(assertPaperDraft(mcp("unknown")).carrier).toBe("fedex");
+    // the visit ids may follow the provenance pair
+    expect(assertPaperDraft(mcp("x".repeat(64), [{ key: "_phDistinctId", value: "0199c1f0" }])).pinataLines).toBe(1);
+  });
+
+  it("refuses MCP provenance that drifts: unpaired rails, a foreign source, an unsanitized agent, tag without rails or rails without tag", () => {
+    const withAttrs = (extra: Attr[], tags = ["builder", "variant-default", "mcp"]) =>
+      order({ tags, customAttributes: [...order().customAttributes, ...extra] });
+    const SOURCE = { key: "_orderSource", value: "mcp" };
+    const AGENT = { key: "_orderAgent", value: "unknown" };
+    expectRefusal(() => assertPaperDraft(withAttrs([SOURCE])), "mcp_attrs_pairing", /emitted together or not at all/);
+    expectRefusal(() => assertPaperDraft(withAttrs([AGENT])), "mcp_attrs_pairing", /_orderSource and _orderAgent/);
+    expectRefusal(
+      () => assertPaperDraft(withAttrs([{ key: "_orderSource", value: "storefront" }, AGENT])),
+      "order_source_invalid",
+      /_orderSource must be "mcp" — got "storefront"/,
+    );
+    for (const agent of ["", "Claude (beta)", "<script>alert(1)</script>", "x".repeat(65), "Claué"]) {
+      expectRefusal(
+        () => assertPaperDraft(withAttrs([SOURCE, { key: "_orderAgent", value: agent }])),
+        "order_agent_invalid",
+        /_orderAgent must match/,
+      );
+    }
+    // the tag and the rails travel together
+    expectRefusal(() => assertPaperDraft(withAttrs([])), "mcp_tag_pairing", /tag "mcp" without _orderSource/);
+    expectRefusal(
+      () => assertPaperDraft(withAttrs([SOURCE, AGENT], ["builder", "variant-default"])),
+      "mcp_tag_pairing",
+      /_orderSource without the "mcp" tag/,
+    );
+    // a storefront draft (no source, no tag) is untouched by the rule
+    expect(assertPaperDraft(order()).carrier).toBe("fedex");
+  });
+
+  it("pins POSITION: the pair IMMEDIATELY after _builderNonce, the mcp tag LAST — assertPaperDraft alone catches a regression", () => {
+    const SOURCE = { key: "_orderSource", value: "mcp" };
+    const AGENT = { key: "_orderAgent", value: "unknown" };
+    const PH = { key: "_phDistinctId", value: "0199c1f0" };
+    const base = order().customAttributes; // the five forensics, nonce last
+    const mcpTags = ["builder", "variant-default", "mcp"];
+    const draft = (customAttributes: Attr[], tags = mcpTags) => order({ tags, customAttributes });
+
+    // the pair moved to the front
+    expectRefusal(() => assertPaperDraft(draft([SOURCE, AGENT, ...base])), "mcp_attrs_position", /must follow _builderNonce immediately/);
+    // the pair split around the nonce
+    expectRefusal(
+      () => assertPaperDraft(draft([...base.slice(0, 4), SOURCE, base[4], AGENT])),
+      "mcp_attrs_position",
+      /_orderSource, _orderAgent must follow/,
+    );
+    // the pair after an analytics key
+    expectRefusal(() => assertPaperDraft(draft([...base, PH, SOURCE, AGENT])), "mcp_attrs_position", /got _builderHost, .*_phDistinctId, _orderSource/);
+    // agent before source
+    expectRefusal(() => assertPaperDraft(draft([...base, AGENT, SOURCE])), "mcp_attrs_position", /immediately/);
+    // the tag first, or in the middle
+    expectRefusal(() => assertPaperDraft(draft([...base, SOURCE, AGENT], ["mcp", "builder", "variant-default"])), "mcp_tag_position", /must be last/);
+    expectRefusal(
+      () => assertPaperDraft(draft([...base, SOURCE, AGENT], ["builder", "mcp", "variant-default"])),
+      "mcp_tag_position",
+      /got \["builder","mcp","variant-default"\]/,
+    );
+    // what the route really emits still passes, with or without a variant tag
+    // and with analytics keys AFTER the pair
+    expect(assertPaperDraft(draft([...base, SOURCE, AGENT])).carrier).toBe("fedex");
+    expect(assertPaperDraft(draft([...base, SOURCE, AGENT, PH])).carrier).toBe("fedex");
+    expect(assertPaperDraft(draft([...base, SOURCE, AGENT], ["builder", "mcp"])).carrier).toBe("fedex");
+    // an edge-space agent is refused as unsanitized (the tightened ORDER_AGENT_RE)
+    expectRefusal(
+      () => assertPaperDraft(draft([...base, SOURCE, { key: "_orderAgent", value: " x " }])),
+      "order_agent_invalid",
+      /_orderAgent must match/,
+    );
   });
 
   it("maps every dry-run add-on line onto a piñata's _addons, else refuses it as a stray charge", () => {

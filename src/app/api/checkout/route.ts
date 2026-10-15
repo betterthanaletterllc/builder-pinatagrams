@@ -327,6 +327,11 @@ type CheckoutBody = {
   };
   // The unpaid draft this checkout replaces (the client's pending record).
   supersedes?: { draftOrderId?: string; nonce?: string };
+  // Set ONLY by the ordering MCP (the storefront never sends these): the draft
+  // gains the "mcp" tag and the _orderSource / _orderAgent provenance attrs.
+  // `agent` is the connector's self-reported client name — analytics only.
+  source?: "mcp";
+  agent?: string;
   // NON-PRODUCTION ONLY: preview a variant by name so local/preview builds
   // can exercise any profile's checkout. Production ignores it completely —
   // there the variant comes from this request's own Host, full stop.
@@ -426,6 +431,20 @@ function analyticsAttributes(raw: unknown): AttributeInput[] {
     if (v && v.length <= max && ANALYTICS_VALUE_RE.test(v)) out.push({ key, value: v });
   }
   return out;
+}
+
+// The ordering MCP's self-reported client name → _orderAgent. Attacker-
+// controlled text: everything outside [A-Za-z0-9 ._/:-] is stripped, the
+// rest is capped at 64 chars, and "unknown" stands in when nothing survives.
+// Analytics only — nothing reads it as a trust input.
+const ORDER_AGENT_MAX = 64;
+const ORDER_AGENT_STRIP_RE = /[^A-Za-z0-9 ._/:-]/g;
+function orderAgent(raw: unknown): string {
+  const v =
+    typeof raw === "string"
+      ? raw.replace(ORDER_AGENT_STRIP_RE, "").trim().slice(0, ORDER_AGENT_MAX).trim()
+      : "";
+  return v || "unknown";
 }
 
 function cleanSupersedes(raw: unknown): { draftOrderId: string; nonce: string } | null {
@@ -529,6 +548,15 @@ export async function POST(req: Request) {
   if (email && !EMAIL_RE.test(email)) return bad("That email doesn't look right.");
   const sendInvoice = body?.sendInvoice === true;
   const analyticsAttrs = analyticsAttributes(body?.analytics);
+  // Ordering-MCP provenance (source "mcp" only; the storefront sends neither
+  // field): the "mcp" tag plus these two order attributes, nothing else.
+  const fromMcp = body?.source === "mcp";
+  const mcpAttrs: AttributeInput[] = fromMcp
+    ? [
+        { key: "_orderSource", value: "mcp" },
+        { key: "_orderAgent", value: orderAgent(body?.agent) },
+      ]
+    : [];
   const supersedes = cleanSupersedes(body?.supersedes);
   const rawLines = body?.lines;
   if (!Array.isArray(rawLines) || rawLines.length === 0)
@@ -1078,7 +1106,11 @@ export async function POST(req: Request) {
         ...(discountCodes.length
           ? { discountCodes, allowDiscountCodesInCheckout: false }
           : {}),
-        tags: variantTag ? ["builder", variantTag] : ["builder"],
+        // "mcp" rides AFTER builder + variant-* when the ordering MCP placed it.
+        tags: [
+          ...(variantTag ? ["builder", variantTag] : ["builder"]),
+          ...(fromMcp ? ["mcp"] : []),
+        ],
         // Forensics: which storefront sold this, under which profile shape,
         // priced from which catalog snapshot — orders self-document their
         // config epoch (a mid-test knob edit is visible per order). Then the
@@ -1103,6 +1135,9 @@ export async function POST(req: Request) {
           },
           { key: "_builderCatalog", value: catalog.asOf || "unknown" },
           { key: NONCE_ATTR, value: nonce },
+          // then the ordering MCP's provenance (_orderSource, _orderAgent) —
+          // empty for the storefront — ahead of the visit ids
+          ...mcpAttrs,
           ...analyticsAttrs,
         ],
         shippingAddress: {
