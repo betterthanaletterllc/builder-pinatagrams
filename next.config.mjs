@@ -13,6 +13,9 @@ const nextConfig = {
   // the render-probe function bundle even if static tracing misses them.
   outputFileTracingIncludes: {
     "/api/mcp/render-probe": ["./src/assets/fonts/**/*"],
+    // The designer MCP App (src/lib/mcp-tools/designer.ts) is one HTML file
+    // read with fs at request time; it must ship in the MCP function bundle.
+    "/api/mcp": ["./src/mcp-app/**/*"],
   },
 };
 export default nextConfig;

@@ -1,4 +1,5 @@
 import { mcpHandlers } from "@/lib/mcp-http";
+import { designerResources } from "@/lib/mcp-tools/designer";
 import { executeOrderTool, orderToolList } from "@/lib/order-tools";
 
 export const runtime = "nodejs";
@@ -18,9 +19,13 @@ export const maxDuration = 60;
  *
  * Connector URL: https://mcp.pinatagrams.com/api/mcp (no auth; public).
  * Ordering (create/update/cancel) is gated on MCP_ORDERING_ENABLED === "true".
+ * The in-chat designer (an MCP App) is the ui:// resource defined in
+ * src/lib/mcp-tools/designer.ts and served through the shell's resources/*.
  */
 
 const INSTRUCTIONS = `Piñatagrams: piñata-shaped gift boxes filled with candy or treats, with a printed message card inside, shipped to one recipient on a chosen date. The recipient KEEPS the piñata and pulls the treats out through the bottom; never say "smash" or "break". Tagline: "The sweetest gift."
+
+- open_designer: call this FIRST whenever someone wants to send, order or design a Piñatagram, passing whatever they already told you (occasion, recipient, date, message, address). It opens a visual designer in the chat where they pick the piñata, treats, design, date and address and see the live price. Don't ask in chat for choices the designer collects; do help write the card message; relay the checkout link the designer reports (the order exists only after payment on that link).
 
 Tools, in the order a gift comes together:
 - get_catalog: body styles (in stock or not), fillings, add-ons, per-unit shipping, graphic upcharges, earliest and latest delivery dates.
@@ -37,8 +42,9 @@ Ground rules: one recipient address per checkout; confirm recipient, date and me
 
 export const { POST, GET, DELETE, OPTIONS } = mcpHandlers({
   name: "pinatagrams-ordering",
-  version: "0.3.0",
+  version: "0.4.0",
   instructions: INSTRUCTIONS,
   toolList: orderToolList,
   execute: executeOrderTool,
+  resources: designerResources,
 });

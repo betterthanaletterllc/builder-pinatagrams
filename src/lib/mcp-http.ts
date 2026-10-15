@@ -15,6 +15,11 @@ import { isMcpMode } from "@/lib/app-mode";
  * and newer clients' MCP-Protocol-Version / Mcp-Method headers are
  * tolerated. A 2026-07-28 modern-only client (no `initialize`) is not
  * served yet; dual-era clients fall back to `initialize` and work.
+ *
+ * Resources (for MCP Apps, extension io.modelcontextprotocol/ui): when the
+ * server def carries `resources`, initialize advertises the capability and
+ * resources/list, resources/read and resources/templates/list are served
+ * from it. Without it those methods answer Method not found, as before.
  */
 
 const PROTOCOL_VERSIONS = new Set([
@@ -34,9 +39,28 @@ export type ToolAnnotations = {
 
 export type McpToolListing = {
   name: string;
+  /** Human-readable name a host may show instead of `name`. */
+  title?: string;
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: ToolAnnotations;
+  /** Extension metadata passed through verbatim — MCP Apps' `{ ui: { resourceUri } }`. */
+  _meta?: Record<string, unknown>;
+};
+
+export type McpResourceListing = {
+  uri: string;
+  name: string;
+  description?: string;
+  mimeType: string;
+  _meta?: Record<string, unknown>;
+};
+
+export type McpResourceContents = {
+  uri: string;
+  mimeType: string;
+  text: string;
+  _meta?: Record<string, unknown>;
 };
 
 export type McpServerDef = {
@@ -48,6 +72,13 @@ export type McpServerDef = {
   toolList: () => McpToolListing[];
   /** Runs a tool, returns an MCP CallToolResult. Throws only on unknown tool. */
   execute: (name: string, args: unknown) => Promise<unknown>;
+  /** Static resources (an MCP App's ui:// HTML, for one). Absent = no
+   *  resources capability and the resources/* methods are Method not found. */
+  resources?: {
+    list: () => McpResourceListing[];
+    /** The contents for `uri`, or null when no such resource exists. */
+    read: (uri: string) => Promise<McpResourceContents[] | null>;
+  };
 };
 
 /**
@@ -93,9 +124,15 @@ function rpcResult(req: NextRequest, id: unknown, result: unknown): NextResponse
   return NextResponse.json({ jsonrpc: "2.0", id, result }, { headers: corsHeaders(req) });
 }
 
-function rpcError(req: NextRequest, id: unknown, code: number, message: string): NextResponse {
+function rpcError(
+  req: NextRequest,
+  id: unknown,
+  code: number,
+  message: string,
+  data?: unknown,
+): NextResponse {
   return NextResponse.json(
-    { jsonrpc: "2.0", id, error: { code, message } },
+    { jsonrpc: "2.0", id, error: { code, message, ...(data === undefined ? {} : { data }) } },
     { headers: corsHeaders(req) },
   );
 }
@@ -103,6 +140,9 @@ function rpcError(req: NextRequest, id: unknown, code: number, message: string):
 const NOT_FOUND = () => new NextResponse("Not found", { status: 404 });
 
 export function mcpHandlers(def: McpServerDef) {
+  const methodNotFound = (req: NextRequest, id: unknown, method: unknown) =>
+    rpcError(req, id, -32601, `Method not found: ${method}`);
+
   async function POST(req: NextRequest) {
     if (!isMcpMode()) return NOT_FOUND();
     if (!originAllowed(req)) return new NextResponse("Forbidden", { status: 403 });
@@ -125,7 +165,10 @@ export function mcpHandlers(def: McpServerDef) {
         const requested = String(params?.protocolVersion ?? "");
         return rpcResult(req, id, {
           protocolVersion: PROTOCOL_VERSIONS.has(requested) ? requested : DEFAULT_PROTOCOL,
-          capabilities: { tools: { listChanged: false } },
+          capabilities: {
+            tools: { listChanged: false },
+            ...(def.resources ? { resources: { subscribe: false, listChanged: false } } : {}),
+          },
           serverInfo: { name: def.name, version: def.version },
           instructions: def.instructions,
         });
@@ -142,8 +185,34 @@ export function mcpHandlers(def: McpServerDef) {
           return rpcError(req, id, -32602, err instanceof Error ? err.message : String(err));
         }
       }
+      case "resources/list": {
+        if (!def.resources) return methodNotFound(req, id, method);
+        return rpcResult(req, id, { resources: def.resources.list() });
+      }
+      case "resources/templates/list": {
+        if (!def.resources) return methodNotFound(req, id, method);
+        return rpcResult(req, id, { resourceTemplates: [] });
+      }
+      case "resources/read": {
+        if (!def.resources) return methodNotFound(req, id, method);
+        const uri = params?.uri;
+        if (typeof uri !== "string" || !uri) {
+          return rpcError(req, id, -32602, "Invalid params: uri is required");
+        }
+        let contents: McpResourceContents[] | null;
+        try {
+          contents = await def.resources.read(uri);
+        } catch (err) {
+          console.error(
+            `[mcp] resources/read ${uri} failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return rpcError(req, id, -32603, "Resource unavailable");
+        }
+        if (!contents) return rpcError(req, id, -32002, "Resource not found", { uri });
+        return rpcResult(req, id, { contents });
+      }
       default:
-        return rpcError(req, id, -32601, `Method not found: ${method}`);
+        return methodNotFound(req, id, method);
     }
   }
 

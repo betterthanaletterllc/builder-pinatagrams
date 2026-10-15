@@ -1,4 +1,4 @@
-import { getCatalog, type HubCatalog } from "@/lib/hub";
+import { getCatalog } from "@/lib/hub";
 import {
   deliveryProblem,
   maxDeliveryDate,
@@ -7,7 +7,9 @@ import {
   type Carrier,
 } from "@/lib/delivery";
 import { toolError, toolText, type McpToolListing, type ToolAnnotations } from "@/lib/mcp-http";
+import { projectCatalog } from "@/lib/mcp-tools/catalog";
 import { checkoutTools } from "@/lib/mcp-tools/checkout";
+import { designerTools } from "@/lib/mcp-tools/designer";
 import { designTools } from "@/lib/mcp-tools/designs";
 import { priceTools } from "@/lib/mcp-tools/price";
 import { quoteTools } from "@/lib/mcp-tools/quote";
@@ -32,76 +34,31 @@ const READ_ONLY: ToolAnnotations = {
 };
 
 export type ToolDef = {
+  /** Human-readable name for a host's UI (tools/list `title`); optional. */
+  title?: string;
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: ToolAnnotations;
+  /** Extension metadata passed through tools/list verbatim — an MCP App's
+   *  `{ ui: { resourceUri } }`. Optional. */
+  _meta?: Record<string, unknown>;
   handler: (args: Record<string, unknown>) => Promise<unknown>;
 };
 
 const CARRIERS: Carrier[] = ["fedex", "usps"];
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
-function num(v: unknown): number | null {
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-/** Customer-safe projection of the hub catalog: nothing here is a cost,
- *  a margin or an exact stock count — the hub's public plane already
- *  withholds those, and this narrows further to what an agent needs. */
-function projectCatalog(catalog: HubCatalog) {
-  const raw = catalog as unknown as Record<string, unknown>;
-  const shipping = (raw.shipping ?? {}) as Record<string, unknown>;
-  const pricing = (raw.pricing ?? {}) as Record<string, unknown>;
-  const cfg = resolveDeliveryConfig(catalog.delivery);
-  return {
-    as_of: catalog.asOf,
-    ...(catalog.stale ? { stale: catalog.stale } : {}),
-    body_styles: catalog.bodyStyles.map((s) => ({
-      id: s.id,
-      name: s.name,
-      in_stock: !!s.inStock,
-      image_url: s.imageUrl ?? null,
-    })),
-    fillings: (catalog.fillings ?? []).map((f) => ({
-      id: f.id,
-      label: f.label,
-      blurb: f.blurb ?? "",
-      price_cents: num(f.priceCents) ?? 0,
-    })),
-    add_ons: (catalog.addons ?? []).map((a) => ({
-      id: a.id,
-      label: a.label,
-      price_cents: num(a.priceCents) ?? 0,
-    })),
-    shipping_per_unit_cents: {
-      fedex_2day: num(shipping.fedexCents),
-      usps_first_class: num(shipping.uspsCents),
-    },
-    graphic_upcharge_cents: {
-      library_design: num(pricing.graphicLibraryUpchargeCents),
-      custom_art: num(pricing.graphicCustomUpchargeCents),
-    },
-    delivery: {
-      timezone: "America/Chicago",
-      earliest_fedex: minDeliveryDate(cfg, "fedex"),
-      earliest_usps: minDeliveryDate(cfg, "usps"),
-      latest: maxDeliveryDate(cfg),
-    },
-    currency: "USD",
-    note: "All amounts are integer cents before tax. Every piñata is a gift box with a printed message card inside; the recipient keeps the piñata and pulls the treats out.",
-  };
-}
-
 export const orderTools: Record<string, ToolDef> = {
-  // Phase 1 modules (src/lib/mcp-tools/*): each owns its own file + tests.
+  // Phase 1+ modules (src/lib/mcp-tools/*): each owns its own file + tests.
   ...priceTools,
   ...designTools,
   ...quoteTools,
   ...checkoutTools,
+  ...designerTools,
   get_catalog: {
     description:
       "What Piñatagrams can send right now: body styles with in-stock status, fillings, add-ons, per-unit shipping (FedEx 2-Day guaranteed date vs USPS First Class window), graphic upcharges, and the earliest and latest delivery dates. Amounts are integer cents. Call this before quoting anything.",
@@ -163,9 +120,11 @@ export const orderTools: Record<string, ToolDef> = {
 export function orderToolList(): McpToolListing[] {
   return Object.entries(orderTools).map(([name, def]) => ({
     name,
+    ...(def.title ? { title: def.title } : {}),
     description: def.description,
     inputSchema: def.inputSchema,
     annotations: def.annotations,
+    ...(def._meta ? { _meta: def._meta } : {}),
   }));
 }
 
