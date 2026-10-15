@@ -106,3 +106,20 @@ its `.env.local` pointing at the seeded Neon DB. `NEXT_PUBLIC_HUB_URL` in
 Still to do: GitHub repo + Vercel git integration (deploys are CLI-only for
 now), DNS `builder.pinatagrams.com` CNAME, and the hub must serve
 `/api/public/catalog` + `/price` (admin commit `5160452` — push pending).
+
+## MCP face (mcp.pinatagrams.com)
+
+The same codebase deploys twice. The Vercel project `pinatagrams-mcp` sets
+`APP_MODE=mcp` and tracks the `feat/ordering-mcp` branch as production; it
+has its own Shopify custom app (`pinatagrams-mcp`, `read_products` +
+`write_draft_orders`) so agent traffic can never throttle or take down the
+storefront's checkout. In that mode `src/middleware.ts` 404s every storefront,
+cart and checkout path, answers the storefront's crons with a no-op 200, and
+serves only `/api/mcp` — a public, no-auth MCP server (stateless Streamable
+HTTP; shell in `src/lib/mcp-http.ts`, tools in `src/lib/order-tools.ts`).
+On builder.pinatagrams.com the MCP endpoint 404s. Scope and decisions:
+workspace-root `ORDERING-MCP-SCOPE-2026-10.md`.
+
+Connector URL: `https://mcp.pinatagrams.com/api/mcp`. Local run of this face:
+`APP_MODE=mcp` in `.env.local`, then `next start`, and POST JSON-RPC
+(`initialize`, `tools/list`, `tools/call`) to `/api/mcp`.

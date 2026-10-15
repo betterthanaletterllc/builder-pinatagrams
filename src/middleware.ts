@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isMcpMode, mcpModeAllows } from "@/lib/app-mode";
+import { isMcpMode, mcpModeAllows, mcpModeSkipsCron } from "@/lib/app-mode";
 import {
   FLOW_COOKIE,
   FLOW_HEADER,
@@ -35,6 +35,12 @@ export function middleware(req: NextRequest) {
   // the second deployment can never act as a duplicate storefront.
   if (isMcpMode()) {
     const robots = "noindex, nofollow";
+    if (mcpModeSkipsCron(req.nextUrl.pathname)) {
+      return NextResponse.json(
+        { skipped: "mcp-mode: storefront crons do not run on this deployment" },
+        { headers: { "X-Robots-Tag": robots } },
+      );
+    }
     if (!mcpModeAllows(req.nextUrl.pathname)) {
       return new NextResponse("Not found", { status: 404, headers: { "X-Robots-Tag": robots } });
     }

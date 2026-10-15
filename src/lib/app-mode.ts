@@ -27,3 +27,15 @@ export function mcpModeAllows(pathname: string): boolean {
     pathname.startsWith("/.well-known/")
   );
 }
+
+/**
+ * vercel.json's crons fire on EVERY project built from this repo, so the
+ * mcp face receives the storefront's cron hits too (art cleanup, draft
+ * expiry, webhook registration). None of them may run here — the webhook
+ * one would register the storefront's orders/paid hook under the MCP's own
+ * Shopify app pointing at a 404 — so they are acknowledged with a no-op
+ * 200 instead of a 404, which Vercel would log as a failed cron run.
+ */
+export function mcpModeSkipsCron(pathname: string): boolean {
+  return pathname.startsWith("/api/cron/");
+}

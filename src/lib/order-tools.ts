@@ -7,6 +7,9 @@ import {
   type Carrier,
 } from "@/lib/delivery";
 import { toolError, toolText, type McpToolListing, type ToolAnnotations } from "@/lib/mcp-http";
+import { designTools } from "@/lib/mcp-tools/designs";
+import { priceTools } from "@/lib/mcp-tools/price";
+import { quoteTools } from "@/lib/mcp-tools/quote";
 
 /**
  * The ordering MCP's tool registry — transport-agnostic so the same table
@@ -27,7 +30,7 @@ const READ_ONLY: ToolAnnotations = {
   openWorldHint: true,
 };
 
-type ToolDef = {
+export type ToolDef = {
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: ToolAnnotations;
@@ -93,6 +96,10 @@ function projectCatalog(catalog: HubCatalog) {
 }
 
 export const orderTools: Record<string, ToolDef> = {
+  // Phase 1 modules (src/lib/mcp-tools/*): each owns its own file + tests.
+  ...priceTools,
+  ...designTools,
+  ...quoteTools,
   get_catalog: {
     description:
       "What Piñatagrams can send right now: body styles with in-stock status, fillings, add-ons, per-unit shipping (FedEx 2-Day guaranteed date vs USPS First Class window), graphic upcharges, and the earliest and latest delivery dates. Amounts are integer cents. Call this before quoting anything.",

@@ -49,7 +49,7 @@ export const DEFAULT_VARIANT: VariantProfile = {
 
 /** Hosts where a fallback resolution is EXPECTED (the main site + local/CI
  *  surfaces), not a misconfiguration. */
-const EXPECTED_FALLBACK_HOSTS = /^(builder\.pinatagrams\.com|localhost|127\.0\.0\.1|.*\.vercel\.app)$/;
+const EXPECTED_FALLBACK_HOSTS = /^(builder\.pinatagrams\.com|mcp\.pinatagrams\.com|localhost|127\.0\.0\.1|.*\.vercel\.app)$/;
 
 export function normalizeHost(host: string | null | undefined): string {
   return (host ?? "").trim().toLowerCase().replace(/:\d+$/, "");

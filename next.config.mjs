@@ -6,5 +6,13 @@ const nextConfig = {
       { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
     ],
   },
+  // The server-side art renderer (src/lib/render) is a native addon with
+  // per-platform packages; it must be required at runtime, not bundled.
+  serverExternalPackages: ["@resvg/resvg-js"],
+  // Its fonts are plain files read with fs — make sure they ride along in
+  // the render-probe function bundle even if static tracing misses them.
+  outputFileTracingIncludes: {
+    "/api/mcp/render-probe": ["./src/assets/fonts/**/*"],
+  },
 };
 export default nextConfig;
