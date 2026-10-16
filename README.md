@@ -87,6 +87,30 @@ art upload to Blob is still a placeholder (`PENDING_RENDER_UPLOAD`).
    lands in Paper in the SAME release) + saved designs (Neon)
 6. betterthanaletter.com embed (iframe/postMessage)
 
+## Graphics manifest (`public/graphics.json`)
+
+Snapshot of the Shopify front-graphic library (generated 2026-07-06 from the
+`graphics/front` + `graphics/message` product metafields; the `message` URLs
+are refreshed by `admin/scripts/audit-message-graphics.mjs --write`, nothing
+refreshes `art` yet). `art` is what checkout writes to the `_frontGraphic`
+line attribute, and Paper snapshots that file as the FRONT of the piñata — so
+every `art` must be a `cdn.shopify.com` PNG / JPG / WebP. Paper refuses SVG
+(and anything that isn't a URL) and prints its DO-NOT-FULFILL label instead.
+
+`npm run check:graphics` checks exactly that; `npm run check:graphics -- --live`
+also HEADs every URL and compares the served content-type. Known state as of
+2026-10-16:
+
+- Five fronts live in Shopify under `*_message.png` names (HBD01, HBD06,
+  ANNI01, WED02, WED03). The files ARE the front art — verified against each
+  design's 2023 `*_front_graphic.svg` — and Shopify's own `graphics/front`
+  metafield points at them, so the name is the only thing wrong. Don't swap
+  them for the SVGs: Paper can't print those. The real fix is re-uploading
+  them as `*_front.png` in Shopify and repointing metafield + manifest.
+- Seven designs have SVG-only fronts (FAF45–48, REALSY10–12). The builder
+  sells them, Paper can't ingest the art. They need PNG renders uploaded to
+  Shopify, then metafield + manifest repointed.
+
 ## Dev
 
 ```

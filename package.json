@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3006",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "check:graphics": "node scripts/check-graphics.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.5.0",
