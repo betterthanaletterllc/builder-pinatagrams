@@ -93,9 +93,11 @@ Snapshot of the Shopify front-graphic library (generated 2026-07-06 from the
 `graphics/front` + `graphics/message` product metafields; the `message` URLs
 are refreshed by `admin/scripts/audit-message-graphics.mjs --write`, nothing
 refreshes `art` yet). `art` is what checkout writes to the `_frontGraphic`
-line attribute, and Paper snapshots that file as the FRONT of the piñata — so
-every `art` must be a `cdn.shopify.com` PNG / JPG / WebP. Paper refuses SVG
-(and anything that isn't a URL) and prints its DO-NOT-FULFILL label instead.
+line attribute. Builder lines (CUSTOM-* SKUs) go through Paper's builder-art
+snapshot, which accepts only `cdn.shopify.com` PNG / JPG / WebP and prints
+its DO-NOT-FULFILL label as the FRONT for anything else (SVG, non-URL). That
+gate is builder-only: Paper's print view renders SVG fine and theme orders
+print the product's `graphics/front` metafield as-is.
 
 `npm run check:graphics` checks exactly that; `npm run check:graphics -- --live`
 also HEADs every URL and compares the served content-type. Known state as of
@@ -105,11 +107,14 @@ also HEADs every URL and compares the served content-type. Known state as of
   ANNI01, WED02, WED03). The files ARE the front art — verified against each
   design's 2023 `*_front_graphic.svg` — and Shopify's own `graphics/front`
   metafield points at them, so the name is the only thing wrong. Don't swap
-  them for the SVGs: Paper can't print those. The real fix is re-uploading
-  them as `*_front.png` in Shopify and repointing metafield + manifest.
-- Seven designs have SVG-only fronts (FAF45–48, REALSY10–12). The builder
-  sells them, Paper can't ingest the art. They need PNG renders uploaded to
-  Shopify, then metafield + manifest repointed.
+  them for the SVGs (builder lines would hit the snapshot gate). The real fix
+  is re-uploading them as `*_front.png` in Shopify and repointing metafield
+  + manifest.
+- Seven designs have SVG-only fronts (FAF45–48, REALSY10–12). Theme orders
+  print them fine; builder orders hit the snapshot gate. Fix on either side:
+  let Paper's builder-art snapshot accept `image/svg+xml` from
+  `cdn.shopify.com`, or upload PNG renders to Shopify and repoint metafield
+  + manifest.
 
 ## Dev
 

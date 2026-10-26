@@ -2,10 +2,13 @@
 // Checks public/graphics.json against what Paper can actually print.
 //
 // Every library `art` URL becomes the draft order's `_frontGraphic` line
-// attribute, and Paper snapshots that file as the FRONT of the piñata. Paper
-// only accepts https://cdn.shopify.com/ (or the builder blob) and only
-// image/png, image/jpeg or image/webp bodies — an SVG or a non-URL value is
-// refused and the line gets the DO-NOT-FULFILL sentinel label instead.
+// attribute. Builder lines (CUSTOM-* SKUs) go through Paper's builder-art
+// snapshot (apps/backend/src/server/utils/builder-art), which only accepts
+// https://cdn.shopify.com/ (or the builder blob) and only image/png,
+// image/jpeg or image/webp bodies — an SVG or a non-URL value is refused and
+// the line's FRONT becomes the DO-NOT-FULFILL sentinel label. Paper's print
+// view itself renders SVG fine: theme orders print the product's
+// graphics/front metafield as-is, SVG included. The gate is builder-only.
 //
 //   node scripts/check-graphics.mjs          # structural checks, no network
 //   node scripts/check-graphics.mjs --live   # also HEAD every art URL and
@@ -30,8 +33,8 @@ const RASTER_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 // *_front_graphic.svg / *_message_graphic.svg pair: identical to the front.
 // Shopify's graphics/front metafield points at these same files, so Paper has
 // printed them as fronts since 2024-10-13. Leave them until the files are
-// re-uploaded under *_front.png names — do NOT "fix" them to the SVGs, which
-// Paper cannot ingest.
+// re-uploaded under *_front.png names — do NOT "fix" them to the SVGs: the
+// builder-art snapshot gate would turn every builder order into a sentinel.
 const VERIFIED_FRONT_DESPITE_NAME = new Set([
   "HBD01-GOOGLY_message.png",
   "HBD06-STANDARD_message.png",
@@ -56,7 +59,7 @@ for (const g of graphics) {
   }
   if (!ART_HOST_RE.test(g.art)) errors.push(`${where}: art host is not cdn.shopify.com — ${g.art}`);
   if (!RASTER_EXT.has(ext(g.art)))
-    errors.push(`${where}: art is .${ext(g.art) || "?"}, Paper prints png/jpg/webp only — ${fileName(g.art)}`);
+    errors.push(`${where}: art is .${ext(g.art) || "?"}, Paper's builder-art snapshot accepts png/jpg/webp only — ${fileName(g.art)}`);
   const name = fileName(g.art);
   if (/message/i.test(name) && !VERIFIED_FRONT_DESPITE_NAME.has(name))
     warnings.push(`${where}: front art file is named like a message card — ${name} (open it and confirm it is the front)`);
