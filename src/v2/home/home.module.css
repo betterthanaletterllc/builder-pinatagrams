@@ -466,3 +466,271 @@
   font: 400 14px/1.45 var(--pg-font);
   color: var(--pg-muted);
 }
+
+/* --- all-in landing (flat-price storefronts) ------------------------------
+   The piñata leads on a phone: photo, plain headline, price + arrival, the
+   button, then proof and the risk reversal right under it. */
+
+.homeAllIn {
+  /* room for the sticky bar */
+  padding-bottom: 96px;
+}
+
+.heroAllIn {
+  padding-top: 12px;
+  gap: 16px;
+}
+
+.heroAllIn .heroMedia {
+  aspect-ratio: auto;
+  height: min(30svh, 72vw);
+}
+
+.heroAllIn .title {
+  margin-bottom: 6px;
+  font-size: clamp(32px, 6vw, 60px);
+  line-height: 1.22;
+}
+
+.enye {
+  font-family: var(--pg-font);
+  font-weight: 800;
+}
+
+.subhead {
+  margin: 0 0 12px;
+  font: 600 19px/1.35 var(--pg-font);
+  color: var(--pg-navy);
+}
+
+.heroAllIn .pitch {
+  margin-bottom: 10px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.heroFacts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 0 0 14px;
+  font: 500 15px/1.4 var(--pg-font);
+}
+
+.heroFacts strong {
+  font-weight: 700;
+}
+
+.heroFacts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.proof {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.proofRating {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--pg-navy);
+  font: 500 15px/1.4 var(--pg-font);
+  text-decoration: none;
+}
+
+.proofRating strong {
+  font-weight: 700;
+}
+
+.proofLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 500 14px/1.45 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.proofLine svg {
+  flex: none;
+  color: var(--pg-success-text);
+}
+
+.pay {
+  margin: 2px 0 0;
+  font: 400 13px/1.4 var(--pg-font);
+  color: var(--pg-muted);
+}
+
+.heroPhotos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+  font: 500 13px/1.4 var(--pg-font);
+  color: var(--pg-muted);
+}
+
+.heroPhotos ul {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.heroPhotos li + li {
+  margin-left: -10px;
+}
+
+.heroPhotos img {
+  display: block;
+  width: 52px;
+  height: 52px;
+  border: 3px solid var(--pg-white);
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* price anchor */
+.compare {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compare li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--pg-line);
+  border-radius: var(--pg-r-card);
+  background: var(--pg-white);
+}
+
+.compareName {
+  font: 600 16px/1.3 var(--pg-font);
+}
+
+.comparePrice {
+  font: 600 16px/1.3 var(--pg-font);
+  text-align: right;
+}
+
+.compareNote {
+  grid-column: 1 / -1;
+  font: 400 14px/1.4 var(--pg-font);
+  color: var(--pg-muted);
+}
+
+.compare .compareUs {
+  border: 2px solid var(--pg-navy);
+  background: var(--pg-cream);
+}
+
+.compareUs .compareNote {
+  color: var(--pg-navy);
+}
+
+/* closing CTA (after the reviews) */
+.closing {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.closingTitle {
+  margin: 0;
+  font-family: var(--pg-display);
+  font-weight: 400;
+  font-size: clamp(30px, 5vw, 48px);
+  line-height: 1.05;
+}
+
+.closingText {
+  margin: 0 0 6px;
+  font: 500 15px/1.45 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.corpLink {
+  margin: 12px 0 0;
+  font: 400 14px/1.45 var(--pg-font);
+  color: var(--pg-muted);
+}
+
+.corpLink a {
+  color: var(--pg-peri-dark);
+}
+
+/* sticky bottom bar: shows once the hero button scrolls away */
+.stickyBar {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 30;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  background: var(--pg-white);
+  box-shadow: var(--pg-shadow-bar, 0 -4px 16px rgba(24, 13, 56, 0.12));
+  transform: translateY(110%);
+  transition: transform 0.2s ease;
+}
+
+.stickyBar[data-show="true"] {
+  transform: none;
+}
+
+.stickyRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1200px;
+  min-height: 48px;
+  margin: 0 auto;
+}
+
+.stickyLines {
+  flex: 1;
+  display: grid;
+  margin: 0;
+  font: 400 13px/1.35 var(--pg-font);
+  color: var(--pg-muted);
+}
+
+.stickyLines strong {
+  font: 700 17px/1.3 var(--pg-font);
+  color: var(--pg-navy);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stickyBar {
+    transition: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .compare {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .heroAllIn .heroMedia {
+    order: 2;
+    height: auto;
+    aspect-ratio: 1 / 1;
+  }
+
+  .heroAllIn .pitch {
+    font-size: 17px;
+  }
+}

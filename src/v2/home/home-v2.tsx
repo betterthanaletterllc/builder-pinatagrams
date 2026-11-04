@@ -22,6 +22,7 @@ import { clipText, PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import { ButtonLink, ChipLink } from "../ui/controls";
 import { Check, ChevronRight, Star, Tag, Truck, Users } from "../ui/icons";
 import { CORPORATE_URL } from "@/lib/links";
+import StickyCta from "./sticky-cta";
 import Stars from "../ui/stars";
 import s from "./home.module.css";
 
@@ -57,7 +58,7 @@ export default async function HomeV2({
     b2cPrice(),
     // Extra headroom so the strip still finds 4 five-star-or-verified cards
     // after filtering; null on any hiccup → the review UI is simply absent.
-    getReviews({ limit: 12 }),
+    getReviews({ limit: 60 }),
   ]);
 
   const variant = resolveVariantProfile(catalog.variant);
@@ -113,9 +114,21 @@ export default async function HomeV2({
   const best = bestSellers(variant, 8);
   const designCount = libraryCount(variant, resolveHubGraphics(catalog.hubGraphics));
   const occasions = occasionStrips(variant);
-  const reviewPicks: HubReview[] = reviews
-    ? reviews.reviews.filter((r) => r.rating === 5 || r.verified).slice(0, 4)
+  const hasPhoto = (r: HubReview) => (r.media ?? []).some((m) => m.kind === "photo" && m.url);
+  const goodReviews = reviews ? reviews.reviews.filter((r) => r.rating === 5 || r.verified) : [];
+  // All-in landing: real customer photos lead (photo reviews first).
+  const reviewPicks: HubReview[] = allIn
+    ? [...goodReviews.filter(hasPhoto), ...goodReviews.filter((r) => !hasPhoto(r))].slice(0, 4)
+    : goodReviews.slice(0, 4);
+  // The hero's strip of real delivery photos (verified, five-star, with a photo).
+  const heroPhotos = allIn
+    ? goodReviews
+        .filter((r) => r.rating === 5 && hasPhoto(r))
+        .slice(0, 4)
+        .map((r) => ({ id: r.id, name: r.name, url: r.media.find((m) => m.kind === "photo" && m.url)!.url }))
     : [];
+  const deliveredText = priceCents !== null ? `${dollars(priceCents)} delivered` : null;
+  const freeShip = variant.flatPrice?.shipCents === 0;
   const pitch =
     variant.landingLines?.[0] ??
     (allIn && priceCents !== null
@@ -123,7 +136,7 @@ export default async function HomeV2({
       : `A ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, your design on the box and your message on the inside flap delivered straight to their door.`);
 
   return (
-    <main className={s.home}>
+    <main className={`${s.home}${allIn ? ` ${s.homeAllIn}` : ""}`}>
       {/* Remembers a non-production ?variant= preview for client surfaces
           and flags unresolved hosts loudly. Renders nothing. */}
       <VariantBoot
@@ -133,6 +146,85 @@ export default async function HomeV2({
       />
       <PendingBanner />
 
+      {allIn ? (
+        <section className={`${s.hero} ${s.heroAllIn}`} aria-labelledby="home-title">
+          <div className={s.heroMedia}>
+            {hero || heroFallback?.boxImageUrl ? (
+              <Image
+                src={hero ? hero.url : heroFallback!.boxImageUrl!}
+                alt={hero ? hero.label || "A Piñatagram in its box" : `A ${heroFallback!.name} Piñatagram in its box`}
+                width={1080}
+                height={1080}
+                sizes="(min-width: 1024px) 520px, 92vw"
+                priority
+                className={s.heroImg}
+              />
+            ) : null}
+          </div>
+          <div className={s.heroCopy}>
+            <h1 id="home-title" className={s.title}>
+              {/* Arbotek draws ñ with a cramped tilde: that one letter is set in
+                  the body face. */}
+              Mail them an actual pi<span className={s.enye}>ñ</span>ata
+            </h1>
+            <p className={s.subhead}>The gift they&apos;ll text you a photo of.</p>
+            <p className={s.pitch}>
+              A {PINATA_HEIGHT_IN}-inch piñata packed with candy, your design on the box and your
+              message inside, sent by FedEx to arrive on the day you pick.
+            </p>
+            <p className={s.heroFacts}>
+              {deliveredText && <strong>{deliveredText}</strong>}
+              <span>
+                <Truck size={16} /> {promise}
+              </span>
+            </p>
+            <div className={s.ctaRow}>
+              <ButtonLink id="home-cta" href="/design" size="lg">
+                Send a Piñatagram
+              </ButtonLink>
+            </div>
+            <div className={s.proof}>
+              {reviews && reviews.aggregate.count > 0 && (
+                <Link href="/reviews" className={s.proofRating}>
+                  <Stars rating={reviews.aggregate.rating} size={16} />
+                  <span>
+                    <strong>{reviews.aggregate.rating.toFixed(1)}</strong> ·{" "}
+                    {reviews.aggregate.count.toLocaleString("en-US")} reviews
+                  </span>
+                  {/* brand-pooled rating — the scope label stays with the number */}
+                  <span className={s.scope}>{reviews.scope.label}</span>
+                </Link>
+              )}
+              <p className={s.proofLine}>
+                <Check size={16} /> Lost or damaged on the way? We send a replacement, free.
+              </p>
+              <p className={s.proofLine}>
+                <Check size={16} /> Ships anywhere in the US
+                {freeShip ? ", FedEx included" : ""}
+              </p>
+              <p className={s.pay}>Secure checkout · Apple Pay · all major cards</p>
+            </div>
+            {heroPhotos.length > 0 && (
+              <div className={s.heroPhotos}>
+                <ul aria-label="Photos from customers">
+                  {heroPhotos.map((p) => (
+                    <li key={p.id}>
+                      <Image
+                        src={p.url}
+                        alt={`Customer photo from ${p.name}`}
+                        width={144}
+                        height={144}
+                        sizes="72px"
+                      />
+                    </li>
+                  ))}
+                </ul>
+                <span>Real deliveries from real customers</span>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : (
       <section className={s.hero} aria-labelledby="home-title">
         <div className={s.heroCopy}>
           <ul className={s.promise} aria-label="Delivery, price and rating">
@@ -233,6 +325,32 @@ export default async function HomeV2({
           ) : null}
         </div>
       </section>
+      )}
+
+      {allIn && priceCents !== null && (
+        <section className={s.section} aria-labelledby="home-compare">
+          <h2 id="home-compare" className={s.h2}>
+            More fun than flowers, for less
+          </h2>
+          <ul className={s.compare}>
+            <li>
+              <span className={s.compareName}>Flower delivery</span>
+              <span className={s.comparePrice}>usually $75+</span>
+              <span className={s.compareNote}>Wilted in a week</span>
+            </li>
+            <li>
+              <span className={s.compareName}>Fruit bouquet</span>
+              <span className={s.comparePrice}>usually $60+</span>
+              <span className={s.compareNote}>Gone in a day</span>
+            </li>
+            <li className={s.compareUs}>
+              <span className={s.compareName}>A Piñatagram</span>
+              <span className={s.comparePrice}>{dollars(priceCents)} delivered</span>
+              <span className={s.compareNote}>Candy to share, and a piñata they keep</span>
+            </li>
+          </ul>
+        </section>
+      )}
 
       {occasions.length > 0 && (
         <section className={s.section} aria-labelledby="home-occasions">
@@ -375,6 +493,27 @@ export default async function HomeV2({
         </section>
       )}
 
+      {allIn ? (
+        <>
+          <section className={`${s.section} ${s.closing}`} aria-labelledby="home-closing">
+            <h2 id="home-closing" className={s.closingTitle}>
+              Send the party
+            </h2>
+            <p className={s.closingText}>
+              {deliveredText ? `${deliveredText} · ` : ""}
+              {promise}
+            </p>
+            <ButtonLink href="/design" size="lg">
+              Send a Piñatagram
+            </ButtonLink>
+            <p className={s.corpLink}>
+              Sending to a team or lots of people?{" "}
+              <a href={CORPORATE_URL}>Corporate gifting</a>
+            </p>
+          </section>
+          <StickyCta watchId="home-cta" price={deliveredText} arrive={arrive} />
+        </>
+      ) : (
       <section className={`${s.section} ${s.corporate}`} aria-labelledby="home-corp">
         <Users size={28} />
         <div>
@@ -389,6 +528,7 @@ export default async function HomeV2({
           Corporate gifting
         </ButtonLink>
       </section>
+      )}
     </main>
   );
 }
