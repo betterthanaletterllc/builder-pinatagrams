@@ -893,3 +893,17 @@
     animation: none;
   }
 }
+
+/* all-in storefronts: "Need a start?" sits under the message box, beside
+   the characters-left count */
+.underBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.underBox .counter {
+  margin: 0;
+}

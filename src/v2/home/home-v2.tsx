@@ -11,7 +11,7 @@ import {
   type HubReview,
 } from "@/lib/hub";
 import { cdnThumb } from "@/lib/library-data";
-import { resolveVariantProfile } from "@/lib/variant";
+import { priceForVariant, resolveVariantProfile } from "@/lib/variant";
 import VariantBoot from "@/app/variant-boot";
 import HubDown from "../chrome/hub-down";
 import PendingBanner from "../chrome/pending-banner";
@@ -32,6 +32,11 @@ import s from "./home.module.css";
  * with a preset (occasion / design / body), resolved there server-side.
  * Same hub data as v1's home: catalog, price, reviews.
  */
+/** "$50" for whole dollars, "$49.99" otherwise. */
+function dollars(cents: number): string {
+  return cents % 100 === 0 ? `$${cents / 100}` : formatCents(cents);
+}
+
 export default async function HomeV2({
   searchParams,
 }: {
@@ -48,7 +53,7 @@ export default async function HomeV2({
   } catch {
     return <HubDown />;
   }
-  const [price, reviews] = await Promise.all([
+  const [basePrice, reviews] = await Promise.all([
     b2cPrice(),
     // Extra headroom so the strip still finds 4 five-star-or-verified cards
     // after filtering; null on any hiccup → the review UI is simply absent.
@@ -56,6 +61,9 @@ export default async function HomeV2({
   ]);
 
   const variant = resolveVariantProfile(catalog.variant);
+  // An all-in storefront's one delivered price lays over the price book.
+  const price = priceForVariant(basePrice, variant);
+  const allIn = !!variant.flatPrice;
   // A storefront without a landing (a client store whose own site already
   // made the pitch, e.g. froggle) opens straight on the builder — never on
   // the generic Piñatagrams home. The query (UTMs, a discount) rides along.
@@ -80,7 +88,13 @@ export default async function HomeV2({
       : price.unitDeliveredCents
     : null;
   const priceText =
-    priceCents !== null ? `${tiered ? "From " : ""}${formatCents(priceCents)} delivered` : null;
+    priceCents !== null
+      ? allIn
+        ? `${dollars(priceCents)} flat, delivered`
+        : `${tiered ? "From " : ""}${formatCents(priceCents)} delivered`
+      : null;
+  // The all-in pitch's optional extra (Double Candy), at this storefront's price.
+  const extra = allIn ? (catalog.addons ?? []).find((a) => a.id === "double-candy") : undefined;
 
   // The headline promise stays FedEx (the guaranteed day) even where USPS is
   // offered; "order by midnight" only when tonight really is the cutoff.
@@ -104,7 +118,9 @@ export default async function HomeV2({
     : [];
   const pitch =
     variant.landingLines?.[0] ??
-    `A ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, your design on the box and your message on the inside flap delivered straight to their door.`;
+    (allIn && priceCents !== null
+      ? `One price, everything included. ${dollars(priceCents)} sends a ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, with your design on the box and your message inside, delivered straight to their door.`
+      : `A ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, your design on the box and your message on the inside flap delivered straight to their door.`);
 
   return (
     <main className={s.home}>
@@ -148,6 +164,38 @@ export default async function HomeV2({
               Send a Piñatagram
             </ButtonLink>
           </div>
+          {allIn ? (
+            <>
+              <p className={s.includedHead}>
+                Everything included{priceCents !== null ? ` for ${dollars(priceCents)}` : ""}:
+              </p>
+              <ul className={`${s.assurances} ${s.included}`}>
+                <li>
+                  <Check size={16} /> A {PINATA_HEIGHT_IN}-inch piñata in the style you choose
+                </li>
+                <li>
+                  <Check size={16} />{" "}
+                  {variant.allowCustom
+                    ? "Your design on the box: pick one of ours or make your own"
+                    : "Your pick of designs on the box"}
+                </li>
+                <li>
+                  <Check size={16} /> Your message printed on the inside flap
+                </li>
+                <li>
+                  <Check size={16} /> Packed with candy, or treats if you prefer
+                </li>
+                <li>
+                  <Check size={16} /> FedEx delivery on the day you choose
+                </li>
+              </ul>
+              {extra && (
+                <p className={s.includedNote}>
+                  Want more? Make it {extra.label} for +{dollars(extra.priceCents)}.
+                </p>
+              )}
+            </>
+          ) : (
           <ul className={s.assurances}>
             <li>
               <Check size={16} /> Made to order, just for them
@@ -156,6 +204,7 @@ export default async function HomeV2({
               <Check size={16} /> Choose your delivery date!
             </li>
           </ul>
+          )}
         </div>
         <div className={s.heroMedia}>
           {hero ? (

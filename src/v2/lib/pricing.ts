@@ -18,6 +18,9 @@ export type PriceCtx = {
   uspsOffered: boolean;
   fillings: HubFilling[];
   addons: V2Addon[];
+  /** All-in storefront: the filling is part of the one price — the sheet
+   *  lists it only when it costs extra. */
+  allIn?: boolean;
 };
 
 export type Piece = {
@@ -110,7 +113,7 @@ export function priceRows(
       value: b.tier > 0 ? `+${formatCents(b.tier)}` : "Included",
     });
   }
-  if (p.filling) {
+  if (p.filling && !(ctx.allIn && b.filling === 0)) {
     rows.push({ label: p.filling, value: b.filling > 0 ? `+${formatCents(b.filling)}` : "Included" });
   }
   for (const a of b.addons) rows.push({ label: a.label, value: `+${formatCents(a.cents)}` });

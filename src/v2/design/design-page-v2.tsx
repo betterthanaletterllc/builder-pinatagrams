@@ -8,7 +8,7 @@ import {
   resolveHubGraphics,
   type HubCatalog,
 } from "@/lib/hub";
-import { resolveVariantProfile } from "@/lib/variant";
+import { priceForVariant, resolveVariantProfile } from "@/lib/variant";
 import VariantBoot from "@/app/variant-boot";
 import HubDown from "../chrome/hub-down";
 import {
@@ -123,7 +123,7 @@ export default async function DesignPageV2({
     deepLink: !!(linked || explicitOccasion || style.source === "deeplink"),
     requestedStep: parseStep(param(searchParams, "step")) ?? "design",
     editLineId: param(searchParams, "edit") || null,
-    initialPrice: price,
+    initialPrice: priceForVariant(price, variant),
     previewVariant,
   };
 

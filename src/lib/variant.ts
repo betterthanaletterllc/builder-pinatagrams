@@ -1,4 +1,5 @@
 import type { Carrier } from "./delivery";
+import type { HubPrice } from "./hub";
 
 /**
  * Variant profiles — ONE mechanism for every storefront variation (A/B arms,
@@ -29,6 +30,13 @@ export type VariantProfile = {
   // already made the pitch — first load = the body picker).
   showLanding: boolean;
   landingLines: string[] | null;
+  // ALL-IN price (flat storefronts, hub admin → Builder → Storefronts): one
+  // piñata = unitCents + shipCents FedEx, any design and filling included.
+  // null = the price book's retail + FedEx rate. Its presence also switches
+  // on the all-in presentation (what's-included landing, no per-option
+  // "Included" tags, soonest date preselected) — so pointing the host back
+  // at a profile without one restores the previous storefront whole.
+  flatPrice: { unitCents: number; shipCents: number } | null;
   // "name" = preview override; "host" = matched a configured hostname;
   // "fallback" = no match. A fallback on a host that isn't the main site is
   // a MISCONFIGURATION (typo'd hub row, ads live before the profile) — the
@@ -44,6 +52,7 @@ export const DEFAULT_VARIANT: VariantProfile = {
   allowCustom: true,
   showLanding: true,
   landingLines: null,
+  flatPrice: null,
   resolvedVia: "fallback",
 };
 
@@ -78,10 +87,43 @@ export function resolveVariantProfile(raw: unknown): VariantProfile {
       Array.isArray(r.landingLines) && r.landingLines.length
         ? r.landingLines.map(String).slice(0, 4)
         : null,
+    flatPrice: r.pricing === "tiered" ? null : parseFlatPrice(r.flatPrice),
     resolvedVia:
       r.resolvedVia === "name" || r.resolvedVia === "host"
         ? r.resolvedVia
         : "fallback",
+  };
+}
+
+function parseFlatPrice(raw: unknown): VariantProfile["flatPrice"] {
+  if (!raw || typeof raw !== "object") return null;
+  const { unitCents, shipCents } = raw as Record<string, unknown>;
+  return Number.isInteger(unitCents) &&
+    (unitCents as number) > 0 &&
+    Number.isInteger(shipCents) &&
+    (shipCents as number) >= 0
+    ? { unitCents: unitCents as number, shipCents: shipCents as number }
+    : null;
+}
+
+/**
+ * The hub price with the storefront's all-in price laid over it. EVERY
+ * reader of the base price goes through this — the pages, the flow's retry
+ * and checkout — so what a storefront shows is what its invoice charges.
+ */
+export function priceForVariant(
+  price: HubPrice | null,
+  variant: Pick<VariantProfile, "flatPrice">,
+): HubPrice | null {
+  const fp = variant.flatPrice;
+  if (!price || !fp) return price;
+  const delivered = fp.unitCents + fp.shipCents;
+  return {
+    ...price,
+    unitPriceCents: fp.unitCents,
+    shipPerUnitCents: fp.shipCents,
+    unitDeliveredCents: delivered,
+    orderTotalCents: delivered * price.qty,
   };
 }
 

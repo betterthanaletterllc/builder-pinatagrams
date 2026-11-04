@@ -62,6 +62,9 @@ const StepDeliver = forwardRef<
     /** Soonest tapped again: no date until they pick one. */
     onClearDate: () => void;
     onDate: (ymd: string) => void;
+    /** All-in storefronts: no "Soonest" option — the soonest day is
+     *  already chosen on the calendar (the flow preselects it). */
+    soonestPreselected?: boolean;
     recipient: RecipientProps;
     email: string;
     emailError: string | null;
@@ -130,8 +133,17 @@ const StepDeliver = forwardRef<
             <Callout>Choose how it travels to see delivery dates.</Callout>
           ) : (
             <>
-              {/* "Soonest" is one tap; the calendar right under it is always
-                  open for any other day. Neither is preselected. */}
+              {p.soonestPreselected ? (
+                <p className={s.small} style={{ marginTop: 0 }}>
+                  {p.date === soonestYmd
+                    ? `We picked the soonest day, ${formatYmd(soonestYmd)}${
+                        cutoffTonight(p.cfg, p.carrier) ? " (order by midnight CT tonight)" : ""
+                      }. Tap another date to change it.`
+                    : "Delivered by FedEx on the day you pick."}
+                </p>
+              ) : (
+              /* "Soonest" is one tap; the calendar right under it is always
+                  open for any other day. Neither is preselected. */
               <fieldset className={s.options} aria-labelledby={dateH}>
                 {/* a toggle: tap again to clear it (then pick in the calendar) */}
                 <OptionCard
@@ -153,6 +165,7 @@ const StepDeliver = forwardRef<
                   }
                 />
               </fieldset>
+              )}
               <div id={DATE_IDS.pick} className={s.calendar} tabIndex={-1}>
                 <DateCalendar
                   key={p.carrier}

@@ -12,6 +12,7 @@ import {
 } from "@/lib/hub";
 import {
   normalizeHost,
+  priceForVariant,
   resolveVariantProfile,
   variantUnresolved,
 } from "@/lib/variant";
@@ -917,7 +918,9 @@ export async function POST(req: Request) {
 
   // Server-side price: single-destination B2C — per-unit product + shipping.
   // Same no-stacked-cache rule as the catalog: this number becomes a charge.
-  const price = await priceP;
+  // A storefront's all-in price (its hub profile) lays over the price book —
+  // the same override its pages displayed.
+  const price = priceForVariant(await priceP, variant);
   // Never sell at zero — a misconfigured pricing table must fail loudly.
   if (
     !price ||

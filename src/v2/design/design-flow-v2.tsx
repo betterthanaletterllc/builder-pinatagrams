@@ -54,6 +54,7 @@ import {
   type HubPrice,
 } from "@/lib/hub";
 import { clearLibraryState } from "@/lib/library-data";
+import { priceForVariant } from "@/lib/variant";
 import PendingBanner from "../chrome/pending-banner";
 import {
   ADDRESS_ORDER,
@@ -166,6 +167,11 @@ export default function DesignFlowV2(data: FlowData) {
   const { variant, pricing, deliveryCfg: cfg, fillings } = data;
   const tiered = variant.pricing === "tiered";
   const uspsOffered = variant.carriers.includes("usps");
+  // An all-in storefront (its hub profile sets one delivered price): the
+  // soonest day comes preselected, fillings drop "Included", and "Need a
+  // start?" opens as an overlay. Pointing the host back at a profile
+  // without an all-in price restores the previous flow.
+  const allIn = !!variant.flatPrice;
 
   // The server-resolved preset renders first (SSR = what a new visitor from
   // an ad sees); a stored draft, if any, takes over after hydration.
@@ -235,8 +241,8 @@ export default function DesignFlowV2(data: FlowData) {
       ? cartCarrier(cart)
       : prefs.carrier;
   const priceCtx: PriceCtx = useMemo(
-    () => ({ unitPrice, pricing, tiered, uspsOffered, fillings, addons: data.addons }),
-    [unitPrice, pricing, tiered, uspsOffered, fillings, data.addons],
+    () => ({ unitPrice, pricing, tiered, uspsOffered, fillings, addons: data.addons, allIn }),
+    [unitPrice, pricing, tiered, uspsOffered, fillings, data.addons, allIn],
   );
   const parts: CardParts = {
     to: draft?.msgTo ?? "",
@@ -566,7 +572,8 @@ export default function DesignFlowV2(data: FlowData) {
         .then((r) => (r.ok ? r.json() : null))
         .then((p: HubPrice | null) => {
           if (cancelled) return;
-          if (p && Number.isFinite(p.unitPriceCents) && p.unitPriceCents > 0) setUnitPrice(p);
+          if (p && Number.isFinite(p.unitPriceCents) && p.unitPriceCents > 0)
+            setUnitPrice(priceForVariant(p, variant));
           else throw new Error("price");
         })
         .catch(() => {
@@ -611,6 +618,13 @@ export default function DesignFlowV2(data: FlowData) {
     const ymd = soonest(cfg, carrier);
     if (draft.date !== ymd) patch({ date: ymd });
   }, [draft?.dateSoonest, draft?.date, carrier, cfg, patch]);
+
+  // All-in storefronts preselect the soonest day: a piñata with no date
+  // gets it (as "soonest", so it follows the calendar until they pick).
+  useEffect(() => {
+    if (!allIn || !hydrated || !draft || draft.date || !carrier) return;
+    patch({ date: soonest(cfg, carrier), dateSoonest: true });
+  }, [allIn, hydrated, draft, carrier, cfg, patch]);
 
   // Nothing in progress and nothing in the order: start a piñata. (Off the
   // effect's commit — navigate() flushes synchronously.) Not while the order
@@ -1383,6 +1397,7 @@ export default function DesignFlowV2(data: FlowData) {
         notice={cardNotice}
         onNotice={setCardNotice}
         error={messageError}
+        startersOverlay={allIn}
         onParts={(p, o) => {
           if (p.body.trim() || p.to.trim()) setMessageError(null);
           patch({
@@ -1405,6 +1420,7 @@ export default function DesignFlowV2(data: FlowData) {
         onFilling={pickFilling}
         onAddon={toggleAddon}
         notice={addonNotice}
+        allIn={allIn}
       />
     );
   } else if (step === "deliver") {
@@ -1438,6 +1454,7 @@ export default function DesignFlowV2(data: FlowData) {
         onSoonest={pickSoonest}
         onClearDate={clearDate}
         onDate={pickDate}
+        soonestPreselected={allIn}
         recipient={{
           cartAddress: cartAddressOk ? cartAddress : null,
           cartCount: cart.length,

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useId } from "react";
+import { forwardRef, useEffect, useId, useState } from "react";
 import {
   composeMessage,
   FROM_MAX,
@@ -8,9 +8,12 @@ import {
   STARTERS,
   type CardParts,
 } from "../lib/message";
-import type { OccasionId } from "../lib/occasions";
+import { occasionDef, type OccasionId } from "../lib/occasions";
+import { Button } from "../ui/controls";
 import { Callout, StepHeader } from "../ui/feedback";
 import { TextArea, TextField } from "../ui/field";
+import { Sparkle } from "../ui/icons";
+import Sheet from "../ui/sheet";
 import u from "../ui/ui.module.css";
 import s from "./steps.module.css";
 
@@ -33,8 +36,16 @@ const StepCard = forwardRef<
     onNotice: (msg: string | null) => void;
     /** Shown on the box when they try to move on with it empty. */
     error?: string | null;
+    /** "Need a start?" as a button under the message box that opens the
+     *  starters in an overlay (every occasion, theirs first) — instead of
+     *  the chips under the form. */
+    startersOverlay?: boolean;
   }
->(function StepCard({ parts, occasion, onParts, notice, onNotice, error }, h1Ref) {
+>(function StepCard(
+  { parts, occasion, onParts, notice, onNotice, error, startersOverlay = false },
+  h1Ref,
+) {
+  const [startersOpen, setStartersOpen] = useState(false);
   const counterId = useId();
   const composed = composeMessage(parts);
   const left = MESSAGE_LIMIT - composed.length;
@@ -101,9 +112,21 @@ const StepCard = forwardRef<
             placeholder="Say something they'll keep."
             onChange={(e) => change("body", e.target.value)}
           />
-          <p id={counterId} className={s.counter} data-low={left <= 20}>
-            {left} character{left === 1 ? "" : "s"} left
-          </p>
+          <div className={startersOverlay ? s.underBox : undefined}>
+            {startersOverlay && (
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-haspopup="dialog"
+                onClick={() => setStartersOpen(true)}
+              >
+                <Sparkle size={16} /> Need a start?
+              </Button>
+            )}
+            <p id={counterId} className={s.counter} data-low={left <= 20}>
+              {left} character{left === 1 ? "" : "s"} left
+            </p>
+          </div>
         </div>
         <TextField
           label="From"
@@ -124,6 +147,37 @@ const StepCard = forwardRef<
         </div>
       )}
 
+      {startersOverlay ? (
+        <Sheet
+          open={startersOpen}
+          onClose={() => setStartersOpen(false)}
+          title="Need a start?"
+        >
+          <p className={s.small} style={{ marginTop: 0 }}>
+            Tap one to add it to your card. You can edit it after.
+          </p>
+          {starterGroups(occasion).map((g) => (
+            <div key={g.id} className={s.block} role="group" aria-label={g.label}>
+              <p className={s.eyebrow}>{g.label}</p>
+              <div className={s.starters}>
+                {g.lines.map((line) => (
+                  <button
+                    key={line}
+                    type="button"
+                    className={`${u.chip} ${s.starter}`}
+                    onClick={() => {
+                      applyStarter(line);
+                      setStartersOpen(false);
+                    }}
+                  >
+                    {line}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </Sheet>
+      ) : (
       <div className={s.block} role="group" aria-labelledby={`${counterId}-starters`}>
         <p id={`${counterId}-starters`} className={s.eyebrow}>
           Need a start?
@@ -141,8 +195,25 @@ const StepCard = forwardRef<
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 });
+
+/** The overlay's starters: the piñata's occasion first, then every other
+ *  occasion's (each line once). */
+function starterGroups(occasion: OccasionId | null): { id: string; label: string; lines: string[] }[] {
+  const ids = Object.keys(STARTERS).filter((k) => k !== "default") as OccasionId[];
+  const order = occasion ? [occasion, ...ids.filter((id) => id !== occasion)] : ids;
+  const seen = new Set<string>();
+  const groups: { id: string; label: string; lines: string[] }[] = order.map((id) => ({
+    id,
+    label: occasionDef(id).label,
+    lines: (STARTERS[id] ?? []).filter((l) => !seen.has(l) && !!seen.add(l)),
+  }));
+  const general = STARTERS.default.filter((l) => !seen.has(l));
+  if (general.length) groups.push({ id: "default", label: "Anytime", lines: general });
+  return groups.filter((g) => g.lines.length > 0);
+}
 
 export default StepCard;

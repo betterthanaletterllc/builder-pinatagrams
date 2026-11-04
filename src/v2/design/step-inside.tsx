@@ -27,6 +27,9 @@ const StepInside = forwardRef<
     onFilling: (f: HubFilling) => void;
     onAddon: (id: string, on: boolean) => void;
     notice: string | null;
+    /** All-in storefronts: everything is in the one price, so a filling
+     *  shows a price only when it actually costs more (no "Included"). */
+    allIn?: boolean;
   }
 >(function StepInside(p, h1Ref) {
   const candy = candyFilling(p.fillings);
@@ -49,7 +52,9 @@ const StepInside = forwardRef<
             title={f.label}
             badge={f.id === candy?.id ? "Most popular" : undefined}
             description={f.blurb || undefined}
-            aside={f.priceCents > 0 ? `+${formatCents(f.priceCents)}` : "Included"}
+            aside={
+              f.priceCents > 0 ? `+${formatCents(f.priceCents)}` : p.allIn ? undefined : "Included"
+            }
             media={
               f.imageUrl ? (
                 <Image src={f.imageUrl} alt="" width={112} height={112} sizes="56px" />

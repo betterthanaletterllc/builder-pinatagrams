@@ -448,3 +448,21 @@
     padding: 24px 32px;
   }
 }
+
+/* all-in storefronts: what the one price includes */
+.includedHead {
+  margin: 20px 0 0;
+  font: 600 15px/1.4 var(--pg-font);
+  color: var(--pg-navy);
+}
+
+.assurances.included {
+  flex-direction: column;
+  margin-top: 8px;
+}
+
+.includedNote {
+  margin: 10px 0 0;
+  font: 400 14px/1.45 var(--pg-font);
+  color: var(--pg-muted);
+}
