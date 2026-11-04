@@ -16,13 +16,14 @@ import VariantBoot from "@/app/variant-boot";
 import HubDown from "../chrome/hub-down";
 import PendingBanner from "../chrome/pending-banner";
 import { bestSellers, libraryCount, occasionStrips } from "../lib/catalog-server";
-import { cutoffTonight, soonest } from "../lib/dates";
+import { cutoffTonight, orderDeadline, soonest } from "../lib/dates";
 import { b2cPrice, requestContext, trustFrom } from "../lib/server";
 import { clipText, PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import { ButtonLink, ChipLink } from "../ui/controls";
 import { Check, ChevronRight, Star, Tag, Truck, Users } from "../ui/icons";
 import { CORPORATE_URL } from "@/lib/links";
 import ReviewSlider from "./review-slider";
+import OrderCountdown from "./order-countdown";
 import StickyCta from "./sticky-cta";
 import Stars from "../ui/stars";
 import s from "./home.module.css";
@@ -149,6 +150,113 @@ export default async function HomeV2({
       ? `One price, everything included. ${dollars(priceCents)} sends a ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, with your design on the box and your message inside, delivered straight to their door.`
       : `A ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, your design on the box and your message on the inside flap delivered straight to their door.`);
 
+  // The reviews (a swipe row on all-in storefronts, right under the hero
+  // there — on a phone it would otherwise sit below every piñata style).
+  const reviewsSection =
+    reviews && reviewPicks.length > 0 ? (
+        <section className={s.section} aria-labelledby="home-reviews">
+          <div className={s.sectionHead}>
+            <h2 id="home-reviews" className={s.h2}>
+              What senders say
+            </h2>
+            <p className={s.agg}>
+              <Stars rating={reviews.aggregate.rating} />
+              <span>
+                <strong>{reviews.aggregate.rating.toFixed(1)}</strong> ·{" "}
+                {reviews.aggregate.count.toLocaleString("en-US")} reviews
+              </span>
+              {/* brand-pooled rating — the scope label stays with the number */}
+              <span className={s.scope}>{reviews.scope.label}</span>
+            </p>
+          </div>
+          {allIn ? (
+            <ReviewSlider label="Customer reviews">
+              {reviewPicks.map((r) => {
+                const photo = (r.media ?? []).find((m) => m.kind === "photo" && m.url);
+                return (
+                  <li key={r.id} className={s.slide}>
+                    {photo && (
+                      <Image
+                        className={s.slidePhoto}
+                        src={photo.url}
+                        alt={`Customer photo from ${r.name}`}
+                        width={560}
+                        height={420}
+                        sizes="(min-width: 1024px) 280px, 76vw"
+                      />
+                    )}
+                    <div className={s.slideBody}>
+                      <div className={s.reviewTop}>
+                        <Stars rating={r.rating} size={15} />
+                        <span className={s.srOnly}>{r.rating} out of 5 stars</span>
+                        {r.verified && <span className={s.reviewBadge}>Verified buyer</span>}
+                      </div>
+                      {r.title && <p className={s.reviewTitle}>{r.title}</p>}
+                      {/* user-generated: JSX-escaped text only */}
+                      <p className={s.reviewBody}>{clipText(r.body, photo ? 150 : 260)}</p>
+                      <p className={s.reviewFoot}>
+                        <span>{r.name}</span>
+                        {/* FTC disclosure — visible wherever an incentivized
+                            review renders */}
+                        {r.incentivized && (
+                          <span className={s.rewardBadge}>Received a reward for this review</span>
+                        )}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ReviewSlider>
+          ) : (
+          <ul className={s.reviews}>
+            {reviewPicks.map((r) => {
+              const photo = (r.media ?? []).find((m) => m.kind === "photo" && m.url);
+              return (
+                <li key={r.id} className={s.review}>
+                  <div className={s.reviewTop}>
+                    <Stars rating={r.rating} size={15} />
+                    <span className={s.srOnly}>{r.rating} out of 5 stars</span>
+                    {r.verified && <span className={s.reviewBadge}>Verified buyer</span>}
+                  </div>
+                  <div className={s.reviewMain}>
+                    {photo && (
+                      <Image
+                        className={s.reviewPhoto}
+                        src={photo.url}
+                        alt={`Customer photo from ${r.name}`}
+                        width={112}
+                        height={112}
+                        sizes="56px"
+                      />
+                    )}
+                    <div>
+                      {r.title && <p className={s.reviewTitle}>{r.title}</p>}
+                      {/* user-generated: JSX-escaped text only */}
+                      <p className={s.reviewBody}>{clipText(r.body)}</p>
+                    </div>
+                  </div>
+                  <p className={s.reviewFoot}>
+                    <span>{r.name}</span>
+                    {/* FTC disclosure — visible wherever an incentivized
+                        review renders */}
+                    {r.incentivized && (
+                      <span className={s.rewardBadge}>Received a reward for this review</span>
+                    )}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+          )}
+          <p>
+            <Link className={s.more} href="/reviews">
+              See all {reviews.aggregate.count.toLocaleString("en-US")} reviews
+              <ChevronRight size={18} />
+            </Link>
+          </p>
+        </section>
+    ) : null;
+
   return (
     <main className={`${s.home}${allIn ? ` ${s.homeAllIn}` : ""}`}>
       {/* Remembers a non-production ?variant= preview for client surfaces
@@ -180,25 +288,16 @@ export default async function HomeV2({
               {/* Arbotek’s ñ needs its width set (see .enye) */}
               Mail them an actual{" "}
               <span className={s.word}>
-                pi<span className={s.enye}>ñ</span>ata
+                pi<span className={s.enye}>ñ</span>ata!
               </span>
             </h1>
-            <p className={s.subhead}>The gift they&apos;ll text you a photo of.</p>
-            <p className={s.pitch}>
-              A {PINATA_HEIGHT_IN}-inch piñata packed with candy, your design on the box and your
-              message inside, sent by FedEx to arrive on the day you pick.
-            </p>
-            <p className={s.heroFacts}>
-              {deliveredText && (
-                <span className={s.priceLine}>
-                  <strong>{deliveredText}</strong>
-                  <span className={s.anchor}>Less than flower delivery, and they keep it</span>
-                </span>
-              )}
-              <span>
-                <Truck size={16} /> {promise}
-              </span>
-            </p>
+            {deliveredText && (
+              <p className={s.bigPrice}>
+                <strong>{deliveredText}</strong>
+                <span className={s.anchor}>Less than flower delivery, and they keep it</span>
+              </p>
+            )}
+            <OrderCountdown cfg={deliveryCfg} initial={orderDeadline(deliveryCfg)} />
             <div className={s.ctaRow}>
               <ButtonLink id="home-cta" href="/design" size="lg">
                 Send a Piñatagram
@@ -348,6 +447,8 @@ export default async function HomeV2({
       </section>
       )}
 
+      {allIn && reviewsSection}
+
       {occasions.length > 0 && (
         <section className={s.section} aria-labelledby="home-occasions">
           <h2 id="home-occasions" className={s.h2}>
@@ -425,109 +526,7 @@ export default async function HomeV2({
         </section>
       )}
 
-      {reviews && reviewPicks.length > 0 && (
-        <section className={s.section} aria-labelledby="home-reviews">
-          <div className={s.sectionHead}>
-            <h2 id="home-reviews" className={s.h2}>
-              What senders say
-            </h2>
-            <p className={s.agg}>
-              <Stars rating={reviews.aggregate.rating} />
-              <span>
-                <strong>{reviews.aggregate.rating.toFixed(1)}</strong> ·{" "}
-                {reviews.aggregate.count.toLocaleString("en-US")} reviews
-              </span>
-              {/* brand-pooled rating — the scope label stays with the number */}
-              <span className={s.scope}>{reviews.scope.label}</span>
-            </p>
-          </div>
-          {allIn ? (
-            <ReviewSlider label="Customer reviews">
-              {reviewPicks.map((r) => {
-                const photo = (r.media ?? []).find((m) => m.kind === "photo" && m.url);
-                return (
-                  <li key={r.id} className={s.slide}>
-                    {photo && (
-                      <Image
-                        className={s.slidePhoto}
-                        src={photo.url}
-                        alt={`Customer photo from ${r.name}`}
-                        width={560}
-                        height={420}
-                        sizes="(min-width: 1024px) 280px, 76vw"
-                      />
-                    )}
-                    <div className={s.slideBody}>
-                      <div className={s.reviewTop}>
-                        <Stars rating={r.rating} size={15} />
-                        <span className={s.srOnly}>{r.rating} out of 5 stars</span>
-                        {r.verified && <span className={s.reviewBadge}>Verified buyer</span>}
-                      </div>
-                      {r.title && <p className={s.reviewTitle}>{r.title}</p>}
-                      {/* user-generated: JSX-escaped text only */}
-                      <p className={s.reviewBody}>{clipText(r.body, photo ? 150 : 260)}</p>
-                      <p className={s.reviewFoot}>
-                        <span>{r.name}</span>
-                        {/* FTC disclosure — visible wherever an incentivized
-                            review renders */}
-                        {r.incentivized && (
-                          <span className={s.rewardBadge}>Received a reward for this review</span>
-                        )}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ReviewSlider>
-          ) : (
-          <ul className={s.reviews}>
-            {reviewPicks.map((r) => {
-              const photo = (r.media ?? []).find((m) => m.kind === "photo" && m.url);
-              return (
-                <li key={r.id} className={s.review}>
-                  <div className={s.reviewTop}>
-                    <Stars rating={r.rating} size={15} />
-                    <span className={s.srOnly}>{r.rating} out of 5 stars</span>
-                    {r.verified && <span className={s.reviewBadge}>Verified buyer</span>}
-                  </div>
-                  <div className={s.reviewMain}>
-                    {photo && (
-                      <Image
-                        className={s.reviewPhoto}
-                        src={photo.url}
-                        alt={`Customer photo from ${r.name}`}
-                        width={112}
-                        height={112}
-                        sizes="56px"
-                      />
-                    )}
-                    <div>
-                      {r.title && <p className={s.reviewTitle}>{r.title}</p>}
-                      {/* user-generated: JSX-escaped text only */}
-                      <p className={s.reviewBody}>{clipText(r.body)}</p>
-                    </div>
-                  </div>
-                  <p className={s.reviewFoot}>
-                    <span>{r.name}</span>
-                    {/* FTC disclosure — visible wherever an incentivized
-                        review renders */}
-                    {r.incentivized && (
-                      <span className={s.rewardBadge}>Received a reward for this review</span>
-                    )}
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
-          )}
-          <p>
-            <Link className={s.more} href="/reviews">
-              See all {reviews.aggregate.count.toLocaleString("en-US")} reviews
-              <ChevronRight size={18} />
-            </Link>
-          </p>
-        </section>
-      )}
+      {!allIn && reviewsSection}
 
       {allIn ? (
         <>

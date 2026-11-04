@@ -26,7 +26,7 @@ export function shopTodayYmd(now = new Date()): string {
   }).format(now);
 }
 
-function nextDay(ymd: string): string {
+export function nextDay(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
   const dt = new Date(y, m - 1, d + 1);
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
@@ -45,6 +45,42 @@ export function cutoffTonight(cfg: DeliveryConfig, carrier: Carrier = "fedex"): 
     earliestDeliveryDate(cfg, today, carrier) !==
     earliestDeliveryDate(cfg, nextDay(today), carrier)
   );
+}
+
+/** Seconds since midnight in the shop's timezone. */
+function shopSecondsToday(now: Date): number {
+  const p = new Intl.DateTimeFormat("en-US", {
+    timeZone: SHOP_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const n = (t: string) => Number(p.find((x) => x.type === t)?.value ?? 0);
+  return n("hour") * 3600 + n("minute") * 60 + n("second");
+}
+
+/**
+ * The honest order deadline for the landing countdown: how long ordering
+ * still gets the current soonest FedEx day — until the end (midnight CT) of
+ * the last shop day whose orders arrive that day. Over a weekend or holiday
+ * that can be days away. Shared by the server render and the live clock.
+ */
+export function orderDeadline(
+  cfg: DeliveryConfig,
+  now = new Date(),
+): { arrive: string; secondsLeft: number } {
+  const today = shopTodayYmd(now);
+  const arrive = earliestDeliveryDate(cfg, today, "fedex");
+  let last = today;
+  let extraDays = 0;
+  for (let k = 0; k < 14; k++) {
+    const next = nextDay(last);
+    if (earliestDeliveryDate(cfg, next, "fedex") !== arrive) break;
+    last = next;
+    extraDays++;
+  }
+  return { arrive, secondsLeft: (extraDays + 1) * 86400 - shopSecondsToday(now) };
 }
 
 export function soonest(cfg: DeliveryConfig, carrier: Carrier = "fedex"): string {
