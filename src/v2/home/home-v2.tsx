@@ -22,6 +22,7 @@ import { clipText, PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import { ButtonLink, ChipLink } from "../ui/controls";
 import { Check, ChevronRight, Star, Tag, Truck, Users } from "../ui/icons";
 import { CORPORATE_URL } from "@/lib/links";
+import ReviewSlider from "./review-slider";
 import StickyCta from "./sticky-cta";
 import Stars from "../ui/stars";
 import s from "./home.module.css";
@@ -116,9 +117,22 @@ export default async function HomeV2({
   const occasions = occasionStrips(variant);
   const hasPhoto = (r: HubReview) => (r.media ?? []).some((m) => m.kind === "photo" && m.url);
   const goodReviews = reviews ? reviews.reviews.filter((r) => r.rating === 5 || r.verified) : [];
-  // All-in landing: real customer photos lead (photo reviews first).
+  // All-in landing: a swipeable row, best first — a photo, then a word on
+  // timing (the dated-gift fear), verified, not incentivized. Most people
+  // see only the first two or three cards, so the order is the point.
+  const score = (r: HubReview) =>
+    (hasPhoto(r) ? 8 : 0) +
+    (/on time|on the day|right day|as scheduled|arrived|delivered/i.test(r.body) ? 3 : 0) +
+    (r.verified ? 2 : 0) +
+    (r.incentivized ? 0 : 1) -
+    // a five-star with a caveat ("however…", "confusion") goes to the back
+    (/however|unfortunately|disappoint|confus|late|damag|missing|broke|wrong/i.test(r.body) ? 10 : 0);
   const reviewPicks: HubReview[] = allIn
-    ? [...goodReviews.filter(hasPhoto), ...goodReviews.filter((r) => !hasPhoto(r))].slice(0, 4)
+    ? goodReviews
+        .map((r, i) => ({ r, i, k: score(r) }))
+        .sort((a, b) => b.k - a.k || a.i - b.i)
+        .slice(0, 10)
+        .map((x) => x.r)
     : goodReviews.slice(0, 4);
   // The hero's strip of real delivery photos (verified, five-star, with a photo).
   const heroPhotos = allIn
@@ -175,7 +189,12 @@ export default async function HomeV2({
               message inside, sent by FedEx to arrive on the day you pick.
             </p>
             <p className={s.heroFacts}>
-              {deliveredText && <strong>{deliveredText}</strong>}
+              {deliveredText && (
+                <span className={s.priceLine}>
+                  <strong>{deliveredText}</strong>
+                  <span className={s.anchor}>Less than flower delivery, and they keep it</span>
+                </span>
+              )}
               <span>
                 <Truck size={16} /> {promise}
               </span>
@@ -329,31 +348,6 @@ export default async function HomeV2({
       </section>
       )}
 
-      {allIn && priceCents !== null && (
-        <section className={s.section} aria-labelledby="home-compare">
-          <h2 id="home-compare" className={s.h2}>
-            More fun than flowers, for less
-          </h2>
-          <ul className={s.compare}>
-            <li>
-              <span className={s.compareName}>Flower delivery</span>
-              <span className={s.comparePrice}>usually $75+</span>
-              <span className={s.compareNote}>Wilted in a week</span>
-            </li>
-            <li>
-              <span className={s.compareName}>Fruit bouquet</span>
-              <span className={s.comparePrice}>usually $60+</span>
-              <span className={s.compareNote}>Gone in a day</span>
-            </li>
-            <li className={s.compareUs}>
-              <span className={s.compareName}>A Piñatagram</span>
-              <span className={s.comparePrice}>{dollars(priceCents)} delivered</span>
-              <span className={s.compareNote}>Candy to share, and a piñata they keep</span>
-            </li>
-          </ul>
-        </section>
-      )}
-
       {occasions.length > 0 && (
         <section className={s.section} aria-labelledby="home-occasions">
           <h2 id="home-occasions" className={s.h2}>
@@ -447,6 +441,45 @@ export default async function HomeV2({
               <span className={s.scope}>{reviews.scope.label}</span>
             </p>
           </div>
+          {allIn ? (
+            <ReviewSlider label="Customer reviews">
+              {reviewPicks.map((r) => {
+                const photo = (r.media ?? []).find((m) => m.kind === "photo" && m.url);
+                return (
+                  <li key={r.id} className={s.slide}>
+                    {photo && (
+                      <Image
+                        className={s.slidePhoto}
+                        src={photo.url}
+                        alt={`Customer photo from ${r.name}`}
+                        width={560}
+                        height={420}
+                        sizes="(min-width: 1024px) 280px, 76vw"
+                      />
+                    )}
+                    <div className={s.slideBody}>
+                      <div className={s.reviewTop}>
+                        <Stars rating={r.rating} size={15} />
+                        <span className={s.srOnly}>{r.rating} out of 5 stars</span>
+                        {r.verified && <span className={s.reviewBadge}>Verified buyer</span>}
+                      </div>
+                      {r.title && <p className={s.reviewTitle}>{r.title}</p>}
+                      {/* user-generated: JSX-escaped text only */}
+                      <p className={s.reviewBody}>{clipText(r.body, photo ? 150 : 260)}</p>
+                      <p className={s.reviewFoot}>
+                        <span>{r.name}</span>
+                        {/* FTC disclosure — visible wherever an incentivized
+                            review renders */}
+                        {r.incentivized && (
+                          <span className={s.rewardBadge}>Received a reward for this review</span>
+                        )}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ReviewSlider>
+          ) : (
           <ul className={s.reviews}>
             {reviewPicks.map((r) => {
               const photo = (r.media ?? []).find((m) => m.kind === "photo" && m.url);
@@ -486,6 +519,7 @@ export default async function HomeV2({
               );
             })}
           </ul>
+          )}
           <p>
             <Link className={s.more} href="/reviews">
               See all {reviews.aggregate.count.toLocaleString("en-US")} reviews

@@ -610,49 +610,6 @@
   object-fit: cover;
 }
 
-/* price anchor */
-.compare {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.compare li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--pg-line);
-  border-radius: var(--pg-r-card);
-  background: var(--pg-white);
-}
-
-.compareName {
-  font: 600 16px/1.3 var(--pg-font);
-}
-
-.comparePrice {
-  font: 600 16px/1.3 var(--pg-font);
-  text-align: right;
-}
-
-.compareNote {
-  grid-column: 1 / -1;
-  font: 400 14px/1.4 var(--pg-font);
-  color: var(--pg-muted);
-}
-
-.compare .compareUs {
-  border: 2px solid var(--pg-navy);
-  background: var(--pg-cream);
-}
-
-.compareUs .compareNote {
-  color: var(--pg-navy);
-}
-
 /* closing CTA (after the reviews) */
 .closing {
   display: grid;
@@ -729,12 +686,6 @@
   }
 }
 
-@media (min-width: 768px) {
-  .compare {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (min-width: 1024px) {
   .heroAllIn .heroMedia {
     order: 2;
@@ -744,5 +695,144 @@
 
   .heroAllIn .pitch {
     font-size: 17px;
+  }
+}
+
+/* one-line price anchor beside the price */
+.priceLine {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.anchor {
+  font: 400 14px/1.4 var(--pg-font);
+  color: var(--pg-muted);
+}
+
+/* review slider: native swipe with snap points; the next card peeks in */
+.slider {
+  position: relative;
+  margin: 0 -16px 4px;
+}
+
+.sliderTrack {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 78%;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 16px 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 16px;
+  scrollbar-width: none;
+  list-style: none;
+}
+
+.sliderTrack::-webkit-scrollbar {
+  display: none;
+}
+
+.sliderTrack:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+.slide {
+  /* contains its screen-reader text, which would otherwise sit outside the
+     scrolling track and widen the whole page */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--pg-line);
+  border-radius: var(--pg-r-card);
+  background: var(--pg-white);
+  scroll-snap-align: start;
+}
+
+.slidePhoto {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--pg-cream);
+}
+
+.slideBody {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+/* arrows only where there is a pointer to click them */
+.sliderBtn {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sliderBtn {
+    position: absolute;
+    top: 38%;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--pg-line);
+    border-radius: 50%;
+    background: var(--pg-white);
+    color: var(--pg-navy);
+    box-shadow: 0 2px 8px rgba(24, 13, 56, 0.15);
+    cursor: pointer;
+  }
+
+  .sliderBtn:disabled {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sliderBtn:focus-visible {
+    outline: 2px solid var(--pg-peri-dark);
+    outline-offset: 2px;
+  }
+
+  .sliderPrev {
+    left: 4px;
+  }
+
+  .sliderNext {
+    right: 4px;
+  }
+}
+
+@media (min-width: 640px) {
+  .sliderTrack {
+    grid-auto-columns: 44%;
+  }
+}
+
+@media (min-width: 1024px) {
+  .slider {
+    margin: 0 0 4px;
+  }
+
+  .sliderTrack {
+    grid-auto-columns: calc((100% - 36px) / 4);
+    padding: 4px 0 12px;
+    scroll-padding: 0;
+  }
+
+  .sliderPrev {
+    left: -22px;
+  }
+
+  .sliderNext {
+    right: -22px;
   }
 }
