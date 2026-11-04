@@ -39,6 +39,7 @@ export default function Sheet({
   wide = false,
   full = false,
   tall = false,
+  threeQuarter = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -49,6 +50,8 @@ export default function Sheet({
   full?: boolean;
   /** At least ~60% of a phone's height, content centred (the zoom). */
   tall?: boolean;
+  /** Three quarters of the screen, phone or desktop (the card starters). */
+  threeQuarter?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -101,7 +104,7 @@ export default function Sheet({
   return (
     <dialog
       ref={ref}
-      className={`${s.sheet}${wide ? ` ${s.wide}` : ""}${full ? ` ${s.full}` : ""}${tall ? ` ${s.tall}` : ""}`}
+      className={`${s.sheet}${wide ? ` ${s.wide}` : ""}${full ? ` ${s.full}` : ""}${tall ? ` ${s.tall}` : ""}${threeQuarter ? ` ${s.threeQuarter}` : ""}`}
       aria-labelledby={titleId}
       // Esc (native cancel → close) and backdrop taps report back up so the
       // caller's state stays the single source of truth.

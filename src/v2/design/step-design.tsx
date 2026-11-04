@@ -67,6 +67,8 @@ const StepDesign = forwardRef<
     onSeeAll: (occasion: OccasionId | null) => void;
     onLibraryIntent: () => void;
     onMakeOwn: () => void;
+    /** All-in storefronts: "Make your own" leads the grid (else second). */
+    makeOwnFirst?: boolean;
     banner?: ReactNode;
     status?: ReactNode;
   }
@@ -169,7 +171,8 @@ const StepDesign = forwardRef<
               </span>
             </label>
           );
-          return i === 0 && makeOwn ? [tile, makeOwn] : [tile];
+          if (i === 0 && makeOwn) return p.makeOwnFirst ? [makeOwn, tile] : [tile, makeOwn];
+          return [tile];
         })}
       </fieldset>
 

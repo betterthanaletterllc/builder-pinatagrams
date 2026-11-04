@@ -152,6 +152,7 @@ const StepCard = forwardRef<
           open={startersOpen}
           onClose={() => setStartersOpen(false)}
           title="Need a start?"
+          threeQuarter
         >
           <p className={s.small} style={{ marginTop: 0 }}>
             Tap one to add it to your card. You can edit it after.

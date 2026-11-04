@@ -82,10 +82,17 @@ const StepDeliver = forwardRef<
   const orderH = useId();
   const soonestYmd = p.carrier ? soonest(p.cfg, p.carrier) : null;
   const perPiece = (c: number | null) => (c === null ? "—" : formatCents(c));
+  // All-in storefronts: the date question IS the step's headline (no
+  // "When and where" above it, no repeated sub-heading).
+  const dateIsTitle = !!p.soonestPreselected && p.hasPiece;
 
   return (
     <div>
-      <StepHeader ref={h1Ref} index={3} title="When and where" />
+      <StepHeader
+        ref={h1Ref}
+        index={3}
+        title={dateIsTitle ? "When should it arrive?" : "When and where"}
+      />
 
       {p.uspsOffered && (
         <section className={s.section} aria-labelledby={carrierH}>
@@ -125,23 +132,21 @@ const StepDeliver = forwardRef<
       )}
 
       {p.hasPiece && (
-        <section className={s.section} aria-labelledby={dateH}>
-          <h2 id={dateH} className={s.h2}>
-            When should it arrive?
-          </h2>
+        <section
+          className={s.section}
+          aria-labelledby={dateIsTitle ? undefined : dateH}
+          aria-label={dateIsTitle ? "When should it arrive?" : undefined}
+        >
+          {!dateIsTitle && (
+            <h2 id={dateH} className={s.h2}>
+              When should it arrive?
+            </h2>
+          )}
           {!p.carrier || !soonestYmd ? (
             <Callout>Choose how it travels to see delivery dates.</Callout>
           ) : (
             <>
-              {p.soonestPreselected ? (
-                <p className={s.small} style={{ marginTop: 0 }}>
-                  {p.date === soonestYmd
-                    ? `We picked the soonest day, ${formatYmd(soonestYmd)}${
-                        cutoffTonight(p.cfg, p.carrier) ? " (order by midnight CT tonight)" : ""
-                      }. Tap another date to change it.`
-                    : "Delivered by FedEx on the day you pick."}
-                </p>
-              ) : (
+              {p.soonestPreselected ? null : (
               /* "Soonest" is one tap; the calendar right under it is always
                   open for any other day. Neither is preselected. */
               <fieldset className={s.options} aria-labelledby={dateH}>

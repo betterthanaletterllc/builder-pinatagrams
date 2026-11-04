@@ -1360,6 +1360,7 @@ export default function DesignFlowV2(data: FlowData) {
     content = (
       <StepDesign
         ref={h1Ref}
+        makeOwnFirst={allIn}
         graphic={draft.graphic}
         style={style}
         occasion={draft.occasion}

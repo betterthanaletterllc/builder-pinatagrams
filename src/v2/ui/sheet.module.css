@@ -139,6 +139,13 @@
   justify-content: center;
 }
 
+/* Three quarters of the screen (the card starters): a real overlay, not a
+   short tray at the bottom. */
+.threeQuarter {
+  height: 75svh;
+  max-height: 75svh;
+}
+
 @media (min-width: 768px) {
   .sheet {
     inset: 0;
@@ -166,6 +173,12 @@
   .tall {
     width: min(960px, 100% - 48px);
     min-height: 0;
+  }
+
+  .threeQuarter {
+    width: min(760px, 100% - 48px);
+    height: 75svh;
+    max-height: 75svh;
   }
 }
 
