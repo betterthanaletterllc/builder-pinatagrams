@@ -483,7 +483,12 @@
 
 .heroAllIn .heroMedia {
   aspect-ratio: auto;
-  height: min(30svh, 72vw);
+  height: min(32svh, 76vw);
+}
+
+/* the whole box and piñata, never cropped */
+.heroAllIn .heroImg {
+  object-fit: contain;
 }
 
 .heroAllIn .title {
@@ -492,9 +497,16 @@
   line-height: 1.22;
 }
 
+/* Chrome lays Arbotek’s ñ out 0.31em wide (its n is 0.544em), so the next
+   letter runs into it. Same glyph, given the n’s width. */
 .enye {
-  font-family: var(--pg-font);
-  font-weight: 800;
+  display: inline-block;
+  width: 0.544em;
+}
+
+/* ...and the word never breaks around it */
+.word {
+  white-space: nowrap;
 }
 
 .subhead {

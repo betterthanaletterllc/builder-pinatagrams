@@ -163,9 +163,11 @@ export default async function HomeV2({
           </div>
           <div className={s.heroCopy}>
             <h1 id="home-title" className={s.title}>
-              {/* Arbotek draws ñ with a cramped tilde: that one letter is set in
-                  the body face. */}
-              Mail them an actual pi<span className={s.enye}>ñ</span>ata
+              {/* Arbotek’s ñ needs its width set (see .enye) */}
+              Mail them an actual{" "}
+              <span className={s.word}>
+                pi<span className={s.enye}>ñ</span>ata
+              </span>
             </h1>
             <p className={s.subhead}>The gift they&apos;ll text you a photo of.</p>
             <p className={s.pitch}>
