@@ -8,7 +8,7 @@ import {
   STARTERS,
   type CardParts,
 } from "../lib/message";
-import { occasionDef, type OccasionId } from "../lib/occasions";
+import { activeOccasions, occasionDef, type OccasionId } from "../lib/occasions";
 import { Button } from "../ui/controls";
 import { Callout, StepHeader } from "../ui/feedback";
 import { TextArea, TextField } from "../ui/field";
@@ -200,10 +200,13 @@ const StepCard = forwardRef<
   );
 });
 
-/** The overlay's starters: the piñata's occasion first, then every other
- *  occasion's (each line once). */
+/** The overlay's starters: the piñata's occasion first, then the other
+ *  occasions in season today (each line once). */
 function starterGroups(occasion: OccasionId | null): { id: string; label: string; lines: string[] }[] {
-  const ids = Object.keys(STARTERS).filter((k) => k !== "default") as OccasionId[];
+  const inSeason = new Set(activeOccasions(new Date()).map((d) => d.id));
+  const ids = (Object.keys(STARTERS) as (OccasionId | "default")[]).filter(
+    (k): k is OccasionId => k !== "default" && inSeason.has(k),
+  );
   const order = occasion ? [occasion, ...ids.filter((id) => id !== occasion)] : ids;
   const seen = new Set<string>();
   const groups: { id: string; label: string; lines: string[] }[] = order.map((id) => ({
