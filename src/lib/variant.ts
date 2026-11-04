@@ -37,6 +37,10 @@ export type VariantProfile = {
   // "Included" tags, soonest date preselected) — so pointing the host back
   // at a profile without one restores the previous storefront whole.
   flatPrice: { unitCents: number; shipCents: number } | null;
+  // Paid guaranteed delivery date, cents per piñata (hub profile). Set = the
+  // calendar offers the toggle and FedEx orders get the plain "FedEx
+  // delivery" shipping titles; null = no toggle, legacy titles.
+  guaranteeCents: number | null;
   // "name" = preview override; "host" = matched a configured hostname;
   // "fallback" = no match. A fallback on a host that isn't the main site is
   // a MISCONFIGURATION (typo'd hub row, ads live before the profile) — the
@@ -53,6 +57,7 @@ export const DEFAULT_VARIANT: VariantProfile = {
   showLanding: true,
   landingLines: null,
   flatPrice: null,
+  guaranteeCents: null,
   resolvedVia: "fallback",
 };
 
@@ -88,6 +93,10 @@ export function resolveVariantProfile(raw: unknown): VariantProfile {
         ? r.landingLines.map(String).slice(0, 4)
         : null,
     flatPrice: r.pricing === "tiered" ? null : parseFlatPrice(r.flatPrice),
+    guaranteeCents:
+      r.pricing !== "tiered" && Number.isInteger(r.guaranteeCents) && (r.guaranteeCents as number) > 0
+        ? (r.guaranteeCents as number)
+        : null,
     resolvedVia:
       r.resolvedVia === "name" || r.resolvedVia === "host"
         ? r.resolvedVia

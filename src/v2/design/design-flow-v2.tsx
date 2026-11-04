@@ -241,8 +241,17 @@ export default function DesignFlowV2(data: FlowData) {
       ? cartCarrier(cart)
       : prefs.carrier;
   const priceCtx: PriceCtx = useMemo(
-    () => ({ unitPrice, pricing, tiered, uspsOffered, fillings, addons: data.addons, allIn }),
-    [unitPrice, pricing, tiered, uspsOffered, fillings, data.addons, allIn],
+    () => ({
+      unitPrice,
+      pricing,
+      tiered,
+      uspsOffered,
+      fillings,
+      addons: data.addons,
+      allIn,
+      guaranteeCents: variant.guaranteeCents,
+    }),
+    [unitPrice, pricing, tiered, uspsOffered, fillings, data.addons, allIn, variant.guaranteeCents],
   );
   const parts: CardParts = {
     to: draft?.msgTo ?? "",
@@ -251,7 +260,11 @@ export default function DesignFlowV2(data: FlowData) {
   };
   const message = composeMessage(parts);
   const piecePrice = draft
-    ? deliveredCents({ graphic: draft.graphic, filling: draft.filling, addons: draft.addons }, carrier, priceCtx)
+    ? deliveredCents(
+        { graphic: draft.graphic, filling: draft.filling, addons: draft.addons, guaranteed: draft.guaranteed },
+        carrier,
+        priceCtx,
+      )
     : null;
   // The print upload for the design on the Stage (null when none started —
   // e.g. a draft restored after a reload, which re-uploads below).
@@ -754,6 +767,11 @@ export default function DesignFlowV2(data: FlowData) {
 
   const clearDate = () => patch({ date: "", dateSoonest: false });
 
+  const setGuaranteed = (on: boolean) => {
+    patch({ guaranteed: on });
+    trackV2("delivery_guarantee_toggled", { on });
+  };
+
   const pickDate = (ymd: string) => {
     if (!carrier) return;
     patch({ date: ymd, dateSoonest: false });
@@ -866,6 +884,7 @@ export default function DesignFlowV2(data: FlowData) {
             boxImageUrl: style.boxImageUrl,
             logoZone: style.logoZone,
             message,
+            guaranteed: draft.guaranteed,
           }
         : null;
     return computeOrder({
@@ -964,6 +983,8 @@ export default function DesignFlowV2(data: FlowData) {
       ),
       deliveryDate: d.date,
       carrier: c,
+      // the paid guarantee: only where offered, only FedEx
+      ...(d.guaranteed && variant.guaranteeCents && c === "fedex" ? { guaranteed: true } : {}),
       address: to,
       qty: existing?.qty ?? 1,
     };
@@ -1456,6 +1477,9 @@ export default function DesignFlowV2(data: FlowData) {
         onClearDate={clearDate}
         onDate={pickDate}
         soonestPreselected={allIn}
+        guaranteeCents={carrier === "fedex" ? variant.guaranteeCents : null}
+        guaranteed={!!draft?.guaranteed}
+        onGuaranteed={setGuaranteed}
         recipient={{
           cartAddress: cartAddressOk ? cartAddress : null,
           cartCount: cart.length,
@@ -1480,6 +1504,7 @@ export default function DesignFlowV2(data: FlowData) {
         summary={{
           lines: order.views,
           shipping: { label: order.shipLabel, cents: order.shipTotal, from: order.from },
+          guarantee: order.guarantee,
           discounts: order.codeRows,
           total: { cents: order.total, from: order.from },
           onEdit: editLine,
@@ -1504,7 +1529,13 @@ export default function DesignFlowV2(data: FlowData) {
   const priceSheet =
     sheet?.kind === "price" && draft && style
       ? priceRows(
-          { graphic: draft.graphic, filling: draft.filling, addons: draft.addons, styleName: style.name },
+          {
+            graphic: draft.graphic,
+            filling: draft.filling,
+            addons: draft.addons,
+            guaranteed: draft.guaranteed,
+            styleName: style.name,
+          },
           carrier,
           priceCtx,
         )

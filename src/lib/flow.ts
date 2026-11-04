@@ -177,6 +177,8 @@ export type CartLine = {
   // carts parse; addToCart rewrites every line to the latest choice. Absent
   // (pre-USPS carts) = "fedex".
   carrier?: Carrier;
+  // Paid guaranteed delivery date (storefronts that offer it). Absent = no.
+  guaranteed?: boolean;
   address: DeliveryAddress;
   qty: number;
 };
@@ -382,6 +384,7 @@ function cleanLine(raw: unknown): CartLine | null {
     line.addons = o.addons.filter((x): x is string => typeof x === "string");
   } else delete line.addons;
   if (o.carrier !== "usps" && o.carrier !== "fedex") delete line.carrier;
+  if (o.guaranteed !== true) delete line.guaranteed;
   return line;
 }
 

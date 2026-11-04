@@ -2,7 +2,7 @@ import type { Carrier, DeliveryConfig } from "@/lib/delivery";
 import type { CartLine, GraphicChoice } from "@/lib/flow";
 import { discountAmountCents, formatCents, type HubDiscount, type LogoZone } from "@/lib/hub";
 import { arrivalText, dateProblemText } from "./dates";
-import { pieceBreakdown, shipCents, type PriceCtx } from "./pricing";
+import { guaranteeFor, pieceBreakdown, shipCents, type PriceCtx } from "./pricing";
 
 /**
  * The order as Step 4 shows it: every piñata (the one in progress first),
@@ -32,6 +32,8 @@ export type OrderPiece = {
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
   message: string;
+  /** The paid guaranteed date. */
+  guaranteed?: boolean;
 };
 
 export type LineView = {
@@ -54,6 +56,9 @@ export type OrderView = {
   units: number;
   shipLabel: string;
   shipTotal: number | null;
+  /** Paid guaranteed dates in the order (shown on their own row; the
+   *  invoice charges them on the shipping line). */
+  guarantee: { label: string; cents: number } | null;
   codeRows: { label: string; cents: number }[];
   notes: { code: string; text: string }[];
   total: number | null;
@@ -71,6 +76,7 @@ export function pieceFromLine(l: CartLine): OrderPiece {
     boxImageUrl: l.boxImageUrl,
     logoZone: l.logoZone,
     message: l.message,
+    guaranteed: l.guaranteed === true,
   };
 }
 
@@ -95,10 +101,17 @@ export function computeOrder(input: {
   const views: LineView[] = [];
   let merchandise = 0;
   let units = 0;
+  let guaranteeTotal = 0;
+  let guaranteedUnits = 0;
 
   const add = (id: string, p: OrderPiece, kind: "current" | "editing" | "line") => {
     const b = pieceBreakdown({ graphic: p.graphic, filling: p.filling, addons: p.addons }, priceCtx);
     units += p.qty;
+    const g = guaranteeFor({ graphic: p.graphic, filling: p.filling, addons: p.addons, guaranteed: p.guaranteed }, carrier, priceCtx);
+    if (g > 0) {
+      guaranteeTotal += g * p.qty;
+      guaranteedUnits += p.qty;
+    }
     if (b.base !== null) merchandise += (b.base + b.addons.reduce((s, a) => s + a.cents, 0)) * p.qty;
     // Every line re-checked against the ORDER's carrier (a switch, or a
     // date gone stale overnight) — named on its row, fixed per line. The
@@ -111,7 +124,10 @@ export function computeOrder(input: {
       title: `${designName(p.graphic)} · ${p.styleName}`,
       box: { boxImageUrl: p.boxImageUrl, logoZone: p.logoZone, graphic: p.graphic },
       details: [p.filling, p.message ? excerpt(p.message) : null].filter(Boolean).join(" · "),
-      arrives: p.date && !problem ? arrivalText(p.date, lineCarrier, cfg) : null,
+      arrives:
+        p.date && !problem
+          ? `${arrivalText(p.date, lineCarrier, cfg)}${guaranteeFor({ graphic: p.graphic, filling: p.filling, addons: p.addons, guaranteed: p.guaranteed }, carrier, priceCtx) > 0 ? " · guaranteed" : ""}`
+          : null,
       qty: p.qty,
       merchCents: b.base === null ? null : b.base * p.qty,
       addonRows: b.addons.map((a) => ({ label: a.label, cents: a.cents * p.qty })),
@@ -131,6 +147,9 @@ export function computeOrder(input: {
 
   const known = !!priceCtx.unitPrice && ship !== null;
   const shipTotal = ship !== null ? ship * units : null;
+  // Shipping codes act on Shopify's shipping line, which carries the
+  // guarantees too — preview them against both.
+  const shipLine = shipTotal !== null ? shipTotal + guaranteeTotal : null;
   // A PREVIEW of each code with the cart's rules: an order code comes off
   // the merchandise, a shipping code off shipping; one that doesn't apply
   // says why. Shopify applies the real discount.
@@ -143,14 +162,14 @@ export function computeOrder(input: {
         notes.push({ code: d.code, text: `${d.code} needs a ${formatCents(d.minSubtotalCents)} minimum.` });
         continue;
       }
-      if (d.kind === "shipping" && d.maxShippingCents != null && shipTotal! >= d.maxShippingCents) {
+      if (d.kind === "shipping" && d.maxShippingCents != null && shipLine! >= d.maxShippingCents) {
         notes.push({
           code: d.code,
           text: `${d.code} only covers shipping under ${formatCents(d.maxShippingCents)}.`,
         });
         continue;
       }
-      const cents = discountAmountCents(d, merchandise, shipTotal!);
+      const cents = discountAmountCents(d, merchandise, shipLine!);
       if (cents > 0) {
         off += cents;
         codeRows.push({ label: d.code, cents });
@@ -165,12 +184,21 @@ export function computeOrder(input: {
       carrier === "usps"
         ? "USPS First Class"
         : carrier === "fedex"
-          ? "FedEx delivery"
+          ? shipTotal === 0
+            ? "Free FedEx delivery"
+            : "FedEx delivery"
           : "Shipping",
     shipTotal,
+    guarantee:
+      guaranteedUnits > 0
+        ? {
+            label: `Guaranteed delivery date${guaranteedUnits > 1 ? ` ×${guaranteedUnits}` : ""}`,
+            cents: guaranteeTotal,
+          }
+        : null,
     codeRows,
     notes,
-    total: known ? merchandise + shipTotal! - off : null,
+    total: known ? merchandise + shipLine! - off : null,
     from: input.uspsOffered && carrier === null,
   };
 }

@@ -21,13 +21,27 @@ export type PriceCtx = {
   /** All-in storefront: the filling is part of the one price — the sheet
    *  lists it only when it costs extra. */
   allIn?: boolean;
+  /** Paid guaranteed delivery date, cents per piñata (null = not offered). */
+  guaranteeCents?: number | null;
 };
 
 export type Piece = {
   graphic: GraphicChoice | null;
   filling: string | null;
   addons: string[];
+  /** The paid guaranteed date (FedEx, where offered). */
+  guaranteed?: boolean;
 };
+
+/** The guarantee's price for this piece on this carrier (0 = none). */
+export function guaranteeFor(p: Piece, carrier: Carrier | null, ctx: PriceCtx): number {
+  return p.guaranteed && carrier !== "usps" && ctx.guaranteeCents ? ctx.guaranteeCents : 0;
+}
+
+/** "Free" for a $0 delivery line, else the money. */
+export function shipMoney(cents: number): string {
+  return cents === 0 ? "Free" : formatCents(cents);
+}
 
 /** Merchandise for ONE piñata (no shipping): base + tier + filling + add-ons. */
 export function merchCents(p: Piece, ctx: PriceCtx): number | null {
@@ -84,13 +98,13 @@ export function deliveredCents(
   const m = merchCents(p, ctx);
   const s = shipCents(carrier, ctx);
   return {
-    cents: m !== null && s !== null ? m + s : null,
+    cents: m !== null && s !== null ? m + s + guaranteeFor(p, carrier, ctx) : null,
     from: ctx.uspsOffered && carrier === null,
   };
 }
 
 export function linePiece(l: CartLine): Piece {
-  return { graphic: l.graphic, filling: l.filling, addons: l.addons ?? [] };
+  return { graphic: l.graphic, filling: l.filling, addons: l.addons ?? [], guaranteed: l.guaranteed };
 }
 
 /** The price sheet (tap the price): one piñata itemised, delivered total. */
@@ -123,10 +137,14 @@ export function priceRows(
       carrier === "usps"
         ? "USPS First Class"
         : carrier === "fedex"
-          ? "FedEx delivery"
+          ? ship === 0
+            ? "Free FedEx delivery"
+            : "FedEx delivery"
           : "Delivery (you choose at the last step)",
-    value: ship === null ? "—" : `${carrier ? "" : "from "}${formatCents(ship)}`,
+    value: ship === null ? "—" : `${carrier ? "" : "from "}${shipMoney(ship)}`,
   });
+  const g = guaranteeFor(p, carrier, ctx);
+  if (g > 0) rows.push({ label: "Guaranteed delivery date", value: `+${formatCents(g)}` });
   const d = deliveredCents(p, carrier, ctx);
   return {
     rows,

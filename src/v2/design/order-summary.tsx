@@ -18,6 +18,7 @@ import s from "./steps.module.css";
 export default function OrderSummary({
   lines,
   shipping,
+  guarantee,
   discounts,
   total,
   onEdit,
@@ -27,6 +28,8 @@ export default function OrderSummary({
 }: {
   lines: LineView[];
   shipping: { label: string; cents: number | null; from: boolean };
+  /** Paid guaranteed dates, on their own row. */
+  guarantee?: { label: string; cents: number } | null;
   discounts: { label: string; cents: number }[];
   total: { cents: number | null; from: boolean };
   onEdit: (id: string) => void;
@@ -119,8 +122,16 @@ export default function OrderSummary({
       <dl style={{ margin: 0 }}>
         <div className={s.kv}>
           <dt>{shipping.label}</dt>
-          <dd style={{ margin: 0 }}>{money(shipping.cents, shipping.from)}</dd>
+          <dd style={{ margin: 0 }}>
+            {shipping.cents === 0 && !shipping.from ? "Free" : money(shipping.cents, shipping.from)}
+          </dd>
         </div>
+        {guarantee && (
+          <div className={s.kv}>
+            <dt>{guarantee.label}</dt>
+            <dd style={{ margin: 0 }}>{formatCents(guarantee.cents)}</dd>
+          </div>
+        )}
         {discounts.map((d) => (
           <div key={d.label} className={`${s.kv} ${s.kvDiscount}`}>
             <dt>{d.label}</dt>

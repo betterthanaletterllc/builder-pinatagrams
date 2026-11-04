@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useId, type ComponentProps, type ReactNode } from "react";
+import { forwardRef, useId, useState, type ComponentProps, type ReactNode } from "react";
 import DateCalendar from "@/app/design/date-calendar";
 import {
   formatWindow,
@@ -65,6 +65,11 @@ const StepDeliver = forwardRef<
     /** All-in storefronts: no "Soonest" option — the soonest day is
      *  already chosen on the calendar (the flow preselects it). */
     soonestPreselected?: boolean;
+    /** The paid guaranteed date, cents per piñata — null = not offered
+     *  (no toggle). FedEx only. */
+    guaranteeCents?: number | null;
+    guaranteed?: boolean;
+    onGuaranteed?: (on: boolean) => void;
     recipient: RecipientProps;
     email: string;
     emailError: string | null;
@@ -85,6 +90,8 @@ const StepDeliver = forwardRef<
   // All-in storefronts: the date question IS the step's headline (no
   // "When and where" above it, no repeated sub-heading).
   const dateIsTitle = !!p.soonestPreselected && p.hasPiece;
+  const guaranteeId = useId();
+  const [guaranteeHelp, setGuaranteeHelp] = useState(false);
 
   return (
     <div>
@@ -192,6 +199,43 @@ const StepDeliver = forwardRef<
                   </ul>
                 )}
               </div>
+              {p.guaranteeCents && p.carrier === "fedex" ? (
+                <div className={s.guarantee}>
+                  <div className={s.guaranteeRow}>
+                    <label className={s.guaranteeToggle}>
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={!!p.guaranteed}
+                        aria-describedby={guaranteeHelp ? `${guaranteeId}-help` : undefined}
+                        onChange={(e) => p.onGuaranteed?.(e.target.checked)}
+                      />
+                      <span className={s.switchTrack} aria-hidden="true">
+                        <span className={s.switchThumb} />
+                      </span>
+                      <span className={s.guaranteeLabel}>Guaranteed delivery date</span>
+                      <span className={s.guaranteePrice}>+{formatCents(p.guaranteeCents)}</span>
+                    </label>
+                    <button
+                      type="button"
+                      className={s.helpBtn}
+                      aria-label="What is the guaranteed delivery date?"
+                      aria-expanded={guaranteeHelp}
+                      aria-controls={`${guaranteeId}-help`}
+                      onClick={() => setGuaranteeHelp((v) => !v)}
+                    >
+                      ?
+                    </button>
+                  </div>
+                  {guaranteeHelp && (
+                    <p id={`${guaranteeId}-help`} className={s.guaranteeHelp}>
+                      With the guarantee, your piñata arrives on the date you picked, or you get a
+                      full refund. Without it, we send it to arrive on your date, but it may arrive
+                      within a business day or two of it.
+                    </p>
+                  )}
+                </div>
+              ) : null}
               {p.carrier === "usps" && (
                 <p className={s.assure} data-tone="window">
                   <Mail size={18} />

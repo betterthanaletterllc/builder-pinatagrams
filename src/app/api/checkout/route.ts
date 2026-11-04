@@ -628,6 +628,10 @@ export async function POST(req: Request) {
   const variant = resolveVariantProfile(catalog.variant);
   const tiered = variant.pricing === "tiered";
   const uspsOffered = variant.carriers.includes("usps");
+  // The paid guaranteed date: only where the profile prices it, only FedEx.
+  // A profile with a guarantee price also gets the plain FedEx titles below.
+  const guaranteeCents = variant.guaranteeCents;
+  const guaranteeOffered = guaranteeCents !== null && orderCarrier === "fedex";
 
   // Backstop for the cart's self-heal: a USPS cart can't check out on a
   // storefront that doesn't offer USPS (profile changed mid-sitting).
@@ -674,6 +678,9 @@ export async function POST(req: Request) {
     deliveryDate: string;
     // USPS only: the promised arrival window ("start..end" + display label).
     window: { start: string; end: string } | null;
+    // Paid guaranteed delivery date (profiles with a guarantee price, FedEx
+    // only) — charged on the shipping line, flagged on the piñata line.
+    guaranteed: boolean;
     message: string;
     address: DeliveryAddress;
   };
@@ -910,6 +917,7 @@ export async function POST(req: Request) {
         orderCarrier === "usps"
           ? uspsWindow(deliveryDate, deliveryCfg)
           : null,
+      guaranteed: guaranteeOffered && l.guaranteed === true,
       message: str(l.message, 300),
       address: addr.address,
     });
@@ -1002,6 +1010,14 @@ export async function POST(req: Request) {
       key: "Arrives",
       value: l.window ? formatWindow(l.window) : formatYmd(l.deliveryDate),
     },
+    // The paid guarantee: visible on the piñata it covers (refund claims
+    // are per piñata), plus a hidden rail for ops tooling.
+    ...(l.guaranteed
+      ? [
+          { key: "Guaranteed date", value: "Yes" },
+          { key: "_guaranteedDate", value: "true" },
+        ]
+      : []),
     // Underscored = hidden machine rails Paper reads at fulfillment.
     { key: "_bodyStyle", value: l.styleId },
     { key: "_design", value: l.design },
@@ -1046,6 +1062,10 @@ export async function POST(req: Request) {
   const draftOrders = [...groups.entries()].map(([groupKey, groupLines]) => {
     const a = groupLines[0].address;
     const units = groupLines.reduce((s, l) => s + l.qty, 0);
+    // The shipping line carries the FedEx rate AND any paid guarantees (one
+    // shipping line per draft, like the storefront's guaranteed-date line).
+    const guaranteedUnits = groupLines.reduce((s, l) => s + (l.guaranteed ? l.qty : 0), 0);
+    const groupShipCents = shipRateCents * units + (guaranteeCents ?? 0) * guaranteedUnits;
     // Per-draft secret: a later checkout may delete this draft only by
     // presenting it (see supersedes) — never on a draft id alone.
     const nonce = randomBytes(16).toString("hex");
@@ -1067,7 +1087,7 @@ export async function POST(req: Request) {
       // capped code: covers this group only when its rate is strictly under
       // the cap (Shopify's "applies to shipping rates under $X")
       (shippingRule.maxShippingCents === null ||
-        shipRateCents * units < shippingRule.maxShippingCents);
+        groupShipCents < shippingRule.maxShippingCents);
     return {
       groupKey,
       shipTo: formatAddress(a),
@@ -1131,17 +1151,28 @@ export async function POST(req: Request) {
           // First Class's schedule, so USPS orders route correctly today
           // with zero Paper changes. Verify both branches in the Paper
           // release before advertising USPS.
+          //
+          // Profiles with a paid guarantee (guaranteeCents) use plain FedEx
+          // titles instead — "FedEx delivery", or "FedEx delivery —
+          // guaranteed date" when the guarantee was bought. Paper reads a
+          // "fedex" prefix as the same FedEx 2-Day tier (Paper
+          // fix/fedex-title-tier): that change MUST be live before any such
+          // profile serves a host, or these orders would schedule as USPS.
           title:
             orderCarrier === "usps"
               ? freeShip
                 ? "USPS First Class — arrives around your selected dates — free shipping"
                 : "USPS First Class — arrives around your selected dates"
-              : freeShip
-                ? "Guaranteed delivery on your selected dates — free shipping"
-                : "Guaranteed delivery on your selected dates",
+              : guaranteeCents !== null
+                ? `${guaranteedUnits > 0 ? "FedEx delivery — guaranteed date" : "FedEx delivery"}${
+                    freeShip ? " — free shipping" : ""
+                  }`
+                : freeShip
+                  ? "Guaranteed delivery on your selected dates — free shipping"
+                  : "Guaranteed delivery on your selected dates",
           // priceWithCurrency replaces the deprecated ShippingLineInput.price.
           priceWithCurrency: {
-            amount: freeShip ? "0.00" : ((shipRateCents * units) / 100).toFixed(2),
+            amount: freeShip ? "0.00" : (groupShipCents / 100).toFixed(2),
             currencyCode: "USD",
           },
         },

@@ -186,7 +186,10 @@ export default async function HomeV2({
                   <Check size={16} /> Packed with candy, or treats if you prefer
                 </li>
                 <li>
-                  <Check size={16} /> FedEx delivery on the day you choose
+                  <Check size={16} />{" "}
+                  {variant.flatPrice?.shipCents === 0
+                    ? "Free FedEx delivery, timed for the day you choose"
+                    : "FedEx delivery on the day you choose"}
                 </li>
               </ul>
               {extra && (

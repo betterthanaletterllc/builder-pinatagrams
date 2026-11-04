@@ -35,6 +35,8 @@ export type DraftV2 = {
   addons: string[];
   date: string; // YYYY-MM-DD, "" = not picked (never silently preselected)
   dateSoonest: boolean; // picked via "Soonest" → follows carrier changes
+  /** Paid guaranteed delivery date (storefronts that offer it). */
+  guaranteed?: boolean;
   editLineId: string | null;
   /** The piñata added last, reopened by going Back from the order step
    *  (after Checkout too): it saves over its own line like an edit, but the
@@ -142,6 +144,7 @@ export function draftFromLine(l: CartLine, occasion: OccasionId | null): DraftV2
     addons: l.addons ?? [],
     date: l.deliveryDate ?? "",
     dateSoonest: false,
+    guaranteed: l.guaranteed === true,
     editLineId: l.id,
   };
 }
