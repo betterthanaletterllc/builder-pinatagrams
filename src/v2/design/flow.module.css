@@ -283,6 +283,46 @@
   container-type: size;
 }
 
+/* Step 1: swipe the box sideways to change the body style. Vertical drags
+   still scroll the page; no text/image drag gets in the way. */
+.stageView[data-swipe] {
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stageView[data-swipe] img {
+  -webkit-user-drag: none;
+}
+
+.stageBox[data-enter="next"] {
+  animation: pg-swipe-next 0.22s ease-out;
+}
+
+.stageBox[data-enter="prev"] {
+  animation: pg-swipe-prev 0.22s ease-out;
+}
+
+@keyframes pg-swipe-next {
+  from {
+    opacity: 0;
+    transform: translateX(18%);
+  }
+}
+
+@keyframes pg-swipe-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-18%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stageBox[data-enter] {
+    animation: none;
+  }
+}
+
 /* "When and where": the piñata + what's inside it, side by side. */
 .stageView[data-with="filling"] {
   display: flex;

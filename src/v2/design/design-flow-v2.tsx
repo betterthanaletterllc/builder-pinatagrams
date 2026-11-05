@@ -65,7 +65,7 @@ import {
 } from "../lib/address";
 import { trackV2 } from "../lib/analytics";
 import { arrivalText, dateProblemText, soonest } from "../lib/dates";
-import { fillingAfterDesignChange } from "../lib/defaults";
+import { bodyGroup, fillingAfterDesignChange } from "../lib/defaults";
 import {
   draftFromLine,
   draftFromPreset,
@@ -1356,6 +1356,23 @@ export default function DesignFlowV2(data: FlowData) {
     return !rec || rec.bodyStyles === "all" || rec.bodyStyles.includes(styleId);
   };
 
+  // Step 1's swipe: the next/previous style in the body sheet's order
+  // (everyday first, then occasions), skipping any this design isn't
+  // offered on; wraps around at the ends.
+  const swipeStyle = (dir: 1 | -1) => {
+    if (!draft) return;
+    const ordered = [
+      ...data.styles.filter((b) => bodyGroup(b.id) === "everyday"),
+      ...data.styles.filter((b) => bodyGroup(b.id) === "occasions"),
+    ].filter((b) => b.id === draft.styleId || wearable(b.id));
+    if (ordered.length < 2) return;
+    const at = ordered.findIndex((b) => b.id === draft.styleId);
+    const next = ordered[(at + dir + ordered.length) % ordered.length];
+    if (!next || next.id === draft.styleId) return;
+    patch({ styleId: next.id });
+    trackV2("body_style_selected", { style: next.id, source: "swipe" });
+  };
+
   const affected = order.views.filter((v) => !v.current && v.problem);
   const carrierNoticeNode =
     carrierNotice && carrierNotice === carrier ? (
@@ -1589,6 +1606,7 @@ export default function DesignFlowV2(data: FlowData) {
                 box={data.box}
                 loading={loading}
                 onBody={draft ? () => setSheet({ kind: "body" }) : undefined}
+                onSwipe={draft ? swipeStyle : undefined}
                 onZoom={draft ? () => setSheet({ kind: "zoom" }) : undefined}
               />
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { CSSProperties, ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import BoxPreview from "@/app/design/box-preview";
 import type { GraphicChoice } from "@/lib/flow";
 import type { HubBodyStyle } from "@/lib/hub";
@@ -44,6 +44,7 @@ export default function Stage({
   filling,
   box,
   onBody,
+  onSwipe,
   onZoom,
   loading,
   empty,
@@ -56,6 +57,9 @@ export default function Stage({
   filling: string | null;
   box: BoxInterior | null;
   onBody?: () => void;
+  /** Step 1: a sideways swipe on the box changes the body style
+   *  (1 = next, -1 = previous). */
+  onSwipe?: (dir: 1 | -1) => void;
   onZoom?: () => void;
   loading?: boolean;
   empty?: ReactNode;
@@ -72,6 +76,27 @@ export default function Stage({
   const showSize = !loading && step === "design" && !!style;
   // The box's left side in its photo (the label spans the front).
   const leftEdge = style?.logoZone?.x ?? BOX_EDGE;
+  // Swipe: a mostly-sideways drag of 40px+ on the box. Vertical drags stay
+  // page scrolls (touch-action: pan-y on the view).
+  const canSwipe = !loading && step === "design" && !!style && !!onSwipe;
+  const start = useRef<{ x: number; y: number; id: number } | null>(null);
+  const [enter, setEnter] = useState<1 | -1 | null>(null);
+  const down = (e: PointerEvent<HTMLDivElement>) => {
+    if (!canSwipe || (e.pointerType === "mouse" && e.button !== 0)) return;
+    start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  };
+  const up = (e: PointerEvent<HTMLDivElement>) => {
+    const s0 = start.current;
+    start.current = null;
+    if (!canSwipe || !onSwipe || !s0 || s0.id !== e.pointerId) return;
+    const dx = e.clientX - s0.x;
+    const dy = e.clientY - s0.y;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    // swipe left = next style, swipe right = previous
+    const dir = dx < 0 ? 1 : -1;
+    setEnter(dir);
+    onSwipe(dir);
+  };
   return (
     <div
       className={`${f.stage}${privateArt ? " ph-no-capture" : ""}`}
@@ -107,11 +132,27 @@ export default function Stage({
         </div>
       )}
 
-      <div className={f.stageView} data-with={showFilling ? "filling" : undefined}>
+      <div
+        className={f.stageView}
+        data-with={showFilling ? "filling" : undefined}
+        data-swipe={canSwipe || undefined}
+        onPointerDown={down}
+        onPointerUp={up}
+        onPointerCancel={() => {
+          start.current = null;
+        }}
+      >
         {loading ? (
           <Skeleton width="62%" height="78%" radius={16} />
         ) : style ? (
-          <div className={f.stageBox} data-mode={mode} data-ph-mask>
+          <div
+            // keyed by style so a swipe replays the slide-in
+            key={style.id}
+            className={f.stageBox}
+            data-mode={mode}
+            data-enter={canSwipe && enter ? (enter === 1 ? "next" : "prev") : undefined}
+            data-ph-mask
+          >
             <BoxPreview
               // A new body resets the preview's image-fallback state.
               key={style.id}

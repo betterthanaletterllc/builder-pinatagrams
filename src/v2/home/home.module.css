@@ -768,19 +768,17 @@
 .countdown {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin: 2px 0 18px;
-  padding: 16px 18px;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
   border-radius: var(--pg-r-card);
   background: var(--pg-cream);
-  font: 500 18px/1.4 var(--pg-font);
+  font: 500 15px/1.4 var(--pg-font);
   color: var(--pg-navy);
 }
 
 .countdown svg {
   flex: none;
-  width: 26px;
-  height: 26px;
   margin-top: 1px;
 }
 
@@ -789,19 +787,8 @@
 }
 
 .countdownTime {
-  font-size: 22px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-@media (min-width: 1024px) {
-  .countdown {
-    font-size: 20px;
-  }
-
-  .countdownTime {
-    font-size: 26px;
-  }
 }
 
 /* "See all reviews" sits snug under the slider */
