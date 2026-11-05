@@ -444,6 +444,55 @@
   pointer-events: none;
 }
 
+/* with the style arrows at mid-height, the size moves up out of their way */
+.sideStat[data-arrows] {
+  bottom: 50%;
+  justify-content: flex-end;
+  padding-bottom: 32px;
+}
+
+/* Step 1: arrows to step through the piñata styles (swipe does the same) */
+.styleArrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--pg-line-strong);
+  border-radius: 50%;
+  background: var(--pg-white);
+  color: var(--pg-navy);
+  box-shadow: 0 2px 8px rgba(24, 13, 56, 0.15);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.styleArrowPrev {
+  left: 6px;
+}
+
+.styleArrowNext {
+  right: 6px;
+}
+
+@media (hover: hover) {
+  .styleArrow:hover {
+    background: var(--pg-cream);
+  }
+}
+
+.styleArrow:focus-visible {
+  outline: 2px solid var(--pg-peri-dark);
+  outline-offset: 2px;
+}
+
+.styleArrow:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
 .sideStat svg {
   width: clamp(18px, 7.5cqh, 26px);
   height: auto;

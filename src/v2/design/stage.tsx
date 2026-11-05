@@ -9,7 +9,7 @@ import { PINATA_HEIGHT_IN } from "../lib/text";
 import type { BoxInterior, StepId } from "../lib/types";
 import { previewArt } from "../ui/box-thumb";
 import { Skeleton } from "../ui/feedback";
-import { Height, ZoomIn } from "../ui/icons";
+import { ChevronLeft, ChevronRight, Height, ZoomIn } from "../ui/icons";
 import f from "./flow.module.css";
 
 // Where the box's left side sits in its photo, as a share of the photo's
@@ -93,7 +93,11 @@ export default function Stage({
     const dy = e.clientY - s0.y;
     if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
     // swipe left = next style, swipe right = previous
-    const dir = dx < 0 ? 1 : -1;
+    go(dx < 0 ? 1 : -1);
+  };
+  // The arrows and the swipe both land here.
+  const go = (dir: 1 | -1) => {
+    if (!onSwipe) return;
     setEnter(dir);
     onSwipe(dir);
   };
@@ -188,8 +192,37 @@ export default function Stage({
             </figure>
           </>
         )}
+        {canSwipe && (
+          <>
+            {/* pointer events stop here, so a tap never reads as a swipe */}
+            <button
+              type="button"
+              className={`${f.styleArrow} ${f.styleArrowPrev}`}
+              aria-label="Previous piñata style"
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={() => go(-1)}
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <button
+              type="button"
+              className={`${f.styleArrow} ${f.styleArrowNext}`}
+              aria-label="Next piñata style"
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={() => go(1)}
+            >
+              <ChevronRight size={22} />
+            </button>
+          </>
+        )}
         {showSize && (
-          <p className={f.sideStat} style={{ "--edge": leftEdge } as CSSProperties}>
+          <p
+            className={f.sideStat}
+            data-arrows={canSwipe || undefined}
+            style={{ "--edge": leftEdge } as CSSProperties}
+          >
             <Height />
             <strong aria-hidden="true">{PINATA_HEIGHT_IN}″</strong>
             <span aria-hidden="true">tall</span>
