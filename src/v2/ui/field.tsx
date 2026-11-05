@@ -22,6 +22,8 @@ type Common = {
   hint?: ReactNode;
   error?: string | null;
   optional?: boolean;
+  /** Keep the label for screen readers only (the placeholder says it). */
+  hideLabel?: boolean;
 };
 
 function useFieldIds(id: string | undefined, hint: unknown, error: unknown) {
@@ -37,6 +39,7 @@ function Shell({
   htmlFor,
   label,
   optional,
+  hideLabel,
   hint,
   hintId,
   error,
@@ -50,7 +53,7 @@ function Shell({
 }) {
   return (
     <div className={u.field}>
-      <label htmlFor={htmlFor} className={u.label}>
+      <label htmlFor={htmlFor} className={hideLabel ? u.srOnly : u.label}>
         {label}
         {optional && <span className={u.optional}> (optional)</span>}
       </label>
@@ -100,13 +103,17 @@ export const TextField = forwardRef<
 export const TextArea = forwardRef<
   HTMLTextAreaElement,
   Common & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "children">
->(function TextArea({ label, hint, error, optional, id, className, ...rest }, ref) {
+>(function TextArea(
+  { label, hint, error, optional, hideLabel, id, className, ...rest },
+  ref,
+) {
   const { base, hintId, errorId, describedBy } = useFieldIds(id, hint, error);
   return (
     <Shell
       htmlFor={base}
       label={label}
       optional={optional}
+      hideLabel={hideLabel}
       hint={hint}
       hintId={hintId}
       error={error}

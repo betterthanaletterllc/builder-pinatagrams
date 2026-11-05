@@ -894,18 +894,10 @@
   }
 }
 
-/* all-in storefronts: "Need a start?" sits under the message box, beside
-   the characters-left count */
-.underBox {
+/* all-in storefronts: "Need a start?" sits above the message box */
+.overBox {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.underBox .counter {
-  margin: 0;
+  margin-bottom: 10px;
 }
 
 /* the paid guaranteed delivery date: a switch under the calendar, with a

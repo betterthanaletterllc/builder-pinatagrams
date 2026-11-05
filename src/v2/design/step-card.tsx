@@ -99,21 +99,8 @@ const StepCard = forwardRef<
 
       <div className={s.fields}>
         <div>
-          <TextArea
-            id="pg-message"
-            label="Message"
-            value={parts.body}
-            rows={5}
-            error={error}
-            // (spread after the field's own ids, so the error id goes in too)
-            aria-describedby={[error ? "pg-message-error" : null, counterId]
-              .filter(Boolean)
-              .join(" ")}
-            placeholder="Say something they'll keep."
-            onChange={(e) => change("body", e.target.value)}
-          />
-          <div className={startersOverlay ? s.underBox : undefined}>
-            {startersOverlay && (
+          {startersOverlay && (
+            <div className={s.overBox}>
               <Button
                 variant="secondary"
                 size="sm"
@@ -122,11 +109,26 @@ const StepCard = forwardRef<
               >
                 <Sparkle size={16} /> Need a start?
               </Button>
-            )}
-            <p id={counterId} className={s.counter} data-low={left <= 20}>
-              {left} character{left === 1 ? "" : "s"} left
-            </p>
-          </div>
+            </div>
+          )}
+          <TextArea
+            id="pg-message"
+            label="Message"
+            // all-in: no visible label; the placeholder asks for the message
+            hideLabel={startersOverlay}
+            value={parts.body}
+            rows={5}
+            error={error}
+            // (spread after the field's own ids, so the error id goes in too)
+            aria-describedby={[error ? "pg-message-error" : null, counterId]
+              .filter(Boolean)
+              .join(" ")}
+            placeholder={startersOverlay ? "Write your message here" : "Say something they'll keep."}
+            onChange={(e) => change("body", e.target.value)}
+          />
+          <p id={counterId} className={s.counter} data-low={left <= 20}>
+            {left} character{left === 1 ? "" : "s"} left
+          </p>
         </div>
         <TextField
           label="From"

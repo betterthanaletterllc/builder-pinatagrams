@@ -549,56 +549,12 @@
   color: var(--pg-muted);
 }
 
-.heroPhotos {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  margin-top: 16px;
-  font: 500 13px/1.4 var(--pg-font);
-  color: var(--pg-muted);
-}
-
-.heroPhotos ul {
-  display: flex;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.heroPhotos li + li {
-  margin-left: -10px;
-}
-
-.heroPhotos img {
-  display: block;
-  width: 52px;
-  height: 52px;
-  border: 3px solid var(--pg-white);
-  border-radius: 50%;
-  object-fit: cover;
-}
-
 /* closing CTA (after the reviews) */
 .closing {
   display: grid;
   justify-items: center;
   gap: 10px;
   text-align: center;
-}
-
-.closingTitle {
-  margin: 0;
-  font-family: var(--pg-display);
-  font-weight: 400;
-  font-size: clamp(30px, 5vw, 48px);
-  line-height: 1.05;
-}
-
-.closingText {
-  margin: 0 0 6px;
-  font: 500 15px/1.45 var(--pg-font);
-  color: var(--pg-text-2);
 }
 
 .corpLink {
@@ -671,7 +627,7 @@
 /* review slider: native swipe with snap points; the next card peeks in */
 .slider {
   position: relative;
-  margin: 0 -16px 4px;
+  margin: 0 -16px;
 }
 
 .sliderTrack {
@@ -680,7 +636,7 @@
   grid-auto-columns: 78%;
   gap: 12px;
   margin: 0;
-  padding: 4px 16px 12px;
+  padding: 4px 16px 6px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
@@ -776,12 +732,12 @@
 
 @media (min-width: 1024px) {
   .slider {
-    margin: 0 0 4px;
+    margin: 0;
   }
 
   .sliderTrack {
     grid-auto-columns: calc((100% - 36px) / 4);
-    padding: 4px 0 12px;
+    padding: 4px 0 6px;
     scroll-padding: 0;
   }
 
@@ -812,17 +768,19 @@
 .countdown {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin: 0 0 16px;
-  padding: 10px 12px;
+  gap: 12px;
+  margin: 2px 0 18px;
+  padding: 16px 18px;
   border-radius: var(--pg-r-card);
   background: var(--pg-cream);
-  font: 500 15px/1.4 var(--pg-font);
+  font: 500 18px/1.4 var(--pg-font);
   color: var(--pg-navy);
 }
 
 .countdown svg {
   flex: none;
+  width: 26px;
+  height: 26px;
   margin-top: 1px;
 }
 
@@ -831,8 +789,43 @@
 }
 
 .countdownTime {
+  font-size: 22px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .countdown {
+    font-size: 20px;
+  }
+
+  .countdownTime {
+    font-size: 26px;
+  }
+}
+
+/* "See all reviews" sits snug under the slider */
+.seeAll {
+  margin: 0;
+}
+
+/* all-in occasions: one swipeable row on phones instead of ragged wrapping */
+@media (max-width: 1023px) {
+  .chipRow {
+    flex-wrap: nowrap;
+    margin: 0 -16px;
+    padding: 0 16px 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chipRow::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chipRow > li {
+    flex: none;
+  }
 }
 
 @media (min-width: 1024px) {

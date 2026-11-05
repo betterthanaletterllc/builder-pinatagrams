@@ -135,15 +135,7 @@ export default async function HomeV2({
         .slice(0, 10)
         .map((x) => x.r)
     : goodReviews.slice(0, 4);
-  // The hero's strip of real delivery photos (verified, five-star, with a photo).
-  const heroPhotos = allIn
-    ? goodReviews
-        .filter((r) => r.rating === 5 && hasPhoto(r))
-        .slice(0, 4)
-        .map((r) => ({ id: r.id, name: r.name, url: r.media.find((m) => m.kind === "photo" && m.url)!.url }))
-    : [];
   const deliveredText = priceCents !== null ? `${dollars(priceCents)} delivered` : null;
-  const freeShip = variant.flatPrice?.shipCents === 0;
   const pitch =
     variant.landingLines?.[0] ??
     (allIn && priceCents !== null
@@ -159,15 +151,18 @@ export default async function HomeV2({
             <h2 id="home-reviews" className={s.h2}>
               What senders say
             </h2>
-            <p className={s.agg}>
-              <Stars rating={reviews.aggregate.rating} />
-              <span>
-                <strong>{reviews.aggregate.rating.toFixed(1)}</strong> ·{" "}
-                {reviews.aggregate.count.toLocaleString("en-US")} reviews
-              </span>
-              {/* brand-pooled rating — the scope label stays with the number */}
-              <span className={s.scope}>{reviews.scope.label}</span>
-            </p>
+            {/* all-in: the hero already shows the rating, right above */}
+            {!allIn && (
+              <p className={s.agg}>
+                <Stars rating={reviews.aggregate.rating} />
+                <span>
+                  <strong>{reviews.aggregate.rating.toFixed(1)}</strong> ·{" "}
+                  {reviews.aggregate.count.toLocaleString("en-US")} reviews
+                </span>
+                {/* brand-pooled rating — the scope label stays with the number */}
+                <span className={s.scope}>{reviews.scope.label}</span>
+              </p>
+            )}
           </div>
           {allIn ? (
             <ReviewSlider label="Customer reviews">
@@ -248,7 +243,7 @@ export default async function HomeV2({
             })}
           </ul>
           )}
-          <p>
+          <p className={s.seeAll}>
             <Link className={s.more} href="/reviews">
               See all {reviews.aggregate.count.toLocaleString("en-US")} reviews
               <ChevronRight size={18} />
@@ -286,15 +281,16 @@ export default async function HomeV2({
           <div className={s.heroCopy}>
             <h1 id="home-title" className={s.title}>
               {/* Arbotek’s ñ needs its width set (see .enye) */}
-              Mail them an actual{" "}
+              Send a{" "}
               <span className={s.word}>
-                pi<span className={s.enye}>ñ</span>ata!
-              </span>
+                Pi<span className={s.enye}>ñ</span>ata
+              </span>{" "}
+              filled with goodies!
             </h1>
             {deliveredText && (
               <p className={s.bigPrice}>
                 <strong>{deliveredText}</strong>
-                <span className={s.anchor}>Less than flower delivery, and they keep it</span>
+                <span className={s.anchor}>Less than a flower delivery, and a gift they’ll never forget</span>
               </p>
             )}
             <OrderCountdown cfg={deliveryCfg} initial={orderDeadline(deliveryCfg)} />
@@ -320,28 +316,9 @@ export default async function HomeV2({
               </p>
               <p className={s.proofLine}>
                 <Check size={16} /> Ships anywhere in the US
-                {freeShip ? ", FedEx included" : ""}
               </p>
               <p className={s.pay}>Secure checkout · Apple Pay · all major cards</p>
             </div>
-            {heroPhotos.length > 0 && (
-              <div className={s.heroPhotos}>
-                <ul aria-label="Photos from customers">
-                  {heroPhotos.map((p) => (
-                    <li key={p.id}>
-                      <Image
-                        src={p.url}
-                        alt={`Customer photo from ${p.name}`}
-                        width={144}
-                        height={144}
-                        sizes="72px"
-                      />
-                    </li>
-                  ))}
-                </ul>
-                <span>Real deliveries from real customers</span>
-              </div>
-            )}
           </div>
         </section>
       ) : (
@@ -454,7 +431,7 @@ export default async function HomeV2({
           <h2 id="home-occasions" className={s.h2}>
             What are you celebrating?
           </h2>
-          <ul className={s.chips}>
+          <ul className={allIn ? `${s.chips} ${s.chipRow}` : s.chips}>
             {occasions.map((o) => (
               <li key={o.id}>
                 <ChipLink href={`/design?occasion=${o.id}`}>{o.label}</ChipLink>
@@ -503,7 +480,7 @@ export default async function HomeV2({
             <h2 id="home-bodies" className={s.h2}>
               Choose your piñata
             </h2>
-            {priceText && <p className={s.sectionNote}>{priceText}</p>}
+            {priceText && !allIn && <p className={s.sectionNote}>{priceText}</p>}
           </div>
           <ul className={s.bodyGrid}>
             {styles.map((b) => (
@@ -530,14 +507,7 @@ export default async function HomeV2({
 
       {allIn ? (
         <>
-          <section className={`${s.section} ${s.closing}`} aria-labelledby="home-closing">
-            <h2 id="home-closing" className={s.closingTitle}>
-              Send the party
-            </h2>
-            <p className={s.closingText}>
-              {deliveredText ? `${deliveredText} · ` : ""}
-              {promise}
-            </p>
+          <section className={`${s.section} ${s.closing}`} aria-label="Send a Piñatagram">
             <ButtonLink href="/design" size="lg">
               Send a Piñatagram
             </ButtonLink>
