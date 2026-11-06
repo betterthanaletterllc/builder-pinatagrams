@@ -54,8 +54,16 @@ Server pieces added with the overhaul:
   `SHOPIFY_CLIENT_SECRET` (or `SHOPIFY_WEBHOOK_SECRET` for a hand-made admin
   webhook); `GET` on the same path says whether the subscription exists (and
   creates it if missing, once per instance).
-- Analytics (GA4, Meta pixel, PostHog) only run in production on
+- Analytics (GA4, Meta pixel, OpenAI pixel, PostHog) only run in production on
   `*.pinatagrams.com`; PostHog loads lazily.
+- OpenAI uses the same public pixel ID as Shopify's official ChatGPT app
+  (`NEXT_PUBLIC_OPENAI_PIXEL_ID` overrides the default). The builder sends
+  page views, add-to-cart and checkout-start events. At payment and resume,
+  the SDK's consent-controlled `__oppref` cookie is carried into the Shopify
+  invoice URL. Shopify's app owns the completed-purchase event; creating a
+  draft or returning to the builder must never send another purchase.
+  Test with `node --test tests/openai-ads.test.mjs`; verify live page/checkout
+  events in OpenAI Ads Manager and a completed test purchase in Shopify.
 
 ## Current state (B2C flow v1)
 

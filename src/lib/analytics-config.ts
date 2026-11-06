@@ -9,6 +9,9 @@ export const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? "G-TF4J3S84QY";
 // same pattern as GA_ID; the env var can still override.
 export const META_PIXEL_ID =
   process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "621443411344269";
+// Public measurement ID, shared with Shopify's official ChatGPT app.
+export const OPENAI_PIXEL_ID =
+  process.env.NEXT_PUBLIC_OPENAI_PIXEL_ID ?? "88U7xR7f9CY4XHuBZ6LPRT";
 // PostHog project 520051 (US cloud). Write-only client token — public-safe
 // per PostHog; env can still override.
 export const POSTHOG_KEY =

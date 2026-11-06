@@ -31,6 +31,7 @@ import { formatYmd } from "./delivery";
 import { track, trackBeginCheckout } from "./analytics";
 import { readAnalyticsIds } from "./analytics-ids";
 import { previewVariantName } from "./variant";
+import { openAiCheckoutUrl } from "./openai-ads";
 
 export type LineError = { lineId: string; code: string; message: string };
 
@@ -310,7 +311,7 @@ async function runCheckout(opts: {
     return {
       ok: true,
       kind: "redirect",
-      invoiceUrl: orders[0].invoiceUrl,
+      invoiceUrl: openAiCheckoutUrl(orders[0].invoiceUrl),
       draftOrderId: orders[0].draftOrderId,
     };
   }
@@ -524,5 +525,5 @@ export async function reopenPendingOrder(key: string): Promise<ReopenResult> {
  *  whichever builder page the shopper returns to re-checks right away. */
 export function resumePayment(p: PendingOrder): void {
   updatePendingOrders([pendingKey(p)], { checkedAt: undefined });
-  window.location.assign(p.invoiceUrl);
+  window.location.assign(openAiCheckoutUrl(p.invoiceUrl));
 }

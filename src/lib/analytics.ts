@@ -12,7 +12,8 @@
  */
 
 import type { PostHog, SessionRecordingOptions } from "posthog-js";
-import { GA_ID, META_PIXEL_ID, POSTHOG_HOST, POSTHOG_KEY } from "./analytics-config";
+import { GA_ID, META_PIXEL_ID, OPENAI_PIXEL_ID, POSTHOG_HOST, POSTHOG_KEY } from "./analytics-config";
+import { startOpenAiAnalytics, trackOpenAiCommerce, trackOpenAiPageView } from "./openai-ads";
 
 // The ids live in a browser-free module so server routes can share them.
 export { GA_ID, META_PIXEL_ID, POSTHOG_HOST, POSTHOG_KEY };
@@ -201,6 +202,7 @@ let started = false;
 export function startAnalytics(): void {
   if (started || !analyticsEnabled()) return;
   started = true;
+  startOpenAiAnalytics(OPENAI_PIXEL_ID);
   phCapture("$pageview", superProps());
   scheduleAnalyticsLoad();
 }
@@ -219,6 +221,7 @@ export function track(event: string, props?: Record<string, unknown>): void {
 
 export function trackPageView(path: string): void {
   if (!analyticsEnabled()) return devLog("page_view", { path });
+  trackOpenAiPageView(path);
   const sp = superProps();
   try {
     window.gtag?.("event", "page_view", { page_path: path, ...sp });
@@ -274,6 +277,7 @@ export function trackAddToCart(
 ): string {
   const eventId = opts?.eventId ?? newEventId("atc");
   trackCommerce("add_to_cart", "AddToCart", valueCents, eventId);
+  trackOpenAiCommerce("items_added", valueCents, eventId);
   return eventId;
 }
 
@@ -284,6 +288,7 @@ export function trackBeginCheckout(
 ): string {
   const eventId = opts?.eventId ?? newEventId("ic");
   trackCommerce("begin_checkout", "InitiateCheckout", valueCents, eventId);
+  trackOpenAiCommerce("checkout_started", valueCents, eventId);
   return eventId;
 }
 
