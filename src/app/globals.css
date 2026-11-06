@@ -2865,7 +2865,10 @@ body:has(.bottom-stack) .site-footer {
   box-sizing: border-box;
   padding: 4% 6%;
   display: flex;
+  /* "safe": a message that is ever too tall keeps its FIRST line in view
+     instead of being centred off both ends (plain centre where unsupported) */
   align-items: center;
+  align-items: safe center;
   justify-content: center;
   text-align: center;
   color: var(--ink);
@@ -2874,6 +2877,16 @@ body:has(.bottom-stack) .site-footer {
   overflow: hidden;
   white-space: pre-wrap;
   word-break: break-word;
+  /* the auto-fit sets the size; the phone must not enlarge it */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* the words themselves, measured by the auto-fit (box-preview.tsx) */
+.flap-text {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* When the matching card is underneath, the text layer goes transparent and

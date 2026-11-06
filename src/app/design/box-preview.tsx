@@ -209,6 +209,7 @@ export default function BoxPreview({
   // card (padding included). Runs after layout; opacity-hidden layers still
   // have geometry, so this works even before the crossfade reveals it.
   const msgRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
   const onCard = !!messageCard && !photoFailed;
   useLayoutEffect(() => {
     const el = msgRef.current;
@@ -237,11 +238,24 @@ export default function BoxPreview({
       // Shrink until it fits. Once the words are small, tighter line spacing
       // goes first (a many-line message on a phone-sized card) so every line
       // shows instead of the first and last being cut at the box.
+      // Fit is measured on the words themselves against the padded box —
+      // both edges. (el.scrollHeight only sees what spills past the BOTTOM of
+      // a centred flex box, so an overflow split top/bottom could pass as a
+      // fit and then be clipped at both ends: the "half a message" bug.)
+      const text = textRef.current;
+      const cs = getComputedStyle(el);
+      const availH = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const availW = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      // no room yet (a hidden or still-collapsing layer): a later re-fit sizes it
+      if (!text || availH <= 0 || availW <= 0) return;
+      // (width: a word wider than the line — only possible where the browser
+      // can't break it — shows as the span's own horizontal overflow)
+      const over = () => text.offsetHeight > availH + 0.5 || text.scrollWidth > text.clientWidth + 1;
       let size = 16;
       let leading = 1.35;
       el.style.fontSize = `${size}px`;
       el.style.lineHeight = String(leading);
-      while (el.scrollHeight > el.clientHeight) {
+      while (over()) {
         if (size > 8) size -= 0.5;
         else if (leading > 1.12) leading = Math.round((leading - 0.05) * 100) / 100;
         else if (size > 4) size -= 0.25;
@@ -251,15 +265,25 @@ export default function BoxPreview({
       }
     };
     fit();
-    // re-fit when the zone's rendered size changes (rotation, window resize)
-    // and once the web font has arrived (its glyphs are wider)
+    // re-fit when the zone's rendered size changes (rotation, window resize,
+    // the stage settling after a step change), once the web font has arrived
+    // (its glyphs are wider), and once more after the step's transitions —
+    // a fit taken mid-change must never stick.
     const ro = new ResizeObserver(fit);
     ro.observe(el);
+    if (el.parentElement) ro.observe(el.parentElement);
     let live = true;
     void document.fonts?.ready.then(() => live && fit());
+    const onFonts = () => live && fit();
+    document.fonts?.addEventListener?.("loadingdone", onFonts);
+    const raf = requestAnimationFrame(() => live && fit());
+    const late = window.setTimeout(() => live && fit(), 400);
     return () => {
       live = false;
       ro.disconnect();
+      document.fonts?.removeEventListener?.("loadingdone", onFonts);
+      cancelAnimationFrame(raf);
+      window.clearTimeout(late);
     };
   }, [message, mode, onCard, zone.w, zone.h, messagePadding?.x, messagePadding?.y]);
 
@@ -411,7 +435,9 @@ export default function BoxPreview({
                 // above (a percent of the card, not of the photo)
               }}
             >
-              {message || "Your message appears here, printed on the inside flap."}
+              <span ref={textRef} className="flap-text">
+                {message || "Your message appears here, printed on the inside flap."}
+              </span>
             </div>
           </div>
         </div>
