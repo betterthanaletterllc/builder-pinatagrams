@@ -67,6 +67,12 @@ export default async function HomeV2({
   // An all-in storefront's one delivered price lays over the price book.
   const price = priceForVariant(basePrice, variant);
   const allIn = !!variant.flatPrice;
+  // TEST 2026-11-06: the pre-Nov-4 landing layout (Send the party!, designs
+  // up top, no countdown) with the all-in $50 price in its chips. Builder
+  // starts fell from ~40% to ~26% of sessions after the all-in landing went
+  // live; this isolates the layout from the price. Flip back to `allIn` to
+  // restore the all-in landing.
+  const allInLayout = false as boolean;
   // A storefront without a landing (a client store whose own site already
   // made the pitch, e.g. froggle) opens straight on the builder — never on
   // the generic Piñatagrams home. The query (UTMs, a discount) rides along.
@@ -128,7 +134,7 @@ export default async function HomeV2({
     (r.incentivized ? 0 : 1) -
     // a five-star with a caveat ("however…", "confusion") goes to the back
     (/however|unfortunately|disappoint|confus|late|damag|missing|broke|wrong/i.test(r.body) ? 10 : 0);
-  const reviewPicks: HubReview[] = allIn
+  const reviewPicks: HubReview[] = allInLayout
     ? goodReviews
         .map((r, i) => ({ r, i, k: score(r) }))
         .sort((a, b) => b.k - a.k || a.i - b.i)
@@ -136,7 +142,7 @@ export default async function HomeV2({
         .map((x) => x.r)
     : goodReviews.slice(0, 4);
   // The hero's strip of real delivery photos (verified, five-star, with a photo).
-  const heroPhotos = allIn
+  const heroPhotos = allInLayout
     ? goodReviews
         .filter((r) => r.rating === 5 && hasPhoto(r))
         .slice(0, 4)
@@ -146,9 +152,9 @@ export default async function HomeV2({
   const freeShip = variant.flatPrice?.shipCents === 0;
   const pitch =
     variant.landingLines?.[0] ??
-    (allIn && priceCents !== null
+    (allInLayout && priceCents !== null
       ? `One price, everything included. ${dollars(priceCents)} sends a ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, with your design on the box and your message inside, delivered straight to their door.`
-      : `A ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, your design on the box and your message on the inside flap delivered straight to their door.`);
+      : `${PINATA_HEIGHT_IN === 11 || PINATA_HEIGHT_IN === 8 || PINATA_HEIGHT_IN === 18 ? "An" : "A"} ${PINATA_HEIGHT_IN}-inch piñata packed with goodies, your design on the box and your message on the inside flap delivered straight to their door.`);
 
   // The reviews (a swipe row on all-in storefronts, right under the hero
   // there — on a phone it would otherwise sit below every piñata style).
@@ -169,7 +175,7 @@ export default async function HomeV2({
               <span className={s.scope}>{reviews.scope.label}</span>
             </p>
           </div>
-          {allIn ? (
+          {allInLayout ? (
             <ReviewSlider label="Customer reviews">
               {reviewPicks.map((r) => {
                 const photo = (r.media ?? []).find((m) => m.kind === "photo" && m.url);
@@ -258,7 +264,7 @@ export default async function HomeV2({
     ) : null;
 
   return (
-    <main className={`${s.home}${allIn ? ` ${s.homeAllIn}` : ""}`}>
+    <main className={`${s.home}${allInLayout ? ` ${s.homeAllIn}` : ""}`}>
       {/* Remembers a non-production ?variant= preview for client surfaces
           and flags unresolved hosts loudly. Renders nothing. */}
       <VariantBoot
@@ -268,7 +274,7 @@ export default async function HomeV2({
       />
       <PendingBanner />
 
-      {allIn ? (
+      {allInLayout ? (
         <section className={`${s.hero} ${s.heroAllIn}`} aria-labelledby="home-title">
           <div className={s.heroMedia}>
             {hero || heroFallback?.boxImageUrl ? (
@@ -376,7 +382,7 @@ export default async function HomeV2({
               Send a Piñatagram
             </ButtonLink>
           </div>
-          {allIn ? (
+          {allInLayout ? (
             <>
               <p className={s.includedHead}>
                 Everything included{priceCents !== null ? ` for ${dollars(priceCents)}` : ""}:
@@ -447,7 +453,7 @@ export default async function HomeV2({
       </section>
       )}
 
-      {allIn && reviewsSection}
+      {allInLayout && reviewsSection}
 
       {occasions.length > 0 && (
         <section className={s.section} aria-labelledby="home-occasions">
@@ -526,9 +532,9 @@ export default async function HomeV2({
         </section>
       )}
 
-      {!allIn && reviewsSection}
+      {!allInLayout && reviewsSection}
 
-      {allIn ? (
+      {allInLayout ? (
         <>
           <section className={`${s.section} ${s.closing}`} aria-labelledby="home-closing">
             <h2 id="home-closing" className={s.closingTitle}>
