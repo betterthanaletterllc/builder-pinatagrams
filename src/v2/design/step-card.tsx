@@ -4,7 +4,9 @@ import { forwardRef, useEffect, useId, useState } from "react";
 import {
   composeMessage,
   FROM_MAX,
+  lineCount,
   MESSAGE_LIMIT,
+  MESSAGE_MAX_LINES,
   STARTERS,
   type CardParts,
 } from "../lib/message";
@@ -73,6 +75,16 @@ const StepCard = forwardRef<
       onNotice(`That won't fit — the card holds ${MESSAGE_LIMIT} characters in all.`);
       return;
     }
+    // The message box holds at most MESSAGE_MAX_LINES lines (blank ones
+    // included; the From line is extra). A further line break is simply
+    // refused — quietly, no notice. Removing lines is always allowed.
+    if (
+      field === "body" &&
+      lineCount(value) > MESSAGE_MAX_LINES &&
+      lineCount(value) > lineCount(parts.body)
+    ) {
+      return;
+    }
     onNotice(null);
     onParts(next);
   };
@@ -80,7 +92,7 @@ const StepCard = forwardRef<
   const applyStarter = (line: string) => {
     const body = parts.body.trim() ? `${parts.body.replace(/\s+$/, "")}\n${line}` : line;
     const next = { ...parts, body };
-    if (composeMessage(next).length > MESSAGE_LIMIT) {
+    if (composeMessage(next).length > MESSAGE_LIMIT || lineCount(body) > MESSAGE_MAX_LINES) {
       onNotice("That starter won't fit with what you've written — trim a little first.");
       return;
     }

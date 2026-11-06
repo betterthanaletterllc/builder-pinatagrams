@@ -9,8 +9,17 @@ import type { OccasionId } from "./occasions";
  */
 
 export const MESSAGE_LIMIT = 300;
+/** Lines in the message box (line breaks, blank lines included; the
+ *  "From:" line is extra) — past this a short message would need smaller
+ *  type than a long paragraph. Checkout backstops it (route.ts). */
+export const MESSAGE_MAX_LINES = 8;
 export const TO_MAX = 40;
 export const FROM_MAX = 40;
+
+/** Lines the printed card starts (each line break begins one). */
+export function lineCount(s: string): number {
+  return s ? s.split("\n").length : 0;
+}
 
 export type CardParts = { to: string; body: string; from: string };
 

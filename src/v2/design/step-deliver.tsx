@@ -229,9 +229,10 @@ const StepDeliver = forwardRef<
                   </div>
                   {guaranteeHelp && (
                     <p id={`${guaranteeId}-help`} className={s.guaranteeHelp}>
-                      With the guarantee, your piñata arrives on the date you picked, or you get a
-                      full refund. Without it, we send it to arrive on your date, but it may arrive
-                      within a business day or two of it.
+                      With the guarantee, your piñata arrives on the date you picked. If it
+                      doesn&apos;t, you get a 50% refund, and a full refund if it&apos;s more than
+                      one business day off. Without it, we send it to arrive on your date, but it
+                      may arrive within a business day or two of it.
                     </p>
                   )}
                 </div>

@@ -356,6 +356,20 @@ function str(v: unknown, max: number): string {
   return typeof v === "string" ? v.slice(0, max).trim() : "";
 }
 
+/** The card prints at most 9 lines: 8 of message (v2/lib/message.ts
+ *  MESSAGE_MAX_LINES; the builder refuses a 9th) + the "From:" line.
+ *  Backstop for anything that skips the builder: extra lines join the last
+ *  one with spaces, so no words are lost. */
+const MESSAGE_MAX_LINES = 9;
+function capLines(s: string): string {
+  const lines = s.split("\n");
+  if (lines.length <= MESSAGE_MAX_LINES) return s;
+  return [
+    ...lines.slice(0, MESSAGE_MAX_LINES - 1),
+    lines.slice(MESSAGE_MAX_LINES - 1).map((l) => l.trim()).filter(Boolean).join(" "),
+  ].join("\n");
+}
+
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** "a", "a and b", "a, b and c". */
@@ -918,7 +932,7 @@ export async function POST(req: Request) {
           ? uspsWindow(deliveryDate, deliveryCfg)
           : null,
       guaranteed: guaranteeOffered && l.guaranteed === true,
-      message: str(l.message, 300),
+      message: capLines(str(l.message, 300)),
       address: addr.address,
     });
   }

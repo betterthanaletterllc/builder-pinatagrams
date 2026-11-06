@@ -258,7 +258,7 @@ export default function BoxPreview({
       while (over()) {
         if (size > 8) size -= 0.5;
         else if (leading > 1.12) leading = Math.round((leading - 0.05) * 100) / 100;
-        else if (size > 4) size -= 0.25;
+        else if (size > 3.5) size -= 0.25;
         else break;
         el.style.fontSize = `${size}px`;
         el.style.lineHeight = String(leading);
