@@ -10,6 +10,7 @@ import {
   type PendingOrder,
 } from "@/lib/flow";
 import { resumePayment } from "@/lib/checkout-client";
+import { openAiCheckoutUrl } from "@/lib/openai-ads";
 import { Info } from "../ui/icons";
 import c from "./chrome.module.css";
 
@@ -78,7 +79,7 @@ export default function PendingBanner({
           <>
             <a
               className={c.resume}
-              href={pending.invoiceUrl}
+              href={openAiCheckoutUrl(pending.invoiceUrl)}
               onClick={(e) => {
                 // Clears the paid-check throttle on the way out, so whichever
                 // builder page they come back to re-checks right away.
