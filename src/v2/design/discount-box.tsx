@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import { saveDiscountCodes } from "@/lib/flow";
 import { formatCents, resolveDiscount, type HubDiscount } from "@/lib/hub";
 import { Button } from "../ui/controls";
@@ -15,7 +15,8 @@ export function describeDiscount(d: HubDiscount): string {
 }
 
 /**
- * "Have a code?" — collapsed until asked for. Codes resolve through the
+ * The discount-code field — always open (no "Have a code?" toggle, since
+ * 2026-11-10) while fewer than two codes are applied. Codes resolve through the
  * builder's own /api/discount and are stored exactly as the cart stores
  * them (lib/flow), with the cart's rules: at most two, one per kind (an
  * order code + a free-shipping code). Shopify applies the real discount.
@@ -30,11 +31,9 @@ export default function DiscountBox({
   /** Per-code eligibility notes (below a minimum, over a shipping cap). */
   notes: { code: string; text: string }[];
 }) {
-  const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const regionId = useId();
 
   const apply = async () => {
     const c = code.trim().toUpperCase().slice(0, 64);
@@ -93,19 +92,10 @@ export default function DiscountBox({
       ))}
       {discounts.length < 2 && (
         <>
-          <button
-            type="button"
-            className={s.linkBtn}
-            aria-expanded={open}
-            aria-controls={regionId}
-            onClick={() => setOpen((o) => !o)}
-          >
-            {discounts.length ? "Add another code" : "Have a code?"}
-          </button>
-          <div id={regionId} hidden={!open}>
+          <div>
             <div className={s.codeForm}>
               <TextField
-                label="Discount code"
+                label={discounts.length ? "Add another code" : "Discount code"}
                 value={code}
                 autoComplete="off"
                 autoCapitalize="characters"
