@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   deliveryProblem,
+  fedexNearbyDays,
   fromYmd,
   maxDeliveryDate,
   minDeliveryDate,
@@ -31,11 +32,15 @@ export default function DateCalendar({
   onChange,
   cfg,
   carrier = "fedex",
+  showNearby = false,
 }: {
   value: string; // "" = nothing chosen yet
   onChange: (ymd: string) => void;
   cfg: DeliveryConfig;
   carrier?: Carrier;
+  /** FedEx without the guarantee: faintly shade the 2 business days either
+   *  side of the picked date (it may land a day or two off). */
+  showNearby?: boolean;
 }) {
   const [view, setView] = useState(() => {
     const d = value ? fromYmd(value) : fromYmd(minDeliveryDate(cfg, carrier));
@@ -76,6 +81,10 @@ export default function DateCalendar({
     ymd <= win.end &&
     ymd !== value &&
     uspsDeliveryDay(ymd, cfg);
+
+  const nearby = new Set(
+    showNearby && carrier === "fedex" && value ? fedexNearbyDays(value, cfg) : [],
+  );
 
   return (
     <div className="cal">
@@ -119,6 +128,7 @@ export default function DateCalendar({
                 "cal-day" +
                 (ymd === value ? " selected" : "") +
                 (inWindow(ymd) ? " win" : "") +
+                (nearby.has(ymd) && !deliveryProblem(ymd, cfg, carrier) ? " near" : "") +
                 (deliveryProblem(ymd, cfg, carrier) ? " off" : "")
               }
               disabled={!!deliveryProblem(ymd, cfg, carrier)}

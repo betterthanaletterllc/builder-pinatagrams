@@ -395,6 +395,14 @@
 /* USPS window: identifiable without colour alone — a 2px #4a62c4 ring
    (5.5:1 against white, past the 3:1 non-text minimum) and navy numbers on
    a light tint (14:1); the legend below names both marks. */
+/* FedEx without the guarantee: the business days either side of the picked
+   day, a faint see-through version of the selection. */
+.calendar :global(.cal .cal-day.near) {
+  background: color-mix(in srgb, var(--pg-navy) 18%, transparent);
+  color: var(--pg-navy);
+  font-weight: 600;
+}
+
 .calendar :global(.cal .cal-day.win) {
   opacity: 1;
   background: #e3e8fc;

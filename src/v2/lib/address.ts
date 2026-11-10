@@ -46,8 +46,8 @@ export function validateAddress(
   else if (stateCode(a.province) !== a.province) e.province = "Choose a US state.";
   if (!a.zip.trim()) e.zip = "Enter the ZIP code.";
   else if (!ZIP_RE.test(a.zip.trim())) e.zip = "Enter a 5-digit ZIP code.";
-  if (a.phone.trim() && a.phone.replace(/\D/g, "").length < 10)
-    e.phone = "Enter a 10-digit phone number, or leave it blank.";
+  // No phone field (removed 2026-11-10 to shorten checkout): a phone saved
+  // earlier still rides along, but nothing here can flag it.
   return e;
 }
 
@@ -58,7 +58,6 @@ export const ADDRESS_ORDER: AddressField[] = [
   "city",
   "province",
   "zip",
-  "phone",
 ];
 
 /** "Sam Rivera, Austin TX" */

@@ -58,7 +58,6 @@ import { priceForVariant } from "@/lib/variant";
 import PendingBanner from "../chrome/pending-banner";
 import {
   ADDRESS_ORDER,
-  emailProblem,
   validateAddress,
   type AddressErrors,
   type AddressField,
@@ -110,7 +109,7 @@ import {
 } from "./sheets";
 import Stage from "./stage";
 import StepCard from "./step-card";
-import StepDeliver, { CARRIER_IDS, DATE_IDS, EMAIL_ID } from "./step-deliver";
+import StepDeliver, { CARRIER_IDS, DATE_IDS } from "./step-deliver";
 import StepDesign, { sameGraphic } from "./step-design";
 import StepInside from "./step-inside";
 import f from "./flow.module.css";
@@ -859,7 +858,6 @@ export default function DesignFlowV2(data: FlowData) {
   const shownAddressErrors: AddressErrors = Object.fromEntries(
     Object.entries(addressErrors).filter(([k]) => submitted || touched[k as AddressField]),
   );
-  const emailError = emailProblem(prefs.email);
 
   // A saved address that can't take this carrier (a PO box after switching
   // to FedEx) opens the form, prefilled, instead of failing at checkout.
@@ -943,7 +941,6 @@ export default function DesignFlowV2(data: FlowData) {
         out.push({ kind: "address", message: addressErrors[k]!, focus: () => focusAddressField(k) });
       }
     }
-    if (emailError) out.push({ kind: "email", message: emailError, focus: byId(EMAIL_ID) });
     return out;
   };
 
@@ -1023,7 +1020,9 @@ export default function DesignFlowV2(data: FlowData) {
     const res = await startCheckout({
       lines,
       discountCodes: discounts.map((d) => d.code),
-      email: prefs.email.trim() || null,
+      // No email field any more (2026-11-10): Shopify's payment page asks.
+      // A stale one in a saved draft isn't sent — nothing here could fix it.
+      email: null,
       valueCents: order.total,
     });
     if (res.ok && res.kind === "redirect") {
@@ -1514,10 +1513,6 @@ export default function DesignFlowV2(data: FlowData) {
           onChange: (a) => setPrefs((p) => ({ ...p, address: { ...p.address, ...a } })),
           onBlurField: (k) => setTouched((t) => ({ ...t, [k]: true })),
         }}
-        email={prefs.email}
-        emailError={emailError && (touched.email || submitted) ? emailError : null}
-        onEmail={(v) => setPrefs((p) => ({ ...p, email: v }))}
-        onEmailBlur={() => setTouched((t) => ({ ...t, email: true }))}
         summary={{
           lines: order.views,
           shipping: { label: order.shipLabel, cents: order.shipTotal, from: order.from },

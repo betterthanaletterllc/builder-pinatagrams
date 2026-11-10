@@ -15,7 +15,6 @@ import { CORPORATE_URL } from "@/lib/links";
 import { cutoffTonight, soonest } from "../lib/dates";
 import { OptionCard } from "../ui/controls";
 import { Callout, StepHeader } from "../ui/feedback";
-import { TextField } from "../ui/field";
 import { Alert, Mail, Plus, Users } from "../ui/icons";
 import u from "../ui/ui.module.css";
 import DiscountBox from "./discount-box";
@@ -28,7 +27,6 @@ export const CARRIER_IDS: Record<Carrier, string> = {
   fedex: "pg-carrier-fedex",
   usps: "pg-carrier-usps",
 };
-export const EMAIL_ID = "pg-email";
 
 type RecipientProps = Omit<ComponentProps<typeof Recipient>, "headingId">;
 
@@ -71,10 +69,6 @@ const StepDeliver = forwardRef<
     guaranteed?: boolean;
     onGuaranteed?: (on: boolean) => void;
     recipient: RecipientProps;
-    email: string;
-    emailError: string | null;
-    onEmail: (v: string) => void;
-    onEmailBlur: () => void;
     summary: ComponentProps<typeof OrderSummary>;
     discount: ComponentProps<typeof DiscountBox>;
     onAddAnother: (el: HTMLButtonElement) => void;
@@ -185,6 +179,7 @@ const StepDeliver = forwardRef<
                   onChange={p.onDate}
                   cfg={p.cfg}
                   carrier={p.carrier}
+                  showNearby={!p.guaranteed && !p.dateError}
                 />
                 {p.carrier === "usps" && p.date && !p.dateError && (
                   <ul className={s.legend}>
@@ -231,8 +226,7 @@ const StepDeliver = forwardRef<
                     <p id={`${guaranteeId}-help`} className={s.guaranteeHelp}>
                       With the guarantee, your piñata arrives on the date you picked. If it
                       doesn&apos;t, you get a 50% refund, and a full refund if it&apos;s more than
-                      one business day off. Without it, we send it to arrive on your date, but it
-                      may arrive within a business day or two of it.
+                      one business day off.
                     </p>
                   )}
                 </div>
@@ -263,23 +257,6 @@ const StepDeliver = forwardRef<
           Who&apos;s it for?
         </h2>
         <Recipient headingId={whoH} {...p.recipient} />
-      </section>
-
-      <section className={s.section}>
-        <TextField
-          id={EMAIL_ID}
-          label="Email for your receipt"
-          optional
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          spellCheck={false}
-          maxLength={120}
-          value={p.email}
-          error={p.emailError}
-          onChange={(e) => p.onEmail(e.target.value)}
-          onBlur={p.onEmailBlur}
-        />
       </section>
 
       <section className={s.section} aria-labelledby={orderH}>

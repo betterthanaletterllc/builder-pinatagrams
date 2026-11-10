@@ -172,21 +172,6 @@ export function AddressForm({
           onChange={(e) => onChange({ zip: e.target.value.replace(/[^\d-]/g, "") })}
         />
       </div>
-      <TextField
-        {...field("phone")}
-        label="Phone"
-        optional
-        type="tel"
-        inputMode="tel"
-        autoComplete="section-recipient shipping tel"
-        maxLength={24}
-        hint={
-          carrier === "usps"
-            ? "Only if the carrier needs to reach them."
-            : "Only if FedEx needs to reach them."
-        }
-        onChange={(e) => onChange({ phone: e.target.value })}
-      />
     </div>
   );
 }

@@ -330,6 +330,33 @@ export function uspsWindow(
   };
 }
 
+/** FedEx business day: Mon–Fri and not a carrier holiday. */
+function fedexBusinessDay(ymd: string, cfg: DeliveryConfig): boolean {
+  const dow = fromYmd(ymd).getDay();
+  return dow !== 0 && dow !== 6 && !cfg.fedexHolidays.includes(ymd);
+}
+
+/**
+ * The business days around an UNGUARANTEED FedEx date — `n` either side
+ * (weekends and carrier holidays skipped) — shaded faintly on the calendar:
+ * it's aimed at the picked day but may land a day or two off. The picked day
+ * itself is not included.
+ */
+export function fedexNearbyDays(ymd: string, cfg: DeliveryConfig, n = 2): string[] {
+  const out: string[] = [];
+  for (const dir of [-1, 1] as const) {
+    let d = ymd;
+    for (let left = n, guard = 0; left > 0 && guard < 30; guard++) {
+      d = addDays(d, dir);
+      if (fedexBusinessDay(d, cfg)) {
+        out.push(d);
+        left--;
+      }
+    }
+  }
+  return out;
+}
+
 /** Compact window label without weekdays, e.g. "Jul 27 – Jul 31". */
 export function formatWindow(w: { start: string; end: string }): string {
   const short = (ymd: string) =>
