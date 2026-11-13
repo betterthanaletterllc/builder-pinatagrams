@@ -377,6 +377,60 @@
   font: 600 14px/1.4 var(--pg-font);
 }
 
+/* --- "Put their face on it" (custom photo labels) ----------------------------- */
+
+.custom {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  margin: 32px 16px 0;
+  padding: 20px;
+  border-radius: var(--pg-r-stage);
+  background: var(--pg-navy);
+  color: #fff;
+}
+
+.customIcon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.customTitle {
+  margin: 0;
+  font-family: var(--pg-display);
+  font-weight: 400;
+  font-size: clamp(26px, 4vw, 36px);
+  line-height: 1.1;
+}
+
+.customText {
+  margin: 6px 0 0;
+  font: 400 15px/1.5 var(--pg-font);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+/* the light button on the navy card */
+.custom .customBtn {
+  background: #fff;
+  border-color: #fff;
+  color: var(--pg-navy);
+}
+
+@media (min-width: 1024px) {
+  .custom {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 20px;
+    max-width: 1152px;
+    margin: 48px auto 0;
+    padding: 24px 32px;
+  }
+}
+
 /* --- corporate --------------------------------------------------------------- */
 
 .corporate {

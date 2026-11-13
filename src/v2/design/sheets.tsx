@@ -180,6 +180,8 @@ export function LibrarySheet({
   onPick,
   title = "All designs",
   initialView,
+  autoFocusSearch = false,
+  onMakeOwn,
 }: {
   open: boolean;
   onClose: () => void;
@@ -191,6 +193,10 @@ export function LibrarySheet({
   title?: string;
   /** Open on an occasion's aisle (or everything) — see libraryViewFor. */
   initialView?: { aisle: string | null; sub: string | null };
+  /** Opened from step 1's search field: the cursor starts in search. */
+  autoFocusSearch?: boolean;
+  /** "Make your own" from a search with no (or few) matches. */
+  onMakeOwn?: (text: string | null) => void;
 }) {
   return (
     <Sheet open={open} onClose={onClose} title={title} wide full>
@@ -202,6 +208,8 @@ export function LibrarySheet({
           styleId={styleId}
           onPick={onPick}
           initialView={initialView}
+          autoFocusSearch={autoFocusSearch}
+          onMakeOwn={onMakeOwn}
         />
       </div>
     </Sheet>

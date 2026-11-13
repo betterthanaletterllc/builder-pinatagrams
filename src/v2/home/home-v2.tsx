@@ -20,7 +20,7 @@ import { cutoffTonight, orderDeadline, soonest } from "../lib/dates";
 import { b2cPrice, requestContext, trustFrom } from "../lib/server";
 import { clipText, PINATA_HEIGHT_IN, scopeText } from "../lib/text";
 import { ButtonLink, ChipLink } from "../ui/controls";
-import { Check, ChevronRight, Star, Tag, Truck, Users } from "../ui/icons";
+import { Check, ChevronRight, Photo, Star, Tag, Truck, Users } from "../ui/icons";
 import { CORPORATE_URL } from "@/lib/links";
 import ReviewSlider from "./review-slider";
 import OrderCountdown from "./order-countdown";
@@ -500,6 +500,29 @@ export default async function HomeV2({
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* Their own photo on the box is the one thing no library design can
+          do — and the home page never said it was possible. */}
+      {variant.allowCustom && (
+        <section className={s.custom} aria-labelledby="home-custom">
+          <span className={s.customIcon} aria-hidden="true">
+            <Photo size={30} />
+          </span>
+          <div>
+            <h2 id="home-custom" className={s.customTitle}>
+              Put their face on it
+            </h2>
+            <p className={s.customText}>
+              Add your own photos and words — we print them on the front of the box.
+              {/* only the one-price storefronts charge nothing extra for it */}
+              {allIn ? " Same price, same delivery." : ""}
+            </p>
+          </div>
+          <ButtonLink href="/design?make=photo" className={s.customBtn}>
+            Use your photo
+          </ButtonLink>
         </section>
       )}
 

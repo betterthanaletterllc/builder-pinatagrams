@@ -18,24 +18,29 @@ import {
   DEFAULT_ARTBOARD,
   designKey,
   isCurrentDesign,
+  MAX_PHOTO_ZOOM,
   newDesign,
+  photoFrame,
   templateSlotRects,
   TEMPLATES,
+  TEXT_FONTS,
   TEXT_SWATCHES,
   type DesignDocument,
   type PhotoSlot,
   type SlotContent,
   type SlotRect,
   type TemplateId,
+  type TextFont,
   type TextSlot,
 } from "@/lib/design-document";
 import {
-  designFontFamily,
   fitFontSize,
+  loadDesignFonts,
   TEXT_LINE_HEIGHT,
   textBox,
   textCapacity,
   textFits,
+  textFontFor,
 } from "@/lib/design-render";
 import { saveDesignArt } from "@/lib/design-upload";
 import {
@@ -82,6 +87,53 @@ const AUTOSAVE_MS = 800;
 // SIZE is never a reason to refuse an upload; ingestPhoto compresses
 // whatever it's given down to a bounded data URL.
 const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
+// A label fits up to four photos (the four-box layout).
+const MAX_START_PHOTOS = 4;
+// The photo picker: the usual web formats plus iPhone HEIC/HEIF (decoded
+// natively where the browser can, converted otherwise — decodeUpload).
+const PHOTO_ACCEPT = "image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif";
+
+// Pinch-to-zoom: Konva holds back stage events while a node is dragging
+// unless this is on — the second finger of a pinch would never arrive.
+Konva.hitOnDragEnabled = true;
+
+const isHeic = (f: File) =>
+  /^image\/hei[cf]/.test(f.type) || /\.hei[cf]$/i.test(f.name);
+
+function decodeImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const i = new window.Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error("undecodable"));
+    i.src = src;
+  });
+}
+
+/**
+ * Decode an upload. Safari reads iPhone HEIC natively; Chrome, Firefox and
+ * Android browsers can't, so an HEIC that won't decode is converted to JPEG
+ * in the browser first (heic2any — its own chunk, fetched only then).
+ * Returns the image and the type it should be treated as.
+ */
+async function decodeUpload(file: File): Promise<{ img: HTMLImageElement; type: string }> {
+  const url = URL.createObjectURL(file);
+  try {
+    return { img: await decodeImage(url), type: file.type };
+  } catch (err) {
+    if (!isHeic(file)) throw err;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  const { default: heic2any } = await import("heic2any");
+  const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+  const jpeg = Array.isArray(out) ? out[0] : out;
+  const jurl = URL.createObjectURL(jpeg);
+  try {
+    return { img: await decodeImage(jurl), type: "image/jpeg" };
+  } finally {
+    URL.revokeObjectURL(jurl);
+  }
+}
 
 function useImg(src: string | null): {
   img: HTMLImageElement | null;
@@ -186,14 +238,8 @@ function hasRealAlpha(img: HTMLImageElement): boolean {
 async function ingestPhoto(
   file: File,
 ): Promise<{ src: string; w: number; h: number }> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new window.Image();
-      i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error("undecodable"));
-      i.src = url;
-    });
+  const { img, type } = await decodeUpload(file);
+  {
     // Smallest size that still covers the full artboard at print res,
     // bounded by the absolute long edge (never upscale).
     const natW = img.naturalWidth;
@@ -213,7 +259,7 @@ async function ingestPhoto(
     };
 
     const alpha =
-      (file.type === "image/png" || file.type === "image/webp") &&
+      (type === "image/png" || type === "image/webp") &&
       hasRealAlpha(img);
 
     if (alpha) {
@@ -248,8 +294,6 @@ async function ingestPhoto(
       shrink(1280);
     }
     return { src: encodeCanvas(img, w, h, "image/jpeg", 0.55), w, h };
-  } finally {
-    URL.revokeObjectURL(url);
   }
 }
 
@@ -286,7 +330,7 @@ function PhotoSlotEl({
   gy,
   scale,
   onSelect,
-  onOffset,
+  onFrame,
 }: {
   slot: PhotoSlot;
   rect: SlotRect;
@@ -294,42 +338,46 @@ function PhotoSlotEl({
   gy: number;
   scale: number;
   onSelect: () => void;
-  onOffset: (offset: number) => void;
+  /** The shopper dragged the photo: where it now sits on each axis. */
+  onFrame: (fx: number, fy: number) => void;
 }) {
   const { img } = useImg(slot.src);
-  const fit = coverFit(rect, slot.natW, slot.natH, slot.offset);
-  // Drag stays on the overflow axis: local x ∈ [rect.x − overX, rect.x],
-  // y likewise. dragBoundFunc works in ABSOLUTE stage coords, so convert
+  // Same placement the print render uses (photoFrame): zoom, quarter
+  // turns and the framing on each axis.
+  const fr = photoFrame(rect, slot);
+  const movable = fr.overX > 1 || fr.overY > 1;
+  // The node is positioned by its CENTRE (offset = half its size, so it
+  // can rotate in place). Keep the centre where the photo still covers
+  // the box; dragBoundFunc works in ABSOLUTE stage coords, so convert
   // through the design group's transform (gx/gy + scale).
-  const aMinX = gx + (rect.x - fit.overX) * scale;
-  const aMaxX = gx + rect.x * scale;
-  const aMinY = gy + (rect.y - fit.overY) * scale;
-  const aMaxY = gy + rect.y * scale;
+  const minCx = rect.x + fr.bw / 2 - fr.overX;
+  const maxCx = rect.x + fr.bw / 2;
+  const minCy = rect.y + fr.bh / 2 - fr.overY;
+  const maxCy = rect.y + fr.bh / 2;
   return (
     <Group clip={{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}>
       <KonvaImage
         image={img ?? undefined}
-        x={fit.x}
-        y={fit.y}
-        width={fit.width}
-        height={fit.height}
-        draggable={fit.axis !== "none"}
+        x={fr.cx}
+        y={fr.cy}
+        width={fr.dw}
+        height={fr.dh}
+        offsetX={fr.dw / 2}
+        offsetY={fr.dh / 2}
+        rotation={fr.rot}
+        draggable={movable}
         onMouseDown={onSelect}
         onTap={onSelect}
         onDragStart={onSelect}
         dragBoundFunc={(pos) => ({
-          x: clamp(pos.x, aMinX, aMaxX),
-          y: clamp(pos.y, aMinY, aMaxY),
+          x: clamp(pos.x, gx + minCx * scale, gx + maxCx * scale),
+          y: clamp(pos.y, gy + minCy * scale, gy + maxCy * scale),
         })}
         onDragEnd={(e) => {
           const n = e.target;
-          const next =
-            fit.axis === "x"
-              ? (rect.x - n.x()) / fit.overX
-              : fit.axis === "y"
-                ? (rect.y - n.y()) / fit.overY
-                : slot.offset;
-          onOffset(clamp(next, 0, 1));
+          const fx = fr.overX > 1 ? clamp((maxCx - n.x()) / fr.overX, 0, 1) : fr.fx;
+          const fy = fr.overY > 1 ? clamp((maxCy - n.y()) / fr.overY, 0, 1) : fr.fy;
+          onFrame(fx, fy);
         }}
       />
     </Group>
@@ -339,28 +387,28 @@ function PhotoSlotEl({
 function TextSlotEl({
   slot,
   rect,
-  fontFamily,
   fontsReady,
   onSelect,
   onEdit,
 }: {
   slot: TextSlot;
   rect: SlotRect;
-  fontFamily: string;
-  fontsReady: boolean;
+  fontsReady: number;
   onSelect: () => void;
   onEdit: () => void;
 }) {
-  // Same box + fit the print render uses (lib/design-render) — the screen
-  // and the printed file can't disagree about where the words sit.
+  // Same box + fit + face the print render uses (lib/design-render) — the
+  // screen and the printed file can't disagree about where the words sit.
   const { x, y, w, h } = textBox(rect);
   const empty = slot.text.trim() === "";
   const display = empty ? "Your text" : slot.text;
-  // fontsReady in the deps re-fits once Poppins loads (its metrics differ
-  // from the fallback the first fit may have measured).
+  const font = textFontFor(slot.font);
+  // fontsReady in the deps re-fits once the faces load (their metrics
+  // differ from the fallback the first fit may have measured).
   const fontSize = useMemo(
-    () => fitFontSize(display, w, h, fontFamily),
-    [display, w, h, fontFamily, fontsReady],
+    () => fitFontSize(display, w, h, font.family, font.style),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [display, w, h, font.family, font.style, fontsReady],
   );
   return (
     <Group clip={{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}>
@@ -371,7 +419,8 @@ function TextSlotEl({
         height={h}
         text={display}
         fontSize={fontSize}
-        fontFamily={fontFamily}
+        fontFamily={font.family}
+        fontStyle={font.style}
         fill={slot.fill}
         opacity={empty ? 0.35 : 1}
         align="center"
@@ -420,6 +469,7 @@ export default function Editor({
   onDirtyChange,
   initialDesign,
   initialAssets,
+  startText,
 }: {
   bodyStyleId: string;
   boxImageUrl: string | null;
@@ -443,16 +493,34 @@ export default function Editor({
   // reuses them instead of re-exporting and re-uploading. Partial: designs
   // saved before the sha256 stamp have no hash and must NOT reuse.
   initialAssets?: Partial<DesignAssets> | null;
+  // A fresh label that starts with these words ("Put 'Emma' on your own
+  // label" from a search that found nothing): the words fill the left box
+  // of a two-box layout, the right one waits for a photo.
+  startText?: string | null;
 }) {
   // v1 freeform documents can't open here — they start fresh at the picker
   // (the flow keeps their old flattened art unless they save a new design).
   const editable =
     initialDesign && isCurrentDesign(initialDesign) ? initialDesign : null;
-  const [doc, setDoc] = useState<DesignDocument>(
-    () => editable ?? newDesign(bodyStyleId),
-  );
-  // Fresh designs start at the layout picker; edits skip straight in.
-  const [picked, setPicked] = useState(!!editable);
+  const seedText = !editable && startText?.trim() ? startText.trim() : null;
+  const [doc, setDoc] = useState<DesignDocument>(() => {
+    if (editable) return editable;
+    if (!seedText) return newDesign(bodyStyleId);
+    const d = newDesign(bodyStyleId, "halves");
+    return {
+      ...d,
+      slots: d.slots.map((s, i) =>
+        i === 0 ? { kind: "text", text: seedText, fill: TEXT_SWATCHES[0], font: "bold" } : s,
+      ),
+    };
+  });
+  // Fresh designs start at "Add your photos"; edits (and labels that start
+  // with words) skip straight in.
+  const [picked, setPicked] = useState(!!editable || !!seedText);
+  // The start screen can open the full layout picker instead.
+  const [showLayouts, setShowLayouts] = useState(false);
+  // "Adding your photos (2 of 3)…" on the start screen.
+  const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [editingText, setEditingText] = useState<number | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
@@ -462,7 +530,11 @@ export default function Editor({
   const savedDocJson = useRef(editable ? JSON.stringify(editable) : null);
   const designRef = useRef<Konva.Group>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // The start screen's picker takes several photos at once.
+  const startFileRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<number | null>(null);
+  // A two-finger pinch on the selected photo: where it started.
+  const pinch = useRef<{ dist: number; zoom: number; slot: number } | null>(null);
 
   // Inline stand-ins for the old native dialogs.
   const [pendingTemplate, setPendingTemplate] = useState<TemplateId | null>(
@@ -550,7 +622,9 @@ export default function Editor({
     let live = true;
     void loadEditorAutosave().then((a) => {
       if (!live || !a) return;
-      if (a.mode === "new" && !editable && a.doc.slots.some(Boolean)) {
+      // (a label that starts with their search words is a fresh start —
+      // an older unsaved design isn't offered over it)
+      if (a.mode === "new" && !editable && !seedText && a.doc.slots.some(Boolean)) {
         setResume(a);
       } else if (a.mode === "edit" && editable && a.baseKey === baseKey) {
         setResume(a);
@@ -631,32 +705,32 @@ export default function Editor({
     };
   }, [boxed, boxImg, logoZone, px.width, px.height, stageW]);
 
-  const fontFamily = useMemo(() => designFontFamily(), []);
-
-  // Text auto-fit measures against whatever font is loaded NOW; if Poppins
+  // Text auto-fit measures against whatever font is loaded NOW; if a face
   // isn't ready yet it measures the fallback and the size (baked into the
-  // exported print art) can clip. Flip this once fonts finish loading so the
-  // fit — and the export — recompute against the real metrics.
-  const [fontsReady, setFontsReady] = useState(false);
+  // exported print art) can clip. Bump this once the label faces (Poppins
+  // regular + bold, Arbotek — which the page never preloads) have loaded,
+  // so the fit — and the export — recompute against the real metrics.
+  const [fontsReady, setFontsReady] = useState(0);
   useEffect(() => {
     let live = true;
-    const done = () => live && setFontsReady(true);
-    if (typeof document !== "undefined" && document.fonts?.ready) {
-      document.fonts.ready.then(done);
-    } else {
-      done();
-    }
+    void loadDesignFonts().then(() => live && setFontsReady((n) => n + 1));
     return () => {
       live = false;
     };
   }, []);
 
   // Roughly how much text the box being edited holds at the smallest
-  // legible print size — drives the sheet's character counter.
+  // legible print size, in its own font — the sheet's character counter.
   const editingRect = editingText !== null ? rects[editingText] : undefined;
+  const editingContent = editingText !== null ? doc.slots[editingText] : null;
+  const editingFont = textFontFor(
+    editingContent?.kind === "text" ? editingContent.font : undefined,
+  );
   const textRoom = useMemo(
-    () => (editingRect ? textCapacity(editingRect, fontFamily) : 0),
-    [editingRect, fontFamily, fontsReady],
+    () =>
+      editingRect ? textCapacity(editingRect, editingFont.family, editingFont.style) : 0,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editingRect, editingFont.family, editingFont.style, fontsReady],
   );
   useEffect(() => setTextFull(false), [editingText]);
 
@@ -794,14 +868,97 @@ export default function Editor({
       setNotice(null);
       track("photo_added", { replaced });
     } catch {
-      setNotice("That image couldn't be read — try a JPG or PNG.");
+      setNotice("That image couldn't be read — try a JPG, PNG or iPhone photo.");
     } finally {
       setUploadingSlot(null);
     }
   };
 
+  /* --- start screen: photos first ------------------------------------------
+   * People arrive thinking "I want to use my photo", not "how should my
+   * label split?". So the start is "Add your photos": pick 1–4 and the
+   * layout follows from how many — with a box left for words where it
+   * fits. Layouts stay switchable from the toolbar afterwards. */
+  const startPhotos = () => {
+    setNotice(null);
+    startFileRef.current?.click();
+  };
+
+  const onStartPhotos = async (files: File[]) => {
+    const list = files.slice(0, MAX_START_PHOTOS);
+    if (!list.length) return;
+    // 1 photo + words · photo, words, photo · 3 photos + words · 4 photos
+    const plan: { template: TemplateId; boxes: number[] } =
+      list.length === 1
+        ? { template: "halves", boxes: [0] }
+        : list.length === 2
+          ? { template: "thirds", boxes: [0, 2] }
+          : { template: "quarters", boxes: [0, 1, 2, 3].slice(0, list.length) };
+    const rectsT = templateSlotRects(plan.template, DEFAULT_ARTBOARD);
+    const slots: SlotContent[] = rectsT.map(() => null);
+    let failed = 0;
+    setAdding({ done: 0, total: list.length });
+    // let "Adding your photos…" paint before the main-thread encodes
+    await new Promise((r) => setTimeout(r, 40));
+    for (let k = 0; k < list.length; k++) {
+      const file = list[k];
+      try {
+        if (file.size > MAX_UPLOAD_BYTES) throw new Error("huge");
+        const ph = await ingestPhoto(file);
+        const i = plan.boxes[k];
+        slots[i] = {
+          kind: "photo",
+          src: ph.src,
+          natW: ph.w,
+          natH: ph.h,
+          offset: initialPhotoOffset(rectsT[i], ph.w, ph.h),
+        };
+      } catch {
+        failed++;
+      }
+      setAdding({ done: k + 1, total: list.length });
+    }
+    setAdding(null);
+    if (!slots.some(Boolean)) {
+      setNotice(
+        list.length === 1
+          ? "That photo couldn't be read — try a JPG, PNG or iPhone photo."
+          : "Those photos couldn't be read — try JPG, PNG or iPhone photos.",
+      );
+      return;
+    }
+    setDoc({ ...newDesign(bodyStyleId, plan.template), slots });
+    setPicked(true);
+    setSelectedSlot(null);
+    setEditingText(null);
+    setMenuFor(null);
+    setResume(null);
+    const notes = [
+      files.length > MAX_START_PHOTOS
+        ? `A label fits ${MAX_START_PHOTOS} photos — we used your first ${MAX_START_PHOTOS}.`
+        : null,
+      failed ? `${failed} photo${failed === 1 ? "" : "s"} couldn't be read.` : null,
+    ].filter(Boolean);
+    setNotice(notes.length ? notes.join(" ") : null);
+    track("editor_photos_first", { count: list.length, failed });
+  };
+
+  /** "Just words": one box across the whole label, straight into typing. */
+  const startWords = () => {
+    setDoc({
+      ...newDesign(bodyStyleId, "whole"),
+      slots: [{ kind: "text", text: "", fill: TEXT_SWATCHES[0], font: "bold" }],
+    });
+    setPicked(true);
+    setMenuFor(null);
+    setSelectedSlot(0);
+    setEditingText(0);
+    setResume(null);
+    track("editor_words_first");
+  };
+
   const addTextTo = (i: number) => {
-    setSlot(i, { kind: "text", text: "", fill: TEXT_SWATCHES[0] });
+    setSlot(i, { kind: "text", text: "", fill: TEXT_SWATCHES[0], font: "bold" });
     setMenuFor(null);
     setSelectedSlot(i);
     setEditingText(i); // straight into typing
@@ -834,13 +991,19 @@ export default function Editor({
 
   const filledCount = doc.slots.filter(Boolean).length;
   const emptyCount = doc.slots.length - filledCount;
+  // Something worth printing: a photo, or words actually typed (an empty
+  // text box counts as "filled" above but would print blank).
+  const hasContentToUse = doc.slots.some(
+    (s) => s?.kind === "photo" || (s?.kind === "text" && s.text.trim() !== ""),
+  );
 
   // Text-sheet input: refuse a keystroke/paste that would push the words
   // under the smallest legible print size (the counter says why).
   const typeText = (i: number, next: string) => {
     const cur = doc.slots[i];
     const grew = cur?.kind === "text" && next.length > cur.text.length;
-    if (grew && !textFits(next, rects[i], fontFamily)) {
+    const font = textFontFor(cur?.kind === "text" ? cur.font : undefined);
+    if (grew && !textFits(next, rects[i], font.family, font.style)) {
       setTextFull(true);
       return;
     }
@@ -848,8 +1011,48 @@ export default function Editor({
     patchSlot(i, { text: next });
   };
 
+  /** A text box's font. Refused (with a note) if its words would then
+   *  print below the legible size — the display face runs wider. */
+  const setFont = (i: number, font: TextFont) => {
+    const cur = doc.slots[i];
+    if (cur?.kind !== "text" || (cur.font ?? "classic") === font) return;
+    const f = textFontFor(font);
+    if (cur.text.trim() && !textFits(cur.text, rects[i], f.family, f.style)) {
+      setNotice("Those words won't fit this box in that font — shorten them first.");
+      return;
+    }
+    setNotice(null);
+    patchSlot(i, { font });
+    track("editor_font_chosen", { font });
+  };
+
+  /* --- photo framing: zoom, quarter turns, drag (photoFrame) ---------------- */
+  /** Patch a photo's framing, switching it to free (two-axis) framing at
+   *  the spot it currently shows — so nothing jumps when it switches. */
+  const reframe = (i: number, p: Partial<PhotoSlot>) =>
+    setDoc((d) => ({
+      ...d,
+      slots: d.slots.map((s, j) => {
+        if (j !== i || s?.kind !== "photo") return s;
+        const fr = photoFrame(rects[i], s);
+        return { ...s, fx: fr.fx, fy: fr.fy, ...p } as PhotoSlot;
+      }),
+    }));
+
+  const zoomPhoto = (i: number, zoom: number) =>
+    reframe(i, { zoom: Math.round(clamp(zoom, 1, MAX_PHOTO_ZOOM) * 100) / 100 });
+
+  const rotatePhoto = (i: number) => {
+    const s = doc.slots[i];
+    if (s?.kind !== "photo") return;
+    const rot = (((s.rot ?? 0) + 90) % 360) as PhotoSlot["rot"];
+    // a quarter turn swaps the axes — start it centred
+    reframe(i, { rot, fx: 0.5, fy: 0.5 });
+    track("editor_photo_rotated");
+  };
+
   const useThisDesign = () => {
-    if (filledCount === 0) return;
+    if (!hasContentToUse) return;
     setSelectedSlot(null);
     setEditingText(null);
     setMenuFor(null);
@@ -976,27 +1179,79 @@ export default function Editor({
     </div>
   ) : null;
 
-  /* --- layout picker (fresh designs) ------------------------------------- */
+  /* --- start screen (fresh designs) --------------------------------------- */
+  const startInput = (
+    <input
+      ref={startFileRef}
+      type="file"
+      accept={PHOTO_ACCEPT}
+      multiple
+      style={{ display: "none" }}
+      onChange={(e) => {
+        const files = Array.from(e.target.files ?? []);
+        e.target.value = "";
+        if (files.length) void onStartPhotos(files);
+      }}
+    />
+  );
   if (!picked) {
     return (
       <div className="editor-v4">
         {resumeCard}
-        <p className="tmpl-heading">How should your label split?</p>
-        <div className="tmpl-grid">
-          {TEMPLATES.map((t) => (
-            <button
-              key={t.id}
-              className="tmpl-card"
-              onClick={() => pickTemplate(t.id)}
-            >
-              <TmplMini id={t.id} />
-              <span className="tmpl-label">{t.label}</span>
+        {startInput}
+        <div className="start-photos">
+          <p className="tmpl-heading">Start with your photos</p>
+          <button
+            className="btn primary block start-add"
+            onClick={startPhotos}
+            disabled={!!adding}
+          >
+            {adding ? (
+              <>
+                <span className="mini-spinner" aria-hidden /> Adding your photos ({adding.done} of{" "}
+                {adding.total})…
+              </>
+            ) : (
+              "📷 Add your photos"
+            )}
+          </button>
+          <p className="note start-note">
+            Pick 1 to {MAX_START_PHOTOS} — we&apos;ll lay them out, with room for your words.
+          </p>
+          {notice && (
+            <div className="notice warn editor-notice" role="alert">
+              <span>{notice}</span>
+            </div>
+          )}
+          <button className="btn block" onClick={startWords} disabled={!!adding}>
+            ✏️ Just words
+          </button>
+          {!showLayouts && (
+            <button className="link-btn start-layouts" onClick={() => setShowLayouts(true)}>
+              Or choose a layout yourself
             </button>
-          ))}
+          )}
         </div>
-        <p className="note">
-          Each box holds a photo or some text — you can switch layouts later.
-        </p>
+        {showLayouts && (
+          <>
+            <p className="tmpl-heading">How should your label split?</p>
+            <div className="tmpl-grid">
+              {TEMPLATES.map((t) => (
+                <button
+                  key={t.id}
+                  className="tmpl-card"
+                  onClick={() => pickTemplate(t.id)}
+                >
+                  <TmplMini id={t.id} />
+                  <span className="tmpl-label">{t.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="note">
+              Each box holds a photo or some text — you can switch layouts later.
+            </p>
+          </>
+        )}
       </div>
     );
   }
@@ -1015,31 +1270,48 @@ export default function Editor({
     height: r.h * geo.scale,
   });
 
-  const selectedFit =
+  const selectedFrame =
     selected?.kind === "photo" && selectedSlot !== null
-      ? coverFit(rects[selectedSlot], selected.natW, selected.natH, selected.offset)
+      ? photoFrame(rects[selectedSlot], selected)
       : null;
-  // A croppable photo is selected: it can be dragged, so the stage takes
-  // over touch gestures (touch-action: none) — ONLY then, so a swipe over
-  // the rest of the preview still scrolls the page.
-  const framing = !!selectedFit && selectedFit.axis !== "none";
+  // A photo is selected: it can be dragged (once it overflows its box) and
+  // pinched to zoom, so the stage takes over touch gestures
+  // (touch-action: none) — ONLY then, so a swipe over the rest of the
+  // preview still scrolls the page.
+  const framing = !!selectedFrame;
+  const canDrag = !!selectedFrame && (selectedFrame.overX > 1 || selectedFrame.overY > 1);
 
-  // Print sharpness: cover-fitting a photo into its slot upscales it by
-  // max(slot/natural); at the 300-DPI print that's an effective DPI of
-  // dpi / scale. Flag it — never block (the customer can always use their
-  // photo). Threshold 110, NOT 150: ingest's storage ladder floors big
-  // photos at a 1280px long edge, which puts a portrait phone photo in a
-  // full-width slot at ~120 effective DPI — fine at label size, and not
+  // Print sharpness: fitting a photo into its slot (and any zoom) upscales
+  // it by photoFrame's scale; at the 300-DPI print that's an effective DPI
+  // of dpi / scale. Flag it — never block (the customer can always use
+  // their photo). Threshold 110, NOT 150: ingest's storage ladder floors
+  // big photos at a 1280px long edge, which puts a portrait phone photo in
+  // a full-width slot at ~120 effective DPI — fine at label size, and not
   // the customer's fault. 110 still catches genuinely small sources
-  // (a 640×480 web grab ≈ 80 DPI).
+  // (a 640×480 web grab ≈ 80 DPI) and heavy zooms.
   const DPI_WARN = 110;
   const lowResSlots = rects.map((r, i) => {
     const c = doc.slots[i];
     if (!c || c.kind !== "photo") return false;
-    const scale = Math.max(r.w / Math.max(1, c.natW), r.h / Math.max(1, c.natH));
-    return doc.artboard.dpi / scale < DPI_WARN;
+    return doc.artboard.dpi / photoFrame(r, c).scale < DPI_WARN;
   });
   const anyLowRes = lowResSlots.some(Boolean);
+
+  // Two fingers on the selected photo: pinch to zoom it (the drag stops).
+  const onPinch = (touches: TouchList) => {
+    if (selectedSlot === null || selected?.kind !== "photo") return;
+    if (touches.length !== 2) {
+      pinch.current = null;
+      return;
+    }
+    const [a, b] = [touches[0], touches[1]];
+    const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    if (!pinch.current || pinch.current.slot !== selectedSlot) {
+      pinch.current = { dist, zoom: selected.zoom ?? 1, slot: selectedSlot };
+      return;
+    }
+    zoomPhoto(selectedSlot, (pinch.current.zoom * dist) / Math.max(1, pinch.current.dist));
+  };
 
   return (
     <div className="editor-v4">
@@ -1060,7 +1332,7 @@ export default function Editor({
         <input
           ref={fileRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp"
+          accept={PHOTO_ACCEPT}
           style={{ display: "none" }}
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -1132,6 +1404,16 @@ export default function Editor({
             onTouchStart={(e) => {
               if (e.target === e.target.getStage()) setSelectedSlot(null);
             }}
+            onTouchMove={(e) => {
+              if (!framing || e.evt.touches.length !== 2) return;
+              e.evt.preventDefault();
+              // a pinch, not a drag: let go of the photo and zoom it
+              if (e.target.isDragging()) e.target.stopDrag();
+              onPinch(e.evt.touches);
+            }}
+            onTouchEnd={(e) => {
+              if (e.evt.touches.length < 2) pinch.current = null;
+            }}
           >
             {boxed && (
               <Layer listening={false}>
@@ -1170,14 +1452,13 @@ export default function Editor({
                       gy={geo.gy}
                       scale={geo.scale}
                       onSelect={() => setSelectedSlot(i)}
-                      onOffset={(offset) => patchSlot(i, { offset })}
+                      onFrame={(fx, fy) => reframe(i, { fx, fy })}
                     />
                   ) : (
                     <TextSlotEl
                       key={i}
                       slot={c}
                       rect={r}
-                      fontFamily={fontFamily}
                       fontsReady={fontsReady}
                       onSelect={() => setSelectedSlot(i)}
                       onEdit={() => {
@@ -1311,15 +1592,19 @@ export default function Editor({
         </div>
 
         <p className="note">
-          {framing
-            ? `Drag your photo ${selectedFit!.axis === "x" ? "left or right" : "up or down"} — or use the slider below — to frame it.`
-            : selected?.kind === "text"
-              ? coarsePointer
-                ? "Tap the text to edit it — it sizes itself to fit."
-                : "Double-click the text to edit it — it sizes itself to fit."
-              : boxed
-                ? "This is the printed area on your box — tap a ＋ to fill a box."
-                : "Your label, edge to edge — tap a ＋ to fill a box."}
+          {canDrag
+            ? coarsePointer
+              ? "Drag your photo to frame it — pinch or use the zoom below to crop closer."
+              : "Drag your photo to frame it — use the zoom below to crop closer."
+            : framing
+              ? "Zoom in below to crop closer, or turn the photo."
+              : selected?.kind === "text"
+                ? coarsePointer
+                  ? "Tap the text to edit it — it sizes itself to fit."
+                  : "Double-click the text to edit it — it sizes itself to fit."
+                : boxed
+                  ? "This is the printed area on your box — tap a ＋ to fill a box."
+                  : "Your label, edge to edge — tap a ＋ to fill a box."}
         </p>
         {notice && (
           <div className="notice warn editor-notice" role="alert">
@@ -1332,8 +1617,8 @@ export default function Editor({
         {anyLowRes && (
           <p className="note dpi-warn">
             ⚠ A photo you added is lower-resolution than ideal for this size and
-            may look a little soft in print. You can still use it — or tap ↺ to
-            swap in a sharper one.
+            may look a little soft in print. You can still use it — zoom out, or
+            tap ↺ to swap in a sharper one.
           </p>
         )}
       </div>
@@ -1348,6 +1633,23 @@ export default function Editor({
               >
                 Edit text
               </button>
+              <div className="font-pick" role="group" aria-label="Font">
+                {TEXT_FONTS.map((f) => {
+                  const on = (selected.font ?? "classic") === f.id;
+                  const face = textFontFor(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      className={"font-btn" + (on ? " on" : "")}
+                      aria-pressed={on}
+                      onClick={() => setFont(selectedSlot, f.id)}
+                      style={{ fontFamily: face.family, fontWeight: face.style === "bold" ? 700 : 400 }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
               {TEXT_SWATCHES.map((c) => (
                 <button
                   key={c}
@@ -1363,39 +1665,70 @@ export default function Editor({
               ))}
             </>
           )}
-          {selected.kind === "photo" && (
-            <button
-              className="btn mini"
-              onClick={() => requestPhoto(selectedSlot)}
-            >
-              ↺ Replace photo
-            </button>
-          )}
-          {framing && selected.kind === "photo" && (
-            // The single-pointer alternative to dragging (WCAG 2.5.7):
-            // the same 0..1 offset the drag writes, as a plain slider.
-            <label className="frame-slider">
-              <span aria-hidden>
-                {selectedFit!.axis === "x" ? "◀ Frame ▶" : "▲ Frame ▼"}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={Math.round(selected.offset * 100)}
-                aria-label={
-                  selectedFit!.axis === "x"
-                    ? "Frame the photo, left to right"
-                    : "Frame the photo, top to bottom"
-                }
-                onChange={(e) =>
-                  patchSlot(selectedSlot, {
-                    offset: clamp(Number(e.target.value) / 100, 0, 1),
-                  })
-                }
-              />
-            </label>
+          {selected.kind === "photo" && selectedFrame && (
+            <>
+              <button
+                className="btn mini"
+                onClick={() => requestPhoto(selectedSlot)}
+              >
+                ↺ Replace
+              </button>
+              <button
+                className="btn mini"
+                onClick={() => rotatePhoto(selectedSlot)}
+                aria-label="Turn the photo a quarter turn"
+              >
+                ⟳ Turn
+              </button>
+              {/* Zoom = crop: scale past "just covers the box", then drag
+                  (or the sliders) to choose the part that shows. */}
+              <label className="frame-slider">
+                <span aria-hidden>Zoom</span>
+                <input
+                  type="range"
+                  min={100}
+                  max={MAX_PHOTO_ZOOM * 100}
+                  step={5}
+                  value={Math.round((selected.zoom ?? 1) * 100)}
+                  aria-label="Zoom the photo"
+                  onChange={(e) => zoomPhoto(selectedSlot, Number(e.target.value) / 100)}
+                />
+              </label>
+              {/* The single-pointer alternative to dragging (WCAG 2.5.7):
+                  the same framing the drag writes, as plain sliders. */}
+              {selectedFrame.overX > 1 && (
+                <label className="frame-slider">
+                  <span aria-hidden>◀ ▶</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(selectedFrame.fx * 100)}
+                    aria-label="Frame the photo, left to right"
+                    onChange={(e) =>
+                      reframe(selectedSlot, { fx: clamp(Number(e.target.value) / 100, 0, 1) })
+                    }
+                  />
+                </label>
+              )}
+              {selectedFrame.overY > 1 && (
+                <label className="frame-slider">
+                  <span aria-hidden>▲ ▼</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(selectedFrame.fy * 100)}
+                    aria-label="Frame the photo, top to bottom"
+                    onChange={(e) =>
+                      reframe(selectedSlot, { fy: clamp(Number(e.target.value) / 100, 0, 1) })
+                    }
+                  />
+                </label>
+              )}
+            </>
           )}
           <button
             className="btn danger"
@@ -1430,17 +1763,25 @@ export default function Editor({
           </div>
         )}
         {onSave && (
-          <button
-            className="btn primary block"
-            disabled={filledCount === 0}
-            title={filledCount === 0 ? "Fill a box first" : undefined}
-            onClick={useThisDesign}
-          >
-            Use this design →
-          </button>
+          <>
+            {/* Greyed out — and saying why — until the label has something
+                on it (a photo, or words actually typed). */}
+            <button
+              className="btn primary block"
+              disabled={!hasContentToUse}
+              aria-describedby={!hasContentToUse ? "editor-cta-why" : undefined}
+              onClick={useThisDesign}
+            >
+              Use this design →
+            </button>
+            {!hasContentToUse && (
+              <p id="editor-cta-why" className="note editor-cta-why">
+                Add a photo or some words to use your design.
+              </p>
+            )}
+          </>
         )}
       </div>
-
       {undo && (
         <div className="editor-toast" role="status">
           <span>Removed</span>

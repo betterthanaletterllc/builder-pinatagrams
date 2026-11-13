@@ -1,6 +1,7 @@
 import "server-only";
 import collectionsFile from "../../../public/collections.json";
 import graphicsFile from "../../../public/graphics.json";
+import tagsFile from "../../../public/library-index.json";
 import popularFile from "../../../public/popular.json";
 import { CLASSIC_GRAPHIC, type GraphicChoice } from "@/lib/flow";
 import type { HubBodyStyle, HubGraphicEntry } from "@/lib/hub";
@@ -9,6 +10,7 @@ import type { VariantProfile } from "@/lib/variant";
 import { BEST_SELLER_BODIES, designPrefix } from "./defaults";
 import {
   activeOccasions,
+  isSchoolDesign,
   libraryLabelsFor,
   OCCASION_BODY_HINTS,
   occasionDef,
@@ -46,6 +48,12 @@ const BIRTHDAY_EXTRA = new Set(
 );
 
 const RANK = new Map(POPULAR.map((d, i) => [d, i]));
+// Recipient tags per design (grad / teacher put a design in School & grad).
+const RECIPIENTS = new Map(
+  Object.entries(
+    (tagsFile as unknown as { tags?: Record<string, { r?: string[] }> }).tags ?? {},
+  ).map(([d, t]) => [d, t.r ?? []]),
+);
 // Most-sold first; unranked designs keep manifest order (sort is stable).
 const byPopularity = (a: ManifestGraphic, b: ManifestGraphic) =>
   (RANK.get(a.design) ?? 1e6) - (RANK.get(b.design) ?? 1e6);
@@ -119,7 +127,8 @@ export function resolveDesign(
   return g ? toChoice(g) : null;
 }
 
-const STRIP_DESIGNS = 11; // + the Classic tile = 12
+// Step 1 shows up to 24 tiles: 23 designs + the Classic or "Make your own".
+const STRIP_DESIGNS = 23;
 
 function designsForOccasion(
   id: OccasionId,
@@ -127,6 +136,11 @@ function designsForOccasion(
   now: Date,
 ): ManifestGraphic[] {
   if (id === "birthday") return lib.filter((g) => isBirthday(g.design)).sort(byPopularity);
+  if (id === "school") {
+    return lib
+      .filter((g) => isSchoolDesign(g.design, RECIPIENTS.get(g.design)))
+      .sort(byPopularity);
+  }
   const labels = libraryLabelsFor(id, now);
   if (id !== "holidays") {
     return lib.filter((g) => labels.includes(occasionOf(g.design))).sort(byPopularity);
@@ -178,6 +192,12 @@ export function occasionForDesign(
 ): OccasionId | null {
   if (g.type !== "shopify" || g.design === CLASSIC_GRAPHIC.design) return null;
   if (isBirthday(g.design) && strips.some((s) => s.id === "birthday")) return "birthday";
+  if (
+    isSchoolDesign(g.design, RECIPIENTS.get(g.design)) &&
+    strips.some((s) => s.id === "school")
+  ) {
+    return "school";
+  }
   const label = occasionOf(g.design);
   const hit = strips.find((s) => libraryLabelsFor(s.id, now).includes(label));
   return hit?.id ?? null;

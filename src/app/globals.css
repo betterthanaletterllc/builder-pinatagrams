@@ -583,6 +583,86 @@ h1 {
   width: 100%;
 }
 
+.editor-cta .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.editor-cta-why {
+  margin: -2px 0 0;
+}
+
+/* Start screen: photos first. */
+.start-photos {
+  display: grid;
+  gap: 10px;
+  max-width: 460px;
+  margin-bottom: 18px;
+}
+
+.start-photos .tmpl-heading {
+  margin-bottom: 2px;
+}
+
+.start-photos .btn.block {
+  margin-bottom: 0;
+  padding: 14px 16px;
+  font-size: 16px;
+}
+
+.start-photos .btn:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.start-note {
+  margin: -4px 0 4px;
+  font-size: 13px;
+}
+
+.start-layouts {
+  justify-self: start;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+/* Text box fonts — each button set in its own face. */
+.font-pick {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.font-btn {
+  border: none;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 14px;
+  padding: 7px 12px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.font-btn + .font-btn {
+  border-left: 1px solid var(--line);
+}
+
+.font-btn.on {
+  background: var(--pg-navy, #180d38);
+  color: #fff;
+}
+
+.font-btn:focus-visible {
+  outline-offset: -4px;
+}
+
+@media (pointer: coarse) {
+  .font-btn {
+    min-height: 40px;
+  }
+}
+
 .edit-sheet {
   position: fixed;
   bottom: 0;
@@ -666,23 +746,26 @@ h1 {
   border-radius: 3px;
 }
 
+/* All 8 layouts always in view: one row of 8 where there's room, two rows
+   of 4 on a phone (a sliding row hid two of them behind a scrollbar). */
 .tmpl-switch {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(8, 52px);
   gap: 6px;
-  /* 8 template thumbs ≈ 460px — one row that SLIDES on narrow screens
-     (same idiom as the chip rows) instead of running off the right */
-  overflow-x: auto;
   min-width: 0;
   max-width: 100%;
-  padding-bottom: 4px; /* room for the scrollbar */
+}
+
+@media (max-width: 559px) {
+  .tmpl-switch {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
 }
 
 .tmpl-switch-btn {
-  flex: 0 0 auto; /* keep thumbs full-size; the row scrolls instead */
-}
-
-.tmpl-switch-btn {
-  width: 52px;
+  width: 100%;
+  min-width: 0;
   padding: 5px;
   border: 2px solid var(--line);
   border-radius: 8px;
@@ -2062,6 +2145,106 @@ body:has(.bottom-stack) .site-footer {
 @media (hover: hover) {
   .library-card.see-all:hover {
     background: #e3e8fc;
+  }
+}
+
+/* press-and-hold opens the quick look: no iOS image callout, no text
+   selection while a finger rests on a card */
+.library-card {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Loading: a soft shimmer in the art's exact box until the image lands
+   (search results used to sit as a blank grid for seconds). */
+@keyframes library-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.library-card img:not([data-loaded]),
+.library-skeleton {
+  background: linear-gradient(90deg, #f1eee8 0%, #faf8f4 50%, #f1eee8 100%);
+  background-size: 300% 100%;
+  animation: library-shimmer 1.4s ease-in-out infinite;
+  border-radius: 10px;
+}
+
+.library-skeleton {
+  display: block;
+  aspect-ratio: 2.05 / 1;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-card img:not([data-loaded]),
+  .library-skeleton {
+    animation: none;
+  }
+}
+
+/* "Put 'Emma' on your own label" — the card that closes a short result
+   list, sitting where the next design would. */
+.library-card.make-own-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  aspect-ratio: 2.05 / 1;
+  padding: 6px 10px;
+  background: var(--pg-navy, #180d38);
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.make-own-plus {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.library-nomatch {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.library-nomatch p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.library-nomatch .btn {
+  font-size: 15px;
+  padding: 11px 16px;
+  white-space: normal;
+  text-align: left;
+}
+
+.library-nomatch .btn.primary {
+  background: var(--pg-navy, #180d38);
+  border-color: var(--pg-navy, #180d38);
+}
+
+/* the press-and-hold tip only means something under a finger */
+.library-tip {
+  display: none;
+  margin: -6px 0 10px;
+}
+
+@media (pointer: coarse) {
+  .library-tip {
+    display: block;
   }
 }
 

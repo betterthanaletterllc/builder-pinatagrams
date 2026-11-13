@@ -215,6 +215,25 @@
   padding-bottom: 8px;
 }
 
+/* Browsing the designs (scrolled into the grid): the pinned Stage becomes a
+   mini preview — just the box, with the style arrows — so the grid gets
+   the screen. The flow scrolls by the height it lost, so nothing jumps. */
+@media (max-width: 1023px) {
+  .stagePin[data-compact] .stage[data-step="design"] {
+    height: 136px;
+  }
+
+  .stagePin[data-compact] .stageBar,
+  .stagePin[data-compact] .sideStat {
+    display: none;
+  }
+
+  .stagePin[data-compact] .styleArrow {
+    width: 36px;
+    height: 36px;
+  }
+}
+
 /* A phone on its side has no room to pin the Stage over the designs. */
 @media (max-width: 1023px) and (max-height: 500px) {
   .stagePin[data-step="design"] {
@@ -749,6 +768,20 @@ button.barPrice {
   flex: none;
 }
 
+/* What the step's button is waiting for (Card: a message). */
+.barHint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font: 500 14px/1.4 var(--pg-font);
+  color: var(--pg-text-2);
+}
+
+.barHint svg {
+  flex: none;
+}
+
 /* --- editor view ------------------------------------------------------------------ */
 
 .editorView {
@@ -757,6 +790,26 @@ button.barPrice {
   max-width: 820px;
   margin: 0 auto;
   padding: 12px 16px 40px;
+}
+
+/* The shared (v1-styled) editor speaks the journey's colours: its main
+   buttons are navy like Next, not periwinkle. */
+.editorView :global(.btn.primary),
+.editorView :global(.btn.primary:hover) {
+  background: var(--pg-navy);
+  border-color: var(--pg-navy);
+  color: #fff;
+}
+
+@media (hover: hover) {
+  .editorView :global(.btn.primary:not(:disabled):hover) {
+    background: var(--pg-navy-hover);
+    border-color: var(--pg-navy-hover);
+  }
+}
+
+.editorView :global(.seg-btn.on) {
+  background: var(--pg-navy);
 }
 
 .editorHead {

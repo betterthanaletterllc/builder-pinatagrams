@@ -138,15 +138,37 @@ export type PhotoSlot = {
   natW: number;
   natH: number;
   // 0..1 position along the OVERFLOW axis (0 = start, 0.5 = centered).
-  // A cover-filled photo overflows its box on exactly one axis; sliding
-  // along it is the only framing control — that's the point.
+  // At zoom 1 a cover-filled photo overflows its box on exactly one axis;
+  // sliding along it is the framing control. (Read only while fx/fy are
+  // absent — see photoFrame.)
   offset: number;
+  // Optional, added 2026-11 (absent = the original behaviour, so every
+  // saved design renders exactly as before):
+  /** ≥ 1: how far past "just covers the box" the photo is scaled (crop). */
+  zoom?: number;
+  /** Quarter turns, clockwise. */
+  rot?: 0 | 90 | 180 | 270;
+  /** 0..1 framing on each axis once zoomed/rotated/dragged freely. */
+  fx?: number;
+  fy?: number;
 };
+
+/** The text styles on offer — brand fonts only (design-system
+ *  colors_and_type.css): Poppins regular, Poppins bold, Arbotek display. */
+export type TextFont = "classic" | "bold" | "party";
+
+export const TEXT_FONTS: { id: TextFont; label: string }[] = [
+  { id: "classic", label: "Classic" },
+  { id: "bold", label: "Bold" },
+  { id: "party", label: "Party" },
+];
 
 export type TextSlot = {
   kind: "text";
   text: string;
   fill: string;
+  /** Absent = "classic" (every design saved before fonts existed). */
+  font?: TextFont;
 };
 
 export type SlotContent = PhotoSlot | TextSlot | null;
@@ -214,6 +236,85 @@ export function coverFit(
     overX,
     overY,
     axis,
+  };
+}
+
+/** Photo zoom never goes past this (a 4× crop of a phone photo is already
+ *  soft at label size — the low-res warning says so). */
+export const MAX_PHOTO_ZOOM = 4;
+
+/** Whether a photo has left the original one-axis framing. */
+export function isFreeFrame(p: PhotoSlot): boolean {
+  return (p.zoom ?? 1) > 1.001 || (p.rot ?? 0) !== 0 || p.fx !== undefined || p.fy !== undefined;
+}
+
+/**
+ * Where a photo sits in its box — ONE function for the editor and the print
+ * render. Scale = cover the box (after any quarter turn) × zoom; the scaled
+ * photo's bounding box then overflows by overX/overY, and fx/fy (0..1) pick
+ * which part shows. Photos that were never zoomed, turned or freely dragged
+ * use the original framing: `offset` along the one overflowing axis —
+ * identical to coverFit, so saved designs print as they always did.
+ *
+ * Draw it as a Konva image centred on (cx, cy): width dw, height dh,
+ * offsetX dw/2, offsetY dh/2, rotation rot.
+ */
+export function photoFrame(
+  rect: SlotRect,
+  p: PhotoSlot,
+): {
+  cx: number;
+  cy: number;
+  dw: number;
+  dh: number;
+  rot: number;
+  bw: number;
+  bh: number;
+  overX: number;
+  overY: number;
+  fx: number;
+  fy: number;
+  /** drawn px per source px (print sharpness = dpi / scale) */
+  scale: number;
+} {
+  const rot = p.rot ?? 0;
+  const zoom = Math.min(MAX_PHOTO_ZOOM, Math.max(1, p.zoom ?? 1));
+  const natW = Math.max(1, p.natW);
+  const natH = Math.max(1, p.natH);
+  const turned = rot === 90 || rot === 270;
+  const w0 = turned ? natH : natW;
+  const h0 = turned ? natW : natH;
+  const scale = Math.max(rect.w / w0, rect.h / h0) * zoom;
+  const bw = w0 * scale;
+  const bh = h0 * scale;
+  const overX = Math.max(0, bw - rect.w);
+  const overY = Math.max(0, bh - rect.h);
+  let fx: number;
+  let fy: number;
+  if (isFreeFrame(p)) {
+    fx = p.fx ?? 0.5;
+    fy = p.fy ?? 0.5;
+  } else {
+    // coverFit's rule exactly: the offset applies on both axes (only one
+    // overflows, so it slides along that one)
+    fx = p.offset;
+    fy = p.offset;
+  }
+  fx = Math.min(1, Math.max(0, fx));
+  fy = Math.min(1, Math.max(0, fy));
+  return {
+    cx: rect.x - overX * fx + bw / 2,
+    cy: rect.y - overY * fy + bh / 2,
+    dw: natW * scale,
+    dh: natH * scale,
+    rot,
+    bw,
+    bh,
+    overX,
+    overY,
+    fx,
+    fy,
+    scale,
   };
 }
 

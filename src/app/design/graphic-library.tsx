@@ -28,6 +28,9 @@ import {
   type PopularRanking,
   type TagIndex,
 } from "@/lib/library-data";
+import { isSchoolDesign, occasionDef, type OccasionId } from "@/v2/lib/occasions";
+import { useLongPress } from "@/v2/ui/long-press";
+import QuickLook from "@/v2/ui/quick-look";
 
 /**
  * Gift-finding library. Default view = shelves (next holiday, Popular right
@@ -53,12 +56,54 @@ type CollectionsFile = { birthday?: string[] };
 
 type Aisle =
   | "birthdays"
-  | "occasions"
+  | "thank-you"
+  | "congrats"
+  | "love"
+  | "get-well"
   | "holidays"
+  | "school"
+  | "just-because"
+  | "more"
   | "family"
   | "friends"
   | "pets"
   | "vibe";
+
+// The occasion aisles ARE builder2's step 1 chips — same names, same order
+// (v2/lib/occasions OCCASION_DEFS) — so a shopper who learned the chips
+// finds the same words here. Each opens straight onto its full grid.
+type OccasionAisle = Exclude<Aisle, "birthdays" | "holidays" | "more" | "family" | "friends" | "pets" | "vibe">;
+const OCCASION_AISLES: OccasionAisle[] = [
+  "thank-you",
+  "congrats",
+  "love",
+  "get-well",
+  "school",
+  "just-because",
+];
+const isOccasionAisle = (a: Aisle | null): a is OccasionAisle =>
+  OCCASION_AISLES.includes(a as OccasionAisle);
+// Aisles that open on a grid (sub-chips narrow it); the rest open on a
+// shelf per sub-category.
+const GRID_AISLES = new Set<Aisle>(["birthdays", ...OCCASION_AISLES]);
+
+// Library occasion labels an occasion aisle covers (School & grad also
+// takes grad- and teacher-tagged designs — isSchoolDesign).
+const aisleLabels = (a: OccasionAisle): string[] => occasionDef(a as OccasionId).library;
+// Everything the chips don't cover lands in "More occasions".
+const CHIP_LABELS = new Set(["Birthday", ...OCCASION_AISLES.flatMap(aisleLabels)]);
+const isMoreLabel = (o: string) => !CHIP_LABELS.has(o) && !HOLIDAY_LABELS.has(o);
+
+// School & grad sub-filters (recipient tags).
+const SCHOOL_SUBS: [string, string, (r: string[], o: string) => boolean][] = [
+  ["grad", "Grads", (r) => r.includes("grad")],
+  ["teacher", "Teachers", (r) => r.includes("teacher")],
+  [
+    "back-to-school",
+    "Back to school",
+    (r, o) => o === "School" && !r.includes("grad") && !r.includes("teacher"),
+  ],
+];
 
 // "All …" sub-chip sentinel (the union of the aisle's sub-filters).
 const ALL = "__all__";
@@ -71,6 +116,8 @@ const PREVIEW = 11;
 // below how many exact results the close matches are offered as well.
 const CLOSE_MAX = 12;
 const FEW_RESULTS = 4;
+// Under this many results, related shelves + a "make your own" card follow.
+const RELATED_BELOW = 8;
 
 // library_search fires once the shopper pauses typing, not per keystroke.
 const SEARCH_EVENT_DELAY_MS = 800;
@@ -81,14 +128,32 @@ const NO_HUB_GRAPHICS: HubGraphicEntry[] = [];
 const NO_HUB_CATEGORIES: HubGraphicCategory[] = [];
 
 const AISLES: { id: Aisle; label: string; needsTags?: boolean }[] = [
-  { id: "birthdays", label: "🎂 Birthdays" },
-  { id: "occasions", label: "🎉 Occasions" },
-  { id: "holidays", label: "🎄 Holidays" },
-  { id: "family", label: "👪 Family", needsTags: true },
-  { id: "friends", label: "🧑‍🤝‍🧑 Friends & work", needsTags: true },
-  { id: "pets", label: "🐾 Pets", needsTags: true },
-  { id: "vibe", label: "✨ Vibe", needsTags: true },
+  { id: "birthdays", label: occasionDef("birthday").label },
+  { id: "thank-you", label: occasionDef("thank-you").label },
+  { id: "congrats", label: occasionDef("congrats").label },
+  { id: "love", label: occasionDef("love").label },
+  { id: "get-well", label: occasionDef("get-well").label },
+  { id: "holidays", label: occasionDef("holidays").label },
+  { id: "school", label: occasionDef("school").label },
+  { id: "just-because", label: occasionDef("just-because").label },
+  { id: "more", label: "More occasions" },
+  { id: "family", label: "Family", needsTags: true },
+  { id: "friends", label: "Friends & work", needsTags: true },
+  { id: "pets", label: "Pets", needsTags: true },
+  { id: "vibe", label: "Vibe", needsTags: true },
 ];
+
+/** The aisle a library occasion label lives in (shelf "See all", related
+ *  shelves under a short search). */
+function aisleForLabel(label: string): { a: Aisle; s: string | null } {
+  if (label === "Birthday") return { a: "birthdays", s: null };
+  if (HOLIDAY_LABELS.has(label)) return { a: "holidays", s: label };
+  const occ = OCCASION_AISLES.find((a) => aisleLabels(a).includes(label));
+  if (occ) return { a: occ, s: null };
+  return { a: "more", s: label };
+}
+
+const aisleLabel = (a: Aisle) => AISLES.find((x) => x.id === a)?.label ?? "";
 
 // CDN-resized 360px thumbs make shelf scrolling feel instant.
 const THUMB_W = 360;
@@ -97,26 +162,35 @@ const THUMB_W = 360;
 const THUMB_H = 176;
 const thumbUrl = (u: string): string => cdnThumb(u, THUMB_W) ?? u;
 
+// The first this-many cards of a grid load at once (search results land
+// above the fold; lazy-loading them left a blank grid for seconds).
+const EAGER = 6;
+
 function Card({
   g,
   onPick,
+  onPeek,
   eager = false,
 }: {
   g: LibraryGraphic;
   onPick: (g: LibraryGraphic) => void;
-  // Only the first shelf loads eagerly — the rest wait until scrolled near
+  /** Press-and-hold: the art up close. */
+  onPeek?: (g: LibraryGraphic) => void;
+  // Only the first cards load eagerly — the rest wait until scrolled near
   // (the default view used to request ~88 thumbnails at once).
   eager?: boolean;
 }) {
   // Art only — no product name. The graphic sells itself; the title stays
   // available to screen readers and as a hover tooltip.
   const src = g.art ?? g.thumb;
+  const hold = useLongPress<HTMLButtonElement>(() => onPeek?.(g));
   return (
     <button
       className="library-card"
       onClick={() => onPick(g)}
       title={g.title}
       aria-label={g.title}
+      {...(onPeek ? hold : {})}
     >
       {src ? (
         /* eslint-disable-next-line @next/next/no-img-element */
@@ -127,10 +201,31 @@ function Card({
           height={THUMB_H}
           loading={eager ? "eager" : "lazy"}
           decoding="async"
+          draggable={false}
+          // the shimmer placeholder (globals .library-card img) stops here
+          onLoad={(e) => (e.currentTarget.dataset.loaded = "")}
         />
       ) : null}
     </button>
   );
+}
+
+/** The last card of a short result list: their own label instead. */
+function MakeOwnCard({ text, onMakeOwn }: { text: string; onMakeOwn: (t: string | null) => void }) {
+  return (
+    <button className="library-card make-own-card" onClick={() => onMakeOwn(text || null)}>
+      <span className="make-own-plus" aria-hidden>
+        ＋
+      </span>
+      <span>{text ? `Put “${clipQuery(text)}” on your own label` : "Make your own label"}</span>
+    </button>
+  );
+}
+
+/** A query short enough to quote back on a button. */
+function clipQuery(q: string): string {
+  const t = q.trim().replace(/\s+/g, " ");
+  return t.length > 28 ? `${t.slice(0, 27)}…` : t;
 }
 
 export default function GraphicLibrary({
@@ -140,8 +235,15 @@ export default function GraphicLibrary({
   hubCategories = NO_HUB_CATEGORIES,
   styleId,
   initialView,
+  autoFocusSearch = false,
+  onMakeOwn,
 }: {
   onPick: (g: GraphicChoice) => void;
+  /** Opened from a search field: the cursor goes straight into search. */
+  autoFocusSearch?: boolean;
+  /** "Make your own" from inside the library (no match, a short list) —
+   *  with the search words to start the label with, when there are any. */
+  onMakeOwn?: (text: string | null) => void;
   // Open on this aisle / sub-filter (no search) instead of where the shopper
   // last left off — builder2's "See all Birthday designs" / "See all".
   initialView?: { aisle: string | null; sub: string | null };
@@ -319,19 +421,17 @@ export default function GraphicLibrary({
   };
 
   const pickSub = (key: string) => {
-    // Birthdays opens on its full grid, so "All birthdays" = no sub-filter.
+    // Grid aisles open on their full grid, so "All …" = no sub-filter.
     const next =
-      (aisle === "birthdays" && key === ALL) || sub === key ? null : key;
+      (aisle && GRID_AISLES.has(aisle) && key === ALL) || sub === key ? null : key;
     setSub(next);
     if (next && aisle) track("library_aisle", { aisle, sub: next });
   };
 
-  // Shelf "See all →" jumps into the right aisle for its occasion.
-  const jumpToOccasion = (label: string) => {
-    let to: { a: Aisle; s: string | null };
-    if (label === "Birthday") to = { a: "birthdays", s: null };
-    else if (HOLIDAY_LABELS.has(label)) to = { a: "holidays", s: label };
-    else to = { a: "occasions", s: label };
+  // Shelf "See all →" (and the related shelves under a short search) jump
+  // into an aisle, optionally narrowed to one sub-filter.
+  const jumpTo = (to: { a: Aisle; s: string | null }) => {
+    setQuery("");
     setAisle(to.a);
     setSub(to.s);
     track("library_aisle", {
@@ -340,6 +440,10 @@ export default function GraphicLibrary({
       via: "see_all",
     });
   };
+  const jumpToOccasion = (label: string) => jumpTo(aisleForLabel(label));
+
+  // Press-and-hold → the art up close.
+  const [peek, setPeek] = useState<LibraryGraphic | null>(null);
 
   const recipientsOf = (g: LibraryGraphic) => tags[g.design]?.r ?? [];
   const vibesOf = (g: LibraryGraphic) => tags[g.design]?.v ?? [];
@@ -356,8 +460,19 @@ export default function GraphicLibrary({
           const f = BIRTHDAY_SUBS.find((b) => b.key === key);
           return f ? f.test(g, tags[g.design]) : true;
         }
-        case "occasions":
-          return o === key;
+        case "thank-you":
+        case "congrats":
+        case "love":
+        case "get-well":
+        case "just-because":
+          return key === ALL ? aisleLabels(a).includes(o) : o === key;
+        case "school": {
+          if (key === ALL) return isSchoolDesign(g.design, r);
+          const f = SCHOOL_SUBS.find(([k]) => k === key);
+          return f ? isSchoolDesign(g.design, r) && f[2](r, o) : false;
+        }
+        case "more":
+          return key === ALL ? isMoreLabel(o) : o === key;
         case "holidays":
           return key === ALL ? HOLIDAY_LABELS.has(o) : o === key;
         case "family":
@@ -384,14 +499,16 @@ export default function GraphicLibrary({
   const inAisle = useMemo(() => {
     return (g: LibraryGraphic): boolean => {
       if (!aisle) return true;
-      if (aisle === "birthdays") return subMatches(g, aisle, sub ?? ALL);
+      if (GRID_AISLES.has(aisle)) return subMatches(g, aisle, sub ?? ALL);
       if (!sub) return true; // aisle open, nothing picked yet → shelves below
       return subMatches(g, aisle, sub);
     };
   }, [aisle, sub, subMatches]);
 
   const filtering =
-    query.trim() !== "" || aisle === "birthdays" || (aisle !== null && sub !== null);
+    query.trim() !== "" ||
+    (aisle !== null && GRID_AISLES.has(aisle)) ||
+    (aisle !== null && sub !== null);
 
   const byDesign = useMemo(() => {
     const m = new Map<string, LibraryGraphic>();
@@ -459,12 +576,37 @@ export default function GraphicLibrary({
       }
       return chips;
     };
+    // Several labels under one chip (Love = Valentine's + Anniversary +
+    // Wedding): a sub-chip per label, "All" first.
+    const fromLabels = (labels: string[], allLabel: string) => {
+      const chips = labels
+        .map((o): [string, string, number] => [o, o, occasionCounts.get(o) ?? 0])
+        .filter(([, , n]) => n > 0);
+      if (chips.length < 2) return [];
+      const total = chips.reduce((s, [, , n]) => s + n, 0);
+      return [[ALL, allLabel, total] as [string, string, number], ...chips];
+    };
     switch (aisle) {
-      case "occasions":
+      case "thank-you":
+      case "congrats":
+      case "get-well":
+        return [];
+      case "love":
+        return fromLabels(aisleLabels("love"), "All love");
+      case "just-because":
+        return fromLabels(aisleLabels("just-because"), "All");
+      case "school": {
+        const all = (graphics ?? []).filter((g) => subMatches(g, "school", ALL));
+        const chips = SCHOOL_SUBS.map(([k, label]): [string, string, number] => [
+          k,
+          label,
+          all.filter((g) => subMatches(g, "school", k)).length,
+        ]).filter(([, , n]) => n > 0);
+        return chips.length > 1 ? [[ALL, "All school & grad", all.length], ...chips] : [];
+      }
+      case "more":
         return [...occasionCounts.entries()]
-          .filter(
-            ([o]) => o !== "Birthday" && !HOLIDAY_LABELS.has(o),
-          )
+          .filter(([o]) => isMoreLabel(o))
           .sort((a, b) =>
             a[0] === FALLBACK_OCCASION ? 1 :
             b[0] === FALLBACK_OCCASION ? -1 :
@@ -571,6 +713,45 @@ export default function GraphicLibrary({
     return picks.length ? picks : hubVisible.slice(0, CLOSE_MAX);
   }, [search, graphics, aisle, inAisle, popRank, hubVisible]);
 
+  // A short result list ("retirement" = 2) never dead-ends in white space:
+  // under it, shelves from the occasions those results belong to, plus a
+  // "make your own" card in the grid itself.
+  const related = useMemo(() => {
+    if (!search || !graphics || aisle) return [];
+    const exact = search.exact;
+    if (exact.length === 0 || exact.length >= RELATED_BELOW) return [];
+    const shown = new Set(
+      [...exact, ...(exact.length < FEW_RESULTS ? search.close : [])].map((g) => g.design),
+    );
+    const targets: { a: Aisle; s: string | null }[] = [];
+    for (const g of exact) {
+      if (hubVisibleByDesign.has(g.design)) continue;
+      const to = aisleForLabel(occasionOf(g.design));
+      // Get well mixes get-well, condolence and cancer support: never
+      // offered as "more like this" ("sorry" means apology designs).
+      if (to.a === "get-well") continue;
+      if (!targets.some((x) => x.a === to.a && x.s === to.s)) targets.push(to);
+      if (targets.length === 2) break;
+    }
+    return targets
+      .map((to) => {
+        const all = byPopularity(
+          graphics.filter((g) => subMatches(g, to.a, GRID_AISLES.has(to.a) ? ALL : (to.s ?? ALL))),
+          popRank,
+        );
+        const items = all.filter((g) => !shown.has(g.design)).slice(0, PREVIEW);
+        for (const g of items) shown.add(g.design);
+        const name = GRID_AISLES.has(to.a) ? aisleLabel(to.a) : (to.s ?? aisleLabel(to.a));
+        return {
+          to: GRID_AISLES.has(to.a) ? { a: to.a, s: null } : to,
+          title: `More ${name} designs`,
+          items,
+          total: all.length,
+        };
+      })
+      .filter((s) => s.items.length > 0);
+  }, [search, graphics, aisle, hubVisibleByDesign, subMatches, popRank]);
+
   // Aisle grid (no search): best sellers first.
   const aisleGrid = useMemo(
     () =>
@@ -624,14 +805,18 @@ export default function GraphicLibrary({
       title: string;
       items: LibraryGraphic[];
       total: number;
-      seeAll?: string;
+      seeAll?: { a: Aisle; s: string | null };
     }[] = [];
     // One piece of art shows once per view: each shelf previews the best
     // sellers no earlier shelf has shown ("Halloween is coming" and "This
     // season" used to lead with the same art). "See all N" still counts —
     // and opens — every design in the category.
     const seen = new Set<string>();
-    const add = (title: string, all: LibraryGraphic[], seeAll?: string) => {
+    const add = (
+      title: string,
+      all: LibraryGraphic[],
+      seeAll?: { a: Aisle; s: string | null },
+    ) => {
       const items = all.filter((g) => !seen.has(g.design)).slice(0, PREVIEW);
       if (!items.length) return;
       for (const g of items) seen.add(g.design);
@@ -647,7 +832,9 @@ export default function GraphicLibrary({
     const next = holidaysFromToday().find(
       (h) => h.days <= 45 && (occasionCounts.get(h.label) ?? 0) > 0,
     );
-    if (next) add(`${next.label} is coming`, ofOccasion(next.label), next.label);
+    if (next) {
+      add(`${next.label} is coming`, ofOccasion(next.label), aisleForLabel(next.label));
+    }
 
     if (popular.length > 0) {
       add(
@@ -672,19 +859,32 @@ export default function GraphicLibrary({
       ),
     );
 
+    // A shelf per top occasion chip, named exactly as the chip.
     for (const o of SHELF_OCCASIONS) {
       if (o === next?.label) continue; // already pinned up top
-      add(o, ofOccasion(o), o);
+      const to = aisleForLabel(o);
+      if (!GRID_AISLES.has(to.a)) {
+        add(o, ofOccasion(o), to);
+        continue;
+      }
+      add(
+        aisleLabel(to.a),
+        byPopularity(
+          graphics.filter((g) => subMatches(g, to.a, ALL)),
+          popRank,
+        ),
+        { a: to.a, s: null },
+      );
     }
     return out;
-  }, [graphics, tags, popular, popRank, byDesign, filtering, occasionCounts]);
+  }, [graphics, tags, popular, popRank, byDesign, filtering, occasionCounts, subMatches]);
 
   // Aisle open, nothing picked yet → a Netflix-style shelf PER subcategory
   // (Halloween row, Thanksgiving row, …) so the whole aisle is browsable
   // before committing to a sub-chip. Same once-per-view rule as the
   // default shelves (vibes overlap: most punny designs are also funny).
   const aisleShelves = useMemo(() => {
-    if (!graphics || !aisle || aisle === "birthdays" || sub || q) {
+    if (!graphics || !aisle || GRID_AISLES.has(aisle) || sub || q) {
       return [];
     }
     const seen = new Set<string>();
@@ -706,44 +906,72 @@ export default function GraphicLibrary({
   const filterSummary = useMemo(() => {
     if (!aisle) return null;
     const chip = sub ? subChips.find(([k]) => k === sub) : null;
-    if (aisle === "birthdays") return chip ? `Birthdays · ${chip[1]}` : "Birthdays";
+    if (GRID_AISLES.has(aisle)) {
+      return chip ? `${aisleLabel(aisle)} · ${chip[1]}` : aisleLabel(aisle);
+    }
     return chip ? chip[1] : null;
   }, [aisle, sub, subChips]);
 
+  // Cards share the pick + press-and-hold handlers; the first few of every
+  // grid load at once.
+  const card = (g: LibraryGraphic, i: number, eagerAll = false) => (
+    <Card
+      key={g.design}
+      g={g}
+      onPick={pick}
+      onPeek={setPeek}
+      eager={eagerAll || i < EAGER}
+    />
+  );
+  const makeOwnCard = onMakeOwn ? <MakeOwnCard text={q} onMakeOwn={onMakeOwn} /> : null;
+  const designs = (n: number) => `${n} design${n === 1 ? "" : "s"}`;
+
   return (
     <div>
+      {/* Search is there from the first frame (the designs load behind it),
+          so a shopper who came here to search can start typing at once. */}
+      <input
+        type="search"
+        className="library-search"
+        placeholder="Search designs — try “dog”"
+        aria-label="Search designs"
+        enterKeyHint="search"
+        autoFocus={autoFocusSearch}
+        value={query}
+        onChange={(e) => {
+          const v = e.target.value;
+          setQuery(v);
+          // Typing searches the WHOLE library — drop any active
+          // aisle/sub so results aren't secretly narrowed by a chip.
+          if (v.trim()) {
+            setAisle(null);
+            setSub(null);
+          }
+        }}
+      />
+      <p className="note library-tip">Tip: press and hold a design to see it up close.</p>
+
       {failed && (
         <div className="notice warn">
           <p>
-            The graphic library didn&apos;t load. Check your connection and try
-            again — or head back and design your own.
+            The designs didn&apos;t load. Check your connection and try
+            again — or make your own.
           </p>
           <button className="btn" onClick={load}>
             Try again
           </button>
         </div>
       )}
-      {!graphics && !failed && <p className="note">Loading graphics…</p>}
+      {!graphics && !failed && (
+        <div className="library-grid" aria-busy="true" aria-label="Loading designs">
+          {Array.from({ length: 8 }, (_, i) => (
+            <span key={i} className="library-card library-skeleton" />
+          ))}
+        </div>
+      )}
 
       {graphics && (
         <>
-          <input
-            type="search"
-            className="library-search"
-            placeholder="Search — birthday, thank you, dog, Halloween…"
-            value={query}
-            onChange={(e) => {
-              const v = e.target.value;
-              setQuery(v);
-              // Typing searches the WHOLE library — drop any active
-              // aisle/sub so results aren't secretly narrowed by a chip.
-              if (v.trim()) {
-                setAisle(null);
-                setSub(null);
-              }
-            }}
-          />
-
           {!restrict && (
             <div className="facet-row aisle-row">
               <div className="facet-scroll">
@@ -751,6 +979,7 @@ export default function GraphicLibrary({
                   <button
                     key={a.id}
                     className={"chip" + (aisle === a.id ? " active" : "")}
+                    aria-pressed={aisle === a.id}
                     onClick={() => pickAisle(a.id)}
                   >
                     {a.label}
@@ -765,7 +994,7 @@ export default function GraphicLibrary({
               <div className="facet-scroll">
                 {subChips.map(([key, label, n]) => {
                   const on =
-                    aisle === "birthdays" && key === ALL
+                    aisle && GRID_AISLES.has(aisle) && key === ALL
                       ? sub === null
                       : sub === key;
                   return (
@@ -785,15 +1014,13 @@ export default function GraphicLibrary({
 
           {!filtering && aisleShelves.length > 0 ? (
             <div className="shelves">
-              {aisleShelves.map((s, i) => (
+              {aisleShelves.map((s, si) => (
                 <section key={s.key} className="shelf">
                   <div className="shelf-head">
                     <h3>{s.title}</h3>
                   </div>
                   <div className="library-grid">
-                    {s.items.map((g) => (
-                      <Card key={g.design} g={g} onPick={pick} eager={i === 0} />
-                    ))}
+                    {s.items.map((g, i) => card(g, i, si === 0))}
                     {s.total > PREVIEW && (
                       <button
                         className="library-card see-all"
@@ -808,15 +1035,13 @@ export default function GraphicLibrary({
             </div>
           ) : !filtering ? (
             <div className="shelves">
-              {[...hubShelves, ...shelves].map((s, i) => (
-                <section key={`${i}-${s.title}`} className="shelf">
+              {[...hubShelves, ...shelves].map((s, si) => (
+                <section key={`${si}-${s.title}`} className="shelf">
                   <div className="shelf-head">
                     <h3>{s.title}</h3>
                   </div>
                   <div className="library-grid">
-                    {s.items.slice(0, PREVIEW).map((g) => (
-                      <Card key={g.design} g={g} onPick={pick} eager={i === 0} />
-                    ))}
+                    {s.items.slice(0, PREVIEW).map((g, i) => card(g, i, si === 0))}
                     {s.total > PREVIEW &&
                       (() => {
                         const seeAllQuery = (s as { seeAllQuery?: string }).seeAllQuery;
@@ -829,11 +1054,12 @@ export default function GraphicLibrary({
                               <span>See all {s.total} →</span>
                             </button>
                           );
-                        if (s.seeAll)
+                        const to = (s as { seeAll?: { a: Aisle; s: string | null } }).seeAll;
+                        if (to)
                           return (
                             <button
                               className="library-card see-all"
-                              onClick={() => jumpToOccasion(s.seeAll!)}
+                              onClick={() => jumpTo(to)}
                             >
                               <span>See all {s.total} →</span>
                             </button>
@@ -845,38 +1071,40 @@ export default function GraphicLibrary({
               ))}
               {graphics.length > 0 && (
                 <p className="note">
-                  Or search above — every one of our {graphics.length} graphics
-                  is in here.
+                  Or search above — every one of our {designs(graphics.length)} is
+                  in here.
                 </p>
               )}
             </div>
           ) : search && search.exact.length === 0 ? (
-            // Never a dead end: the best partial matches, else best sellers.
+            // Never a dead end: their own label (a name search is the
+            // strongest sign they want one), then the best partial matches,
+            // else best sellers.
             <>
-              <div className="notice info">
-                {search.close.length
-                  ? `No exact match for “${q}” — here are close ones.`
-                  : `No match for “${q}” — here are our most popular designs. Try another word, or design your own graphic.`}
-              </div>
-              <div className="library-grid">
-                {(search.close.length ? search.close : searchFallback).map(
-                  (g) => (
-                    <Card key={g.design} g={g} onPick={pick} />
-                  ),
+              <div className="notice info library-nomatch">
+                <p>No design matches “{clipQuery(q)}”.</p>
+                {onMakeOwn && (
+                  <button className="btn primary" onClick={() => onMakeOwn(q)}>
+                    Put “{clipQuery(q)}” on your own label →
+                  </button>
                 )}
+              </div>
+              <p className="note">
+                {search.close.length ? "Close matches" : "Our most popular designs"}
+              </p>
+              <div className="library-grid">
+                {(search.close.length ? search.close : searchFallback).map((g, i) => card(g, i))}
               </div>
             </>
           ) : search ? (
             <>
               <p className="note">
-                {search.exact.length} graphic
-                {search.exact.length === 1 ? "" : "s"}
+                {designs(search.exact.length)}
                 {filterSummary ? ` · ${filterSummary}` : ""}
               </p>
               <div className="library-grid">
-                {search.exact.map((g) => (
-                  <Card key={g.design} g={g} onPick={pick} />
-                ))}
+                {search.exact.map((g, i) => card(g, i))}
+                {search.exact.length < RELATED_BELOW && makeOwnCard}
               </div>
               {/* A near-miss ("dad birthday" = 1 design) gets the close
                   matches too, so a narrow search still has somewhere to go. */}
@@ -884,33 +1112,64 @@ export default function GraphicLibrary({
                 <>
                   <p className="note">More ideas close to “{q}”</p>
                   <div className="library-grid">
-                    {search.close.map((g) => (
-                      <Card key={g.design} g={g} onPick={pick} />
-                    ))}
+                    {search.close.map((g, i) => card(g, i))}
                   </div>
                 </>
               )}
+              {related.length > 0 && (
+                <div className="shelves">
+                  {related.map((s) => (
+                    <section key={s.title} className="shelf">
+                      <div className="shelf-head">
+                        <h3>{s.title}</h3>
+                      </div>
+                      <div className="library-grid">
+                        {s.items.map((g, i) => card(g, i))}
+                        {s.total > s.items.length && (
+                          <button
+                            className="library-card see-all"
+                            onClick={() => jumpTo(s.to)}
+                          >
+                            <span>See all {s.total} →</span>
+                          </button>
+                        )}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
             </>
           ) : aisleGrid.length === 0 ? (
-            <div className="notice info">
-              Nothing here yet — try a different aisle, or design your own
-              graphic.
+            <div className="notice info library-nomatch">
+              <p>Nothing here yet — try another category.</p>
+              {onMakeOwn && (
+                <button className="btn primary" onClick={() => onMakeOwn(null)}>
+                  Make your own label →
+                </button>
+              )}
             </div>
           ) : (
             <>
               <p className="note">
-                {aisleGrid.length} graphic{aisleGrid.length === 1 ? "" : "s"}
+                {designs(aisleGrid.length)}
                 {filterSummary ? ` · ${filterSummary}` : ""}
               </p>
-              <div className="library-grid">
-                {aisleGrid.map((g) => (
-                  <Card key={g.design} g={g} onPick={pick} />
-                ))}
-              </div>
+              <div className="library-grid">{aisleGrid.map((g, i) => card(g, i))}</div>
             </>
           )}
         </>
       )}
+
+      <QuickLook
+        art={peek ? (cdnThumb(peek.art ?? peek.thumb, 1400) ?? null) : null}
+        name={peek?.title ?? ""}
+        onUse={() => {
+          const g = peek;
+          setPeek(null);
+          if (g) pick(g);
+        }}
+        onClose={() => setPeek(null)}
+      />
     </div>
   );
 }

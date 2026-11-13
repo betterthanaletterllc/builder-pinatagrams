@@ -72,6 +72,29 @@ export const Plus = (p: IconProps) => (
   </Svg>
 );
 
+export const Search = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M21 21l-4.3-4.3" />
+  </Svg>
+);
+
+/** A framed photo (mountains + sun) — "your photo here". */
+export const Photo = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2.5" />
+    <circle cx="9" cy="10" r="1.8" />
+    <path d="M21 16l-5-5-8.5 9" />
+  </Svg>
+);
+
+export const Rotate = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 11a8 8 0 10-2.3 5.7" />
+    <path d="M20 4v7h-7" />
+  </Svg>
+);
+
 export const ZoomIn = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="11" cy="11" r="7" />

@@ -1,11 +1,14 @@
 import Konva from "konva";
 import {
   artboardPx,
-  coverFit,
+  photoFrame,
   templateSlotRects,
   type DesignDocument,
   type SlotRect,
+  type TextFont,
 } from "./design-document";
+
+export type FontStyle = "normal" | "bold";
 
 /**
  * Text layout + the headless print render for template designs. ONE home
@@ -66,12 +69,14 @@ export function fitFontSize(
   w: number,
   h: number,
   fontFamily: string,
+  fontStyle: FontStyle = "normal",
 ): number {
   let size = Math.min(Math.round(h * 0.5), 260);
   const probe = new Konva.Text({
     text,
     width: w,
     fontFamily,
+    fontStyle,
     fontSize: size,
     lineHeight: TEXT_LINE_HEIGHT,
   });
@@ -91,11 +96,12 @@ export function textFits(
   text: string,
   rect: SlotRect,
   fontFamily: string,
+  fontStyle: FontStyle = "normal",
 ): boolean {
   if (text.length > MAX_TEXT_CHARS) return false;
   if (!text.trim()) return true;
   const b = textBox(rect);
-  return fitFontSize(text, b.w, b.h, fontFamily) >= MIN_TEXT_PX;
+  return fitFontSize(text, b.w, b.h, fontFamily, fontStyle) >= MIN_TEXT_PX;
 }
 
 /**
@@ -103,12 +109,16 @@ export function textFits(
  * legible size — the editor's character counter. An estimate on purpose
  * (real text with very long words fits less); textFits stays the gate.
  */
-export function textCapacity(rect: SlotRect, fontFamily: string): number {
+export function textCapacity(
+  rect: SlotRect,
+  fontFamily: string,
+  fontStyle: FontStyle = "normal",
+): number {
   const b = textBox(rect);
   const sample = "Happy birthday to my favorite person in the whole world ";
   const fits = (n: number) => {
     const t = sample.repeat(Math.ceil(n / sample.length)).slice(0, n).trim();
-    return fitFontSize(t, b.w, b.h, fontFamily) >= MIN_TEXT_PX;
+    return fitFontSize(t, b.w, b.h, fontFamily, fontStyle) >= MIN_TEXT_PX;
   };
   if (fits(MAX_TEXT_CHARS)) return MAX_TEXT_CHARS;
   let lo = 1;
@@ -128,6 +138,45 @@ export function designFontFamily(): string {
     .getPropertyValue("--font-poppins")
     .trim();
   return v || "sans-serif";
+}
+
+/** The brand display font (Arbotek Ultra, next/font/local). */
+export function displayFontFamily(): string {
+  if (typeof document === "undefined") return "sans-serif";
+  const v = getComputedStyle(document.body)
+    .getPropertyValue("--font-arbotek")
+    .trim();
+  return v || designFontFamily();
+}
+
+/** The family + weight a text box's style renders in (editor AND print). */
+export function textFontFor(font: TextFont | undefined): {
+  family: string;
+  style: FontStyle;
+} {
+  if (font === "party") return { family: displayFontFamily(), style: "normal" };
+  return { family: designFontFamily(), style: font === "bold" ? "bold" : "normal" };
+}
+
+/**
+ * Make sure every face a label can use is actually loaded before anything
+ * measures with it: the auto-fit (and the size baked into the print file)
+ * would otherwise measure a fallback. Arbotek isn't preloaded by the page,
+ * so it has to be asked for. Never throws.
+ */
+export async function loadDesignFonts(): Promise<void> {
+  if (typeof document === "undefined" || !document.fonts) return;
+  const faces = [
+    `${MIN_TEXT_PX}px ${designFontFamily()}`,
+    `bold ${MIN_TEXT_PX}px ${designFontFamily()}`,
+    `${MIN_TEXT_PX}px ${displayFontFamily()}`,
+  ];
+  try {
+    await Promise.all(faces.map((f) => document.fonts.load(f)));
+    await document.fonts.ready;
+  } catch {
+    // font API missing/refused — measure with whatever is loaded
+  }
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -153,14 +202,9 @@ export async function renderDesignCanvas(
 ): Promise<HTMLCanvasElement> {
   const { width, height } = artboardPx(doc.artboard);
   const rects = templateSlotRects(doc.template, doc.artboard);
-  const fontFamily = designFontFamily();
-  // The auto-fit must measure Poppins, not a fallback face.
-  try {
-    await document.fonts?.load(`${MIN_TEXT_PX}px ${fontFamily}`);
-    await document.fonts?.ready;
-  } catch {
-    // font API missing/refused — measure with whatever is loaded
-  }
+  // The auto-fit must measure the real faces (Poppins regular/bold,
+  // Arbotek), not a fallback.
+  await loadDesignFonts();
   const images = await Promise.all(
     doc.slots.map((s) => (s?.kind === "photo" ? loadImage(s.src) : null)),
   );
@@ -179,19 +223,24 @@ export async function renderDesignCanvas(
       if (c.kind === "photo") {
         const img = images[i];
         if (!img) return;
-        const fit = coverFit(r, c.natW, c.natH, c.offset);
+        // the editor's own framing (zoom, quarter turns, drag) — photoFrame
+        const fr = photoFrame(r, c);
         slot.add(
           new Konva.Image({
             image: img,
-            x: fit.x,
-            y: fit.y,
-            width: fit.width,
-            height: fit.height,
+            x: fr.cx,
+            y: fr.cy,
+            width: fr.dw,
+            height: fr.dh,
+            offsetX: fr.dw / 2,
+            offsetY: fr.dh / 2,
+            rotation: fr.rot,
           }),
         );
       } else {
         if (!c.text.trim()) return;
         const b = textBox(r);
+        const font = textFontFor(c.font);
         slot.add(
           new Konva.Text({
             x: b.x,
@@ -199,8 +248,9 @@ export async function renderDesignCanvas(
             width: b.w,
             height: b.h,
             text: c.text,
-            fontSize: fitFontSize(c.text, b.w, b.h, fontFamily),
-            fontFamily,
+            fontSize: fitFontSize(c.text, b.w, b.h, font.family, font.style),
+            fontFamily: font.family,
+            fontStyle: font.style,
             fill: c.fill,
             align: "center",
             verticalAlign: "middle",

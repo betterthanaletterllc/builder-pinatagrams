@@ -20,6 +20,7 @@ export default function EditorShell({
   onDirtyChange,
   initialDesign,
   initialAssets,
+  startText,
 }: {
   bodyStyleId: string;
   boxImageUrl: string | null;
@@ -35,6 +36,8 @@ export default function EditorShell({
   onDirtyChange?: (dirty: boolean) => void;
   initialDesign?: DesignDocument | null;
   initialAssets?: Partial<DesignAssets> | null;
+  // A fresh label that starts with these words (no layout picker).
+  startText?: string | null;
 }) {
   return (
     <Editor
@@ -46,6 +49,7 @@ export default function EditorShell({
       onDirtyChange={onDirtyChange}
       initialDesign={initialDesign}
       initialAssets={initialAssets}
+      startText={startText}
     />
   );
 }

@@ -361,11 +361,15 @@ const SYNONYM_GROUPS: [string, Term[]][] = [
   ["boss bosses coworker coworkers colleague colleagues employee employees staff team client clients customer customers office manager work job business corporate company employer", [occ("Work & business"), rTag("coworker"), vTag("professional"), w("work")]],
   ["bestie besties bff bestfriend friend friends pal pals buddy amiga amigo", [rTag("friend"), w("friend"), w("bestie")]],
   ["grad grads graduate graduates graduating graduation graduated commencement diploma", [rTag("grad"), w("graduation"), w("grad")]],
+  ["college university dorm freshman", [rTag("grad", 0.7), w("college")]],
   ["anniv anni anniversary anniversaries aniversario", [occ("Anniversary"), w("anniversary")]],
   ["congrats congratulations congratulation congrat congratz felicidades", [occ("Congrats"), w("congrats"), w("congratulations")]],
   ["kudos proud", [occ("Congrats", 0.8), w("job"), w("proud"), w("great")]],
   ["thanks thank thankyou thx ty gracias appreciate appreciation grateful gratitude", [occ("Thank you"), w("thank"), w("grateful")]],
-  ["sympathy condolence condolences sorry loss grief grieving bereavement funeral", [occ("Sympathy"), w("sorry")]],
+  // Condolence and apology are different gifts: "sorry" used to sit here and
+  // pulled every get-well and cancer-support design in with the apologies.
+  ["sympathy condolence condolences loss grief grieving bereavement funeral passing", [occ("Sympathy"), w("thinking"), w("hug"), w("comfort"), w("pray")]],
+  ["sorry apology apologies apologize apologise apologizing apologising forgive forgiveness oops mybad", [w("sorry")]],
   ["getwell sick illness ill surgery hospital recovery recover recovering heal healing", [occ("Sympathy", 0.8), w("heal"), w("healing"), w("well")]],
   ["halloween spooky spook boo trickortreat", [occ("Halloween"), w("halloween")]],
   ["thanksgiving turkey friendsgiving gobble", [occ("Thanksgiving"), w("thanksgiving")]],
@@ -427,6 +431,7 @@ const PHRASES: [RegExp, string][] = [
   [/\bmothers? day\b/g, " mothersday "],
   [/\bfathers? day\b/g, " dad "],
   [/\bover the hill\b/g, " milestone "],
+  [/\bmy bad\b/g, " mybad "],
   [/\bfirst birthday\b/g, " 1st birthday "],
   [/\bsweet (16|sixteen)\b/g, " 16th birthday "],
 ];

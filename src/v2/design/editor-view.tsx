@@ -33,11 +33,13 @@ const EditorView = forwardRef<
     style: HubBodyStyle;
     graphic: GraphicChoice | null;
     retry: boolean;
+    /** Words to start a NEW label with (a search that found nothing). */
+    startText?: string | null;
     onClose: () => void;
     onSave: (design: DesignDocument, preview: string, assets: DesignAssets) => void;
     onAssets: (assets: DesignAssets, docJson: string) => void;
   }
->(function EditorView({ style, graphic, retry, onClose, onSave, onAssets }, h1Ref) {
+>(function EditorView({ style, graphic, retry, startText, onClose, onSave, onAssets }, h1Ref) {
   const existing =
     graphic?.type === "custom" && isCurrentDesign(graphic.design) ? graphic : null;
   return (
@@ -59,11 +61,12 @@ const EditorView = forwardRef<
         </div>
       )}
       <EditorShell
-        key={existing ? "edit" : "new"}
+        key={existing ? "edit" : `new:${startText ?? ""}`}
         bodyStyleId={style.id}
         boxImageUrl={style.boxImageUrl}
         logoZone={style.logoZone}
         initialDesign={existing ? existing.design : null}
+        startText={existing ? null : (startText ?? null)}
         initialAssets={
           existing
             ? {

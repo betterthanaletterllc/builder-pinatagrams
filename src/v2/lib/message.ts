@@ -115,6 +115,11 @@ export const STARTERS: Record<OccasionId | "default", string[]> = {
     "Wishing you a sweet and cozy season.",
     "Cheers to the season — and to you.",
   ],
+  school: [
+    "Congrats, grad! The future looks sweet.",
+    "So proud of you — here's to what's next.",
+    "Thank you for everything you teach.",
+  ],
   "just-because": [
     "Just because you're you.",
     "Thinking of you — enjoy a little treat!",

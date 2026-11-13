@@ -57,7 +57,7 @@ const StepInside = forwardRef<
             }
             media={
               f.imageUrl ? (
-                <Image src={f.imageUrl} alt="" width={112} height={112} sizes="56px" />
+                <Image src={f.imageUrl} alt="" width={112} height={112} sizes="56px" loading="eager" />
               ) : undefined
             }
           />
@@ -85,7 +85,7 @@ const StepInside = forwardRef<
                 mediaSize={64}
                 media={
                   a.imageUrl ? (
-                    <Image src={a.imageUrl} alt="" width={128} height={128} sizes="64px" />
+                    <Image src={a.imageUrl} alt="" width={128} height={128} sizes="64px" loading="eager" />
                   ) : undefined
                 }
               />

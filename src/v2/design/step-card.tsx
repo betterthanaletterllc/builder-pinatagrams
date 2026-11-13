@@ -121,11 +121,28 @@ const StepCard = forwardRef<
               >
                 <Sparkle size={16} /> Need a start?
               </Button>
+              {/* the box has no visible label here, so it says it's
+                  required right beside it (the field itself is aria-required) */}
+              <span className={s.required} aria-hidden="true">
+                * Required
+              </span>
             </div>
           )}
           <TextArea
             id="pg-message"
-            label="Message"
+            label={
+              startersOverlay ? (
+                "Message"
+              ) : (
+                <>
+                  Message{" "}
+                  <span className={s.required} aria-hidden="true">
+                    * Required
+                  </span>
+                </>
+              )
+            }
+            aria-required="true"
             // all-in: no visible label; the placeholder asks for the message
             hideLabel={startersOverlay}
             value={parts.body}

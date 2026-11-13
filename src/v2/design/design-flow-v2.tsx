@@ -81,7 +81,12 @@ import {
   type OrderPrefs,
 } from "../lib/draft";
 import { composeMessage, hasMessage, type CardParts } from "../lib/message";
-import { libraryViewFor, occasionDef, type OccasionId } from "../lib/occasions";
+import {
+  libraryViewFor,
+  occasionDef,
+  occasionForPick,
+  type OccasionId,
+} from "../lib/occasions";
 import { computeOrder, designName, type OrderPiece } from "../lib/order";
 import { deliveredCents, priceRows, type PriceCtx } from "../lib/pricing";
 import { graphicReady, resolveRestore } from "../lib/restore";
@@ -90,7 +95,7 @@ import type { FlowData, GraphicSource, StepId, StepVia } from "../lib/types";
 import BoxThumb from "../ui/box-thumb";
 import { confettiBurst, prefersReducedMotion } from "../ui/confetti";
 import { Callout, PriceTag, useAnnouncer, useToast } from "../ui/feedback";
-import { Alert, Check, Spinner, Truck } from "../ui/icons";
+import { Alert, Check, Pencil, Spinner, Truck } from "../ui/icons";
 import u from "../ui/ui.module.css";
 import ActionBar, { type Cta } from "./action-bar";
 import DryRunResult from "./dry-run";
@@ -118,7 +123,8 @@ import st from "./steps.module.css";
 type SheetState =
   | { kind: "body" }
   | { kind: "zoom" }
-  | { kind: "library"; occasion: OccasionId | null }
+  /** search: opened from step 1's search field (cursor in the search box) */
+  | { kind: "library"; occasion: OccasionId | null; search?: boolean }
   | { kind: "price" }
   | { kind: "lineDate"; lineId: string }
   /** Switching carrier with piñatas already in the order: confirm first. */
@@ -144,6 +150,12 @@ type Problem = {
 /** The card's message box (Step 2) — focused when it's still empty. */
 const MESSAGE_ID = "pg-message";
 const MESSAGE_REQUIRED = "Write a message — it's printed on the inside flap of the box.";
+
+// The mini Stage: shrinks past COMPACT_ENTER_Y of scroll, grows back under
+// COMPACT_EXIT_Y. Its lost height stays in the page as margin, which only
+// shows as a gap above ~180px of scroll — so it never grows back lower.
+const COMPACT_ENTER_Y = 300;
+const COMPACT_EXIT_Y = 220;
 
 const EMPTY_PREFS: OrderPrefs = {
   carrier: null,
@@ -183,6 +195,14 @@ export default function DesignFlowV2(data: FlowData) {
   const [sheet, setSheet] = useState<SheetState>(null);
   const [unitPrice, setUnitPrice] = useState<HubPrice | null>(data.initialPrice);
   const [editorRetry, setEditorRetry] = useState(false);
+  // Words to start a new label with ("Put 'Emma' on your own label" from a
+  // search that found nothing).
+  const [editorText, setEditorText] = useState<string | null>(null);
+  // Phones: the pinned Stage shrinks to a mini preview once the shopper is
+  // browsing the designs under it (see the compact effect below).
+  const [compactStage, setCompactStage] = useState(false);
+  const stagePinRef = useRef<HTMLDivElement>(null);
+  const stagePinH = useRef(0);
   // Custom-design print uploads live in lib/design-upload (they outlive the
   // editor); re-render when any of them changes state.
   useSyncExternalStore(subscribeDesignSaves, designSavesVersion, () => 0);
@@ -383,6 +403,8 @@ export default function DesignFlowV2(data: FlowData) {
   useEffect(() => {
     // Reads only; every write waits for the commit tick below.
     const here = new URL(window.location.href);
+    // ?make=photo (home's "Put their face on it"): straight into Make your own.
+    const wantsMake = here.searchParams.get("make") === "photo";
     const lines = loadCart();
     const sig = presetSignature(here);
     const r = resolveRestore({
@@ -423,11 +445,17 @@ export default function DesignFlowV2(data: FlowData) {
       if (r.park) saveParked(r.park);
       if (r.unpark) saveParked(null);
       if (r.consume) markPresetConsumed(sig);
+      r.url.searchParams.delete("make");
       window.history.replaceState(
         { pgv2: true, pgDepth: Number(window.history.state?.pgDepth ?? 0) },
         "",
         r.url,
       );
+      // Opened like a tap on "Make your own": Back closes the editor onto
+      // step 1, never off the site.
+      if (wantsMake && variant.allowCustom && r.draft && r.step === "design") {
+        openEditor(false);
+      }
       stepStart.current = performance.now();
       trackV2("step_viewed", { step: r.step, step_index: STEPS[r.step].index, via: r.via });
       const d = r.draft;
@@ -672,6 +700,58 @@ export default function DesignFlowV2(data: FlowData) {
     if (needsUpload && d?.graphic.type === "custom") void saveDesignArt(d.graphic.design);
   }, [needsUpload]);
 
+  /* --- the mini Stage (phones, step 1) ----------------------------------------
+   * The pinned Stage took ~380px of an 812px phone, leaving the designs a
+   * mail slot. Once the shopper scrolls into the grid it shrinks to a mini
+   * preview; back near the top it's full size again. The designs never move
+   * (see the layout effect), and the thresholds sit apart so it can't
+   * flicker. */
+  useEffect(() => {
+    if (step !== "design" || view) {
+      setCompactStage(false);
+      return;
+    }
+    // Same breakpoint that pins the Stage (flow.module.css .stagePin).
+    const mq = window.matchMedia("(max-width: 1023px) and (min-height: 501px)");
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const y = window.scrollY;
+      setCompactStage((c) => {
+        const next = mq.matches && (c ? y > COMPACT_EXIT_Y : y > COMPACT_ENTER_Y);
+        if (next !== c) stagePinH.current = stagePinRef.current?.offsetHeight ?? 0;
+        return next;
+      });
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    mq.addEventListener("change", onScroll);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      mq.removeEventListener("change", onScroll);
+    };
+  }, [step, view]);
+  useLayoutEffect(() => {
+    const el = stagePinRef.current;
+    if (!el) return;
+    if (!compactStage) {
+      el.style.marginBottom = "";
+      return;
+    }
+    // The shrunk Stage keeps its old footprint in the page as margin: the
+    // grid never moves, so there's nothing to correct (scroll position,
+    // anchoring, a page end that would clamp) — only the pinned box gets
+    // smaller and the designs under it come into view.
+    const before = stagePinH.current;
+    el.style.marginBottom = "";
+    const lost = before - el.offsetHeight;
+    if (lost > 0) el.style.marginBottom = `${lost}px`;
+  }, [compactStage]);
+
   /* --- choices --------------------------------------------------------------- */
 
   const pickGraphic = (g: GraphicChoice, source: GraphicSource) => {
@@ -779,8 +859,10 @@ export default function DesignFlowV2(data: FlowData) {
 
   /* --- the editor (custom designs) -------------------------------------------- */
 
-  const openEditor = (retry = false) => {
+  const openEditor = (retry = false, text: string | null = null) => {
     setEditorRetry(retry);
+    // a label isn't a letter: a search phrase, at most a short line
+    setEditorText(text?.trim() ? text.trim().replace(/\s+/g, " ").slice(0, 60) : null);
     navigate("design", { via: "chip", history: "push", view: "editor" });
     trackV2("custom_editor_opened");
   };
@@ -1282,6 +1364,13 @@ export default function DesignFlowV2(data: FlowData) {
           </button>
         </p>
       );
+  } else if (step === "card" && draft && !hasMessage(draft) && !view) {
+    // Next waits for a message: say so up front, not only after a tap.
+    barNotice = (
+      <p className={f.barHint} style={{ margin: 0 }}>
+        <Pencil size={16} /> Write your message to continue
+      </p>
+    );
   } else if (step === "deliver" && checkoutError) {
     barNotice = (
       <Callout tone="error" role="alert">
@@ -1421,6 +1510,11 @@ export default function DesignFlowV2(data: FlowData) {
           setSheet({ kind: "library", occasion });
           trackV2("graphic_library_opened", { scope: occasion ?? "all" });
         }}
+        onSearch={() => {
+          libraryScroll.current = window.scrollY;
+          setSheet({ kind: "library", occasion: null, search: true });
+          trackV2("graphic_library_opened", { scope: "search" });
+        }}
         onLibraryIntent={() => void loadLibrary()}
         onMakeOwn={() => openEditor(false)}
         banner={<PendingBanner className={st.block} />}
@@ -1557,8 +1651,10 @@ export default function DesignFlowV2(data: FlowData) {
   // order as the shopper sees it: on the last step (it's listed in "Your
   // order", and checkout includes it) or while other piñatas are already in
   // the order ("Add another"). An edit replaces its line — never twice.
-  const cartExtra =
-    draft && !draft.editLineId && (step === "deliver" || cart.length > 0) ? 1 : 0;
+  // Only on the last step, where it's listed in "Your order": counting the
+  // piñata still being designed on every step (whenever the cart had
+  // something) made the bag say 2 here and 1 on the home page.
+  const cartExtra = draft && !draft.editLineId && step === "deliver" ? 1 : 0;
 
   return (
     <main className={f.flow} data-pg-journey>
@@ -1582,6 +1678,7 @@ export default function DesignFlowV2(data: FlowData) {
           style={style}
           graphic={draft?.graphic ?? null}
           retry={editorRetry}
+          startText={editorText}
           onClose={closeEditor}
           onSave={onEditorSave}
           onAssets={onEditorAssets}
@@ -1590,7 +1687,12 @@ export default function DesignFlowV2(data: FlowData) {
         <div className={f.layout}>
           <div className={f.stageCol}>
             {/* Phones pin Step 1's Stage under the header (see .stagePin). */}
-            <div className={f.stagePin} data-step={step}>
+            <div
+              ref={stagePinRef}
+              className={f.stagePin}
+              data-step={step}
+              data-compact={(step === "design" && compactStage) || undefined}
+            >
               <Stage
                 step={step}
                 style={stageStyle}
@@ -1694,17 +1796,42 @@ export default function DesignFlowV2(data: FlowData) {
             hubCategories={data.hubCategories}
             styleId={style.id}
             onPick={(g) => {
-              if (!sameGraphic(g, draft.graphic)) pickGraphic(g, "library");
+              if (!sameGraphic(g, draft.graphic)) {
+                pickGraphic(g, "library");
+                // The step 1 chip follows the design: picking "I Love You
+                // Dad" from the library mustn't leave "Birthday" lit over a
+                // birthday grid.
+                if (g.type === "shopify") {
+                  const occ = occasionForPick(
+                    g.design,
+                    g.title,
+                    data.strips.map((s) => s.id),
+                  );
+                  if (occ && occ !== draft.occasion) patch({ occasion: occ });
+                }
+              }
               setSheet(null);
               requestAnimationFrame(() => window.scrollTo(0, libraryScroll.current));
             }}
             title={
-              sheet?.kind === "library" && sheet.occasion
-                ? `${occasionDef(sheet.occasion).label} designs`
-                : "All designs"
+              sheet?.kind === "library" && sheet.search
+                ? "Search designs"
+                : sheet?.kind === "library" && sheet.occasion
+                  ? `${occasionDef(sheet.occasion).label} designs`
+                  : "All designs"
             }
             initialView={
               sheet?.kind === "library" ? libraryViewFor(sheet.occasion) : undefined
+            }
+            autoFocusSearch={sheet?.kind === "library" && !!sheet.search}
+            onMakeOwn={
+              variant.allowCustom
+                ? (text) => {
+                    setSheet(null);
+                    trackV2("graphic_library_make_own", { with_text: !!text });
+                    openEditor(false, text);
+                  }
+                : undefined
             }
           />
           <PriceSheet

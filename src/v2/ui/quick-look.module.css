@@ -1,0 +1,27 @@
+.figure {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.art {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2.05 / 1;
+  object-fit: contain;
+  border: 1px solid var(--pg-line);
+  border-radius: var(--pg-r-tile, 10px);
+  background: var(--pg-cream);
+}
+
+.caption {
+  font: 500 14px/1.4 var(--pg-font);
+  color: var(--pg-text-2);
+  text-align: center;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+}

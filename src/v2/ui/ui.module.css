@@ -277,7 +277,26 @@
   height: 56px;
   border-radius: 10px;
   overflow: hidden;
-  background: var(--pg-cream);
+  /* a soft shimmer until the photo lands (it covers this) — an empty
+     beige square read as a missing picture */
+  background: linear-gradient(90deg, var(--pg-cream) 0%, #faf8f4 50%, var(--pg-cream) 100%);
+  background-size: 300% 100%;
+  animation: optionShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes optionShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optionMedia {
+    animation: none;
+  }
 }
 
 .optionMedia img {

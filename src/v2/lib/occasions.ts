@@ -1,4 +1,4 @@
-import { holidaysFromToday } from "@/lib/library-data";
+import { holidaysFromToday, occasionOf } from "@/lib/library-data";
 
 /**
  * "What are you celebrating?" — the v2 occasion chips, mapped onto the
@@ -16,6 +16,7 @@ export type OccasionId =
   | "love"
   | "get-well"
   | "holidays"
+  | "school"
   | "just-because";
 
 export type OccasionDef = {
@@ -49,8 +50,22 @@ export const OCCASION_DEFS: readonly OccasionDef[] = [
   // cancer-support and comfort designs.
   { id: "get-well", label: "Get well", library: ["Sympathy"] },
   { id: "holidays", label: "Holidays", library: [] },
+  // School designs, plus the graduation and teacher designs filed under
+  // Congrats / Thank you (they join by their grad/teacher tags — see
+  // isSchoolDesign).
+  { id: "school", label: "School & grad", library: ["School"], bodyHint: "grad" },
   { id: "just-because", label: "Just because", library: ["Family & Friends", "Party"] },
 ];
+
+/** Tags that put a design in the School & grad chip whatever its code. */
+export const SCHOOL_TAGS = ["grad", "teacher"];
+
+/** School & grad membership: a School design, or one tagged for a grad or
+ *  a teacher (library-index.json). One rule for the step 1 strip and the
+ *  library's School & grad category. */
+export function isSchoolDesign(design: string, recipients: readonly string[] = []): boolean {
+  return occasionOf(design) === "School" || recipients.some((r) => SCHOOL_TAGS.includes(r));
+}
 
 export function isOccasionId(v: unknown): v is OccasionId {
   return OCCASION_DEFS.some((d) => d.id === v);
@@ -61,16 +76,39 @@ export function occasionDef(id: OccasionId): OccasionDef {
 }
 
 /**
- * "See all <occasion> designs": where the full library opens — its aisle
- * and sub-filter for the chip (the library's own taxonomy). null = all.
+ * "See all <occasion> designs": where the full library opens. The library's
+ * top row of categories IS this chip list (same names, same order —
+ * graphic-library AISLES), so each chip opens its own category; Halloween
+ * opens inside Holidays. null = everything.
  */
 export function libraryViewFor(id: OccasionId | null): { aisle: string | null; sub: string | null } {
   if (!id) return { aisle: null, sub: null };
   if (id === "birthday") return { aisle: "birthdays", sub: null };
-  if (id === "holidays") return { aisle: "holidays", sub: null };
   if (id === "halloween") return { aisle: "holidays", sub: "Halloween" };
-  const first = occasionDef(id).library[0];
-  return first ? { aisle: "occasions", sub: first } : { aisle: null, sub: null };
+  return { aisle: id, sub: null };
+}
+
+/**
+ * The chip a picked design belongs to, among the chips showing — so the
+ * step 1 chip follows a design chosen in the library (or the editor's
+ * search) instead of staying on the occasion it started on. Birthday wins
+ * for any birthday wording ("Happy Birthday Dad" is filed under Family &
+ * Friends); null when no showing chip covers it (the Classic, a hub folder).
+ */
+export function occasionForPick(
+  design: string,
+  title: string,
+  showing: readonly OccasionId[],
+  now = new Date(),
+): OccasionId | null {
+  const label = occasionOf(design);
+  const has = (id: OccasionId) => showing.includes(id);
+  if ((label === "Birthday" || /\b(birthday|bday|cumple\w*)\b/i.test(title)) && has("birthday")) {
+    return "birthday";
+  }
+  if (has("school") && isSchoolDesign(design)) return "school";
+  if (/\b(grad|graduat\w*|teacher)\b/i.test(title) && has("school")) return "school";
+  return showing.find((id) => libraryLabelsFor(id, now).includes(label)) ?? null;
 }
 
 function daysUntil(month: number, day: number, now: Date): number {
