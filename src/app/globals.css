@@ -664,20 +664,23 @@ h1 {
   }
 }
 
+/* the words panel: in the page right under the label (never pinned —
+   iOS scrolls an in-page field above its keyboard by itself) */
 .edit-sheet {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 60;
   background: var(--card);
-  border-top: 1px solid var(--line);
-  box-shadow: 0 -4px 16px rgba(24, 13, 56, 0.16);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px max(14px, env(safe-area-inset-right))
-    calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  padding: 10px 12px;
+  margin-top: 10px;
+  scroll-margin-top: calc(var(--pg-header-h, 56px) + 8px);
+}
+
+.editor-v4 .artboard-wrap {
+  scroll-margin-top: calc(var(--pg-header-h, 56px) + 8px);
 }
 
 /* words + Done; fonts and colours above them, reachable while typing */

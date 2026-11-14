@@ -754,47 +754,17 @@ export default function Editor({
     const el = textRef.current;
     if (editingText === null || !el) return;
     el.focus({ preventScroll: true });
+    // One scroll, once: the label to just under the header, the field right
+    // below it — both fit above a phone keyboard, so iOS has nothing to
+    // chase. (Never on every keyboard/viewport event: that fought iOS's own
+    // scrolling and shook the field.)
+    wrapRef.current
+      ?.querySelector(".artboard-wrap")
+      ?.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
     const end = el.value.length;
     el.setSelectionRange(end, end);
   }, [editingText, focusTick]);
 
-  // Phones: the words sheet rides on top of the on-screen keyboard (iOS
-  // leaves fixed elements behind it), and the label scrolls into the space
-  // above the sheet — so you watch the words fit as you type.
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const [kbInset, setKbInset] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (editingText === null || !vv) {
-      setKbInset(0);
-      return;
-    }
-    let raf = 0;
-    const update = () => {
-      setKbInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const art = wrapRef.current?.querySelector(".artboard-wrap");
-        const sheet = sheetRef.current;
-        if (!art || !sheet) return;
-        const a = art.getBoundingClientRect();
-        const room = sheet.getBoundingClientRect().top - 8;
-        const visTop = vv.offsetTop + 64; // clear of the sticky header
-        if (a.bottom <= room && a.top >= visTop) return;
-        let dy = a.bottom - room;
-        if (a.top - dy < visTop) dy = a.top - visTop;
-        if (Math.abs(dy) > 1) window.scrollBy(0, dy);
-      });
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      cancelAnimationFrame(raf);
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, [editingText]);
   const editText = (i: number) => {
     setSelectedSlot(i);
     setEditingText(i);
@@ -1608,6 +1578,82 @@ export default function Editor({
           )}
         </div>
 
+        {/* Words go in right under the label (16px field, no iOS zoom) — in the
+            page, not pinned over it: a fixed sheet fought iOS's own keyboard
+            scrolling and shook while typing. The label above is the live
+            preview. */}
+        {editingSlot && editingText !== null && (
+          <div className="edit-sheet">
+            <div className="edit-sheet-tools">
+              <div className="font-pick" role="group" aria-label="Font">
+                {TEXT_FONTS.map((f) => {
+                  const on = (editingSlot.font ?? "classic") === f.id;
+                  const face = textFontFor(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      className={"font-btn" + (on ? " on" : "")}
+                      aria-pressed={on}
+                      onMouseDown={keepTyping}
+                      onClick={() => setFont(editingText, f.id)}
+                      style={{ fontFamily: face.family, fontWeight: face.style === "bold" ? 700 : 400 }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="edit-sheet-swatches">
+                {TEXT_SWATCHES.map((c) => (
+                  <button
+                    key={c}
+                    className={"swatch" + (editingSlot.fill === c ? " active" : "")}
+                    style={{ background: c }}
+                    onMouseDown={keepTyping}
+                    onClick={() => patchSlot(editingText, { fill: c })}
+                    title={SWATCH_NAMES[c] ?? c}
+                    aria-label={`Text color: ${SWATCH_NAMES[c] ?? c}`}
+                    aria-pressed={editingSlot.fill === c}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="edit-sheet-row">
+            <div className="edit-sheet-field">
+              <textarea
+                ref={textRef}
+                rows={2}
+                placeholder="Type the words for the front"
+                aria-label="Words for the front of the box"
+                aria-describedby="edit-sheet-count"
+                value={editingSlot.text}
+                onChange={(e) => typeText(editingText, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    doneEditingText();
+                  }
+                }}
+              />
+              {/* The count is read on focus (describedby); only "full" is
+                  announced — not every keystroke. */}
+              <span
+                id="edit-sheet-count"
+                className={"edit-count" + (textFull ? " full" : "")}
+              >
+                {`${editingSlot.text.length}/${Math.max(textRoom, editingSlot.text.length)} characters`}
+              </span>
+              <span className="edit-count full" role="status">
+                {textFull ? "That's all that fits in this box" : ""}
+              </span>
+            </div>
+            <button className="btn primary" onClick={doneEditingText}>
+              Done
+            </button>
+            </div>
+          </div>
+        )}
+
         <p className="note">
           {canDrag
             ? coarsePointer
@@ -1810,84 +1856,6 @@ export default function Editor({
           <button className="link-btn" onClick={undoRemove}>
             Undo
           </button>
-        </div>
-      )}
-
-      {/* text edits in a fixed bottom sheet (16px input, no iOS zoom); the
-          canvas text above is the live preview of what's typed */}
-      {editingSlot && editingText !== null && (
-        <div
-          ref={sheetRef}
-          className="edit-sheet"
-          style={kbInset ? { bottom: kbInset, paddingBottom: 10 } : undefined}
-        >
-          <div className="edit-sheet-tools">
-            <div className="font-pick" role="group" aria-label="Font">
-              {TEXT_FONTS.map((f) => {
-                const on = (editingSlot.font ?? "classic") === f.id;
-                const face = textFontFor(f.id);
-                return (
-                  <button
-                    key={f.id}
-                    className={"font-btn" + (on ? " on" : "")}
-                    aria-pressed={on}
-                    onMouseDown={keepTyping}
-                    onClick={() => setFont(editingText, f.id)}
-                    style={{ fontFamily: face.family, fontWeight: face.style === "bold" ? 700 : 400 }}
-                  >
-                    {f.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="edit-sheet-swatches">
-              {TEXT_SWATCHES.map((c) => (
-                <button
-                  key={c}
-                  className={"swatch" + (editingSlot.fill === c ? " active" : "")}
-                  style={{ background: c }}
-                  onMouseDown={keepTyping}
-                  onClick={() => patchSlot(editingText, { fill: c })}
-                  title={SWATCH_NAMES[c] ?? c}
-                  aria-label={`Text color: ${SWATCH_NAMES[c] ?? c}`}
-                  aria-pressed={editingSlot.fill === c}
-                />
-              ))}
-            </div>
-          </div>
-          <div className="edit-sheet-row">
-          <div className="edit-sheet-field">
-            <textarea
-              ref={textRef}
-              rows={2}
-              placeholder="Type the words for the front"
-              aria-label="Words for the front of the box"
-              aria-describedby="edit-sheet-count"
-              value={editingSlot.text}
-              onChange={(e) => typeText(editingText, e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  doneEditingText();
-                }
-              }}
-            />
-            {/* The count is read on focus (describedby); only "full" is
-                announced — not every keystroke. */}
-            <span
-              id="edit-sheet-count"
-              className={"edit-count" + (textFull ? " full" : "")}
-            >
-              {`${editingSlot.text.length}/${Math.max(textRoom, editingSlot.text.length)} characters`}
-            </span>
-            <span className="edit-count full" role="status">
-              {textFull ? "That's all that fits in this box" : ""}
-            </span>
-          </div>
-          <button className="btn primary" onClick={doneEditingText}>
-            Done
-          </button>
-          </div>
         </div>
       )}
     </div>
