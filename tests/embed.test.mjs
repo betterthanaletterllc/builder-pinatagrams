@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import {
   EMBED_HEADER,
@@ -343,4 +344,35 @@ test("the inside card's editor is given no box photo, so it works flat", () => {
 
   const page = readFileSync(new URL("../src/app/embed/design/page.tsx", import.meta.url), "utf8");
   assert.ok(page.includes("embedEditorStyle(style, side)"), "the page no longer strips the box photo for the inside card");
+});
+
+test("the editor's text box names the card being made — the front, for every shopper", () => {
+  const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+  const editor = read("../src/app/design/editor.tsx");
+  // The default is the front, and the front's words are the ones shoppers have always seen.
+  assert.match(editor, /\n  surface = "front",\n/);
+  assert.ok(editor.includes('"Type the words for the front"'));
+  assert.ok(editor.includes('"Words for the front of the box"'));
+  assert.ok(editor.includes('"Type the words for the message graphic"'));
+
+  // Only the staff embed says which card it is; the journey never does.
+  assert.ok(read("../src/app/embed/design/embed-design.tsx").includes("surface={side}"));
+  const tsx = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(name)) tsx.push(full);
+    }
+  };
+  walk(new URL("../src", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+  const passers = tsx
+    .filter((file) => /\bsurface=\{/.test(readFileSync(file, "utf8")))
+    .map((file) => file.replace(/\\/g, "/").replace(/^.*\/src\//, "src/"))
+    .sort();
+  assert.deepEqual(passers, [
+    "src/app/design/editor-shell.tsx", // hands it on
+    "src/app/embed/design/embed-design.tsx", // the staff embed
+    "src/v2/design/editor-view.tsx", // hands it on
+  ]);
 });
