@@ -231,6 +231,7 @@ export default function EmbedDesign({
           style={style}
           graphic={phase.graphic}
           retry={phase.retry}
+          surface={side}
           onClose={onClose}
           onSave={onSave}
           onAssets={onAssets}

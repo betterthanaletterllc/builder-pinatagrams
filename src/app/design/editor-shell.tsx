@@ -21,10 +21,13 @@ export default function EditorShell({
   initialDesign,
   initialAssets,
   startText,
+  surface,
 }: {
   bodyStyleId: string;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
+  // The front label (the default) or the message graphic (staff embed).
+  surface?: "front" | "inside";
   onSave?: (
     design: DesignDocument,
     preview: string,
@@ -50,6 +53,7 @@ export default function EditorShell({
       initialDesign={initialDesign}
       initialAssets={initialAssets}
       startText={startText}
+      surface={surface}
     />
   );
 }

@@ -480,10 +480,15 @@ export default function Editor({
   initialDesign,
   initialAssets,
   startText,
+  surface = "front",
 }: {
   bodyStyleId: string;
   boxImageUrl: string | null;
   logoZone: LogoZone | null;
+  // Which card is being made, for the words around the text box: the front
+  // label (every shopper), or the message graphic — the card inside the box
+  // (the staff embed, /embed/design?side=inside).
+  surface?: "front" | "inside";
   onSave?: (
     design: DesignDocument,
     preview: string,
@@ -1860,8 +1865,14 @@ export default function Editor({
             <textarea
               ref={textRef}
               rows={2}
-              placeholder="Type the words for the front"
-              aria-label="Words for the front of the box"
+              placeholder={
+                surface === "inside"
+                  ? "Type the words for the message graphic"
+                  : "Type the words for the front"
+              }
+              aria-label={
+                surface === "inside" ? "Words for the message graphic" : "Words for the front of the box"
+              }
               aria-describedby="edit-sheet-count"
               value={editingSlot.text}
               onChange={(e) => typeText(editingText, e.target.value)}
