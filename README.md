@@ -91,6 +91,9 @@ message contract are in `src/lib/embed.ts`; Paper keeps the other copy in
   the design just isn't sent anywhere.
 - `?style=` names the body whose box the "On the box" preview shows (hub id
   or name; unknown → the default).
+- `?side=inside` makes the card inside the box (the one the message prints
+  on) instead of the front label: the same editor and print size, flat only
+  — the box photo shows the front (`embedSide`, `embedEditorStyle`).
 
 ### `/embed/sample` — the journey's step one, for starting a sample
 
@@ -106,13 +109,21 @@ step; a test fails if the page stops importing those components.
 - Differences from the journey: every body style is offered, in stock or not
   (a sample can be of anything); nothing is priced; nothing is kept in the
   browser; no cart, checkout or analytics.
-- The one button is "Use this piñata". It sends the framing page a `choice`
+- The one button is "Use this piñata". The step stays on screen afterwards
+  — the box with the pick on it — saying what was sent, so it can be changed
+  and sent again. It sends the framing page a `choice`
   message: the body (hub id, name, and the body as Paper names it —
   `embedBodyToken`, the same token checkout puts after `CUSTOM-` in a SKU),
   the front (a store design's print file on the store's CDN; a hub
   graphic's file and sha256; or a design made here, staged as for an order),
   and the card the message prints on. Paper checks every address and keeps
   its own copies.
+- Paper answers each pick with `held` (kept · failed · released), and this
+  page tells Paper with `pick-state` when what is showing is no longer what
+  it was sent (or the editor is open on something not used yet) — so
+  "Sent to Paper ✓" does not stay on a pick Paper refused or let go, and
+  Paper can ask before using a pick that is no longer on screen
+  (`embedPickKey`, `embedPickState`, `readHeld`, `embedSentAfterHeld`).
 - Same framing rule and the same `ready` / `init` / `close` messages as
   `/embed/design`.
 

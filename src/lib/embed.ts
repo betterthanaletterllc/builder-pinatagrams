@@ -6,7 +6,10 @@
  *
  * There are two pages:
  *   /embed/design — the "Make your own" editor alone, for changing the label
- *     of a piñata that already exists in Paper;
+ *     of a piñata that already exists in Paper. With ?side=inside it makes
+ *     the card INSIDE the box (the one the message prints on) instead of the
+ *     front label: the same editor and the same print size, shown flat only,
+ *     because the box photo shows the front;
  *   /embed/sample — the journey's own step one ("Pick your design"), for
  *     starting a sample: cycle through the body styles, pick a design from
  *     the store's library or make your own. It is built from the very
@@ -35,9 +38,23 @@
  *   embed → parent   { source, v, type: "design",
  *                      art: { url, sha256 }, designUrl, preview }
  *   embed → parent   { source, v, type: "close" }
- *   embed → parent   { source, v, type: "choice",                 (/embed/sample)
+ *   embed → parent   { source, v, type: "choice", seq,            (/embed/sample)
  *                      style: { id, name, body },
  *                      graphic: custom | shopify | hub, messageCard, preview }
+ *   parent → embed   { source, v, type: "held", seq,              (/embed/sample)
+ *                      state: "kept" | "failed" | "released" }
+ *   embed → parent   { source, v, type: "pick-state",             (/embed/sample)
+ *                      state: "none" | "current" | "changed" | "saving" }
+ *
+ * "choice" is numbered (seq: 1, 2, …). "held" is the framing page saying what
+ * it did with that pick — kept it, could not take it, or let it go again —
+ * so "Sent to Paper" does not stay on a pick Paper refused or let go. (It is
+ * shown from the moment of sending: "sent" is true then, and the answer
+ * follows within moments.)
+ * "pick-state" tells the framing page how what is on screen now stands
+ * against what it was last sent, so it can ask before using a pick that is
+ * no longer what is showing. A framing page that sends no "held" and reads no
+ * "pick-state" still works: both are additions.
  *
  * Import-free on purpose: the edge middleware, the server page, the client
  * component and the node tests all load this file.
@@ -176,6 +193,28 @@ export function pickEmbedStyle<T extends { id: string; name: string }>(
   return styles.find((s) => s.id === fallbackId) ?? styles[0] ?? null;
 }
 
+/* --- /embed/design?side=: which card is being made -------------------------- */
+
+/** The front label, or the message graphic: the card inside the box that the message prints on. */
+export type EmbedSide = "front" | "inside";
+
+/** What ?side= asks for. Anything but "inside" is the front label. */
+export function embedSide(value: string | null | undefined): EmbedSide {
+  return (value ?? "").trim().toLowerCase() === "inside" ? "inside" : "front";
+}
+
+/**
+ * The body style as the editor is given it for that card. The inside card is
+ * never on the box photo (the photo shows the front label), so its editor is
+ * handed no photo and works flat — which is where editing happens anyway.
+ */
+export function embedEditorStyle<T extends { boxImageUrl: string | null; logoZone: unknown }>(
+  style: T,
+  side: EmbedSide,
+): T {
+  return side === "inside" ? { ...style, boxImageUrl: null, logoZone: null } : style;
+}
+
 /* --- /embed/sample: "this piñata" ------------------------------------------ */
 
 // Checkout sells every piñata as the Custom Built product's CUSTOM-{BODY}
@@ -205,6 +244,8 @@ export type EmbedChoice = {
   source: typeof EMBED_SOURCE;
   v: typeof EMBED_VERSION;
   type: "choice";
+  /** Which send this is (1, 2, …), for the framing page's "held" answer. */
+  seq: number | null;
   /** The body style: the hub's id and name, and the body as Paper names it. */
   style: { id: string; name: string; body: string };
   graphic: EmbedGraphic;
@@ -219,11 +260,13 @@ export function embedChoiceMessage(input: {
   graphic: EmbedGraphic;
   messageCard: string | null;
   preview: string | null;
+  seq?: number | null;
 }): EmbedChoice {
   return {
     source: EMBED_SOURCE,
     v: EMBED_VERSION,
     type: "choice",
+    seq: input.seq ?? null,
     style: { id: input.style.id, name: input.style.name, body: embedBodyToken(input.style.id) },
     graphic: input.graphic,
     messageCard: input.messageCard,
@@ -253,4 +296,106 @@ export function embedGraphicFor(
       : null;
   }
   return g.art ? { kind: "shopify", design: g.design, title: g.title, art: g.art } : null;
+}
+
+/**
+ * What a pick is, as one string: the body and the front. Two picks with the
+ * same key are the same pick. A design made in the editor is known by its
+ * print file's sha256, so a design changed since it was sent is a different
+ * pick (and one whose print file is not staged yet is never a sent one).
+ */
+export function embedPickKey(
+  styleId: string,
+  g:
+    | { type: "custom"; artSha256?: string | null }
+    | { type: "shopify"; design: string }
+    | { type: "hub"; design: string },
+): string {
+  const front = g.type === "custom" ? `custom:${g.artSha256 ?? ""}` : `${g.type}:${g.design}`;
+  return `${styleId}|${front}`;
+}
+
+/** How what is on screen stands against what the framing page was last sent. */
+export type EmbedPickState =
+  /** Nothing is with the framing page (never sent, or it let the pick go). */
+  | "none"
+  /** What is on screen is what was last sent. */
+  | "current"
+  /** Something else is on screen now. */
+  | "changed"
+  /** The button was pressed; the pick goes the moment its design is saved. */
+  | "saving";
+
+export function embedPickState(input: {
+  /** embedPickKey of what was last sent, or null. */
+  sentKey: string | null;
+  /** embedPickKey of what is on screen. */
+  nowKey: string;
+  /** "Use this piñata" was pressed and the pick is waiting for its print file. */
+  waiting: boolean;
+  /** The editor is open: a design is being made or changed and is not the pick yet. */
+  editing?: boolean;
+}): EmbedPickState {
+  if (input.waiting) return "saving";
+  if (input.sentKey === null) return "none";
+  // Work going on in the editor is "something else" until it is used.
+  if (input.editing) return "changed";
+  return input.sentKey === input.nowKey ? "current" : "changed";
+}
+
+export type EmbedPickStateMessage = {
+  source: typeof EMBED_SOURCE;
+  v: typeof EMBED_VERSION;
+  type: "pick-state";
+  state: EmbedPickState;
+};
+
+export function embedPickStateMessage(state: EmbedPickState): EmbedPickStateMessage {
+  return { source: EMBED_SOURCE, v: EMBED_VERSION, type: "pick-state", state };
+}
+
+/** The pick last sent to the framing page, and what it has said about it. */
+export type EmbedSent = {
+  /** embedPickKey of what was sent. */
+  key: string;
+  /** Its number, which the framing page's answer carries. */
+  seq: number;
+  /** "sent": no answer (yet). "kept": it has its copy. "failed": it could not take it. */
+  held: "sent" | "kept" | "failed";
+};
+
+/**
+ * What is remembered as sent, after the framing page's answer. Only an
+ * answer about the LATEST pick counts — one about an older pick changes
+ * nothing — and a pick it let go again is no longer a sent one at all.
+ */
+export function embedSentAfterHeld(sent: EmbedSent | null, held: EmbedHeld): EmbedSent | null {
+  if (!sent || sent.seq !== held.seq) return sent;
+  if (held.state === "released") return null;
+  return { ...sent, held: held.state };
+}
+
+/** What the framing page did with the pick numbered `seq`. */
+export type EmbedHeld = {
+  seq: number;
+  /** It has its own copy · it could not take it · it let it go again. */
+  state: "kept" | "failed" | "released";
+};
+
+/**
+ * Read a "held" the framing page sent. Null for anything else, from anywhere
+ * else, or not of this version.
+ */
+export function readHeld(
+  origin: string,
+  data: unknown,
+  allowedOrigins: readonly string[],
+): EmbedHeld | null {
+  if (!allowedOrigins.includes(origin)) return null;
+  if (!data || typeof data !== "object") return null;
+  const m = data as Record<string, unknown>;
+  if (m.source !== EMBED_SOURCE || m.v !== EMBED_VERSION || m.type !== "held") return null;
+  if (typeof m.seq !== "number" || !Number.isInteger(m.seq) || m.seq < 1) return null;
+  if (m.state !== "kept" && m.state !== "failed" && m.state !== "released") return null;
+  return { seq: m.seq, state: m.state };
 }

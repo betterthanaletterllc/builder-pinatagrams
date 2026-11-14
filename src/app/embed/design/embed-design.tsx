@@ -12,7 +12,7 @@ import {
   saveDesignArt,
   subscribeDesignSaves,
 } from "@/lib/design-upload";
-import { embedDesignMessage, embedMessage, readInit } from "@/lib/embed";
+import { embedDesignMessage, embedMessage, readInit, type EmbedSide } from "@/lib/embed";
 import type { DesignAssets, GraphicChoice } from "@/lib/flow";
 import type { HubBodyStyle } from "@/lib/hub";
 import EditorView from "@/v2/design/editor-view";
@@ -33,6 +33,10 @@ import e from "./embed.module.css";
  *
  * Opened on its own (no frame) it still works, so it can be looked at — the
  * design just isn't sent anywhere.
+ *
+ * `side` says which card is being made: the front label, or the message
+ * graphic (the card inside the box). The editor is the same; only the words
+ * around it differ.
  */
 
 /** How long to wait for the framing page to say what to open before
@@ -73,12 +77,17 @@ function customGraphic(
 
 export default function EmbedDesign({
   style,
+  side = "front",
   parents,
 }: {
   style: HubBodyStyle;
+  /** The front label (the default), or the card inside the box. */
+  side?: EmbedSide;
   /** The origins allowed to frame this page and to talk to it. */
   parents: string[];
 }) {
+  const inside = side === "inside";
+  const what = inside ? "Your message graphic" : "Your label";
   const [phase, setPhase] = useState<Phase>({ at: "waiting" });
   const [framed, setFramed] = useState(true);
   // The framing page's origin, once it has spoken.
@@ -209,6 +218,15 @@ export default function EmbedDesign({
             </Callout>
           </div>
         )}
+        {inside && (
+          <div className={e.panel}>
+            <Callout tone="info">
+              This is the <strong>message graphic</strong> — the card inside the box, which the
+              message prints on. It is the same size as the front label. If a message is typed in
+              Paper as well, it prints over the middle of it.
+            </Callout>
+          </div>
+        )}
         <EditorView
           style={style}
           graphic={phase.graphic}
@@ -227,7 +245,7 @@ export default function EmbedDesign({
       <main className={e.page}>
         <div className={e.panel}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className={e.preview} src={phase.preview} alt="Your label" />
+          <img className={e.preview} src={phase.preview} alt={what} />
           {failed ? (
             <>
               <Callout tone="error" role="alert">
@@ -264,7 +282,7 @@ export default function EmbedDesign({
     <main className={e.page}>
       <div className={e.panel}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className={e.preview} src={phase.preview} alt="Your label" />
+        <img className={e.preview} src={phase.preview} alt={what} />
         {framed ? (
           <Callout tone="success" role="status">
             Sent to Paper, which keeps its own copy of the print file. To work on it some more —

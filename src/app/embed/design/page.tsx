@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { embedParentOrigins, pickEmbedStyle } from "@/lib/embed";
+import { embedEditorStyle, embedParentOrigins, embedSide, pickEmbedStyle } from "@/lib/embed";
 import { previewOverridesAllowed } from "@/lib/flow-version";
 import { getCatalog, type HubBodyStyle } from "@/lib/hub";
 import { param, requestContext } from "@/v2/lib/server";
@@ -20,6 +20,9 @@ export const metadata: Metadata = {
  * or the name Paper prints). Any body will do, in stock or not — a sample
  * can be of anything — and an unknown one falls back to the usual default.
  * With the hub unreachable the editor still opens, flat only.
+ *
+ * ?side=inside makes the card inside the box (the one the message prints
+ * on) instead of the front label — the same editor, flat only (lib/embed).
  */
 export default async function EmbedDesignPage({
   searchParams,
@@ -28,6 +31,7 @@ export default async function EmbedDesignPage({
 }) {
   const sp = await searchParams;
   const wanted = param(sp, "style") ?? null;
+  const side = embedSide(param(sp, "side"));
   const { host, previewVariant } = await requestContext(undefined);
 
   let style: HubBodyStyle | null = null;
@@ -51,7 +55,8 @@ export default async function EmbedDesignPage({
 
   return (
     <EmbedDesign
-      style={style}
+      style={embedEditorStyle(style, side)}
+      side={side}
       parents={embedParentOrigins(!previewOverridesAllowed())}
     />
   );

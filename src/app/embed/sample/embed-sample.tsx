@@ -20,7 +20,13 @@ import {
   embedChoiceMessage,
   embedGraphicFor,
   embedMessage,
+  embedPickKey,
+  embedPickState,
+  embedPickStateMessage,
+  embedSentAfterHeld,
+  readHeld,
   readInit,
+  type EmbedSent,
 } from "@/lib/embed";
 import type { DesignAssets, GraphicChoice } from "@/lib/flow";
 import type {
@@ -45,9 +51,7 @@ import {
 import { designName } from "@/v2/lib/order";
 import type { BoxInterior, OccasionStrip } from "@/v2/lib/types";
 import BoxThumb, { previewArt } from "@/v2/ui/box-thumb";
-import { Button } from "@/v2/ui/controls";
 import { Callout } from "@/v2/ui/feedback";
-import e from "../design/embed.module.css";
 
 /**
  * Step one of the journey, framed inside Paper (lib/embed): the Stage with
@@ -61,7 +65,13 @@ import e from "../design/embed.module.css";
  *  - the one button says "Use this piñata", and instead of moving on to the
  *    card it tells the page that framed it what was picked: the body, the
  *    front (a store design, a hub graphic, or a design made here — staged
- *    exactly as for an order), and the card the message prints on.
+ *    exactly as for an order), and the card the message prints on. The step
+ *    stays on screen afterwards — the box with the design on it, the grid,
+ *    everything — saying what was sent, so the pick is still seen on the box
+ *    and can be changed and sent again;
+ *  - the two pages keep each other honest: Paper answers each pick ("held":
+ *    kept it, could not take it, let it go again), and this page tells Paper
+ *    when what is showing is no longer what it was sent ("pick-state").
  *
  * Opened on its own (no frame) it still works, so it can be looked at — the
  * pick just isn't sent anywhere.
@@ -73,7 +83,6 @@ type SheetState =
   | { kind: "library"; occasion: OccasionId | null; search?: boolean }
   | null;
 
-type Sent = { styleName: string; name: string; preview: string | null };
 
 export default function EmbedSample({
   parents,
@@ -115,7 +124,9 @@ export default function EmbedSample({
   const [editor, setEditor] = useState<{ retry: boolean; text: string | null } | null>(null);
   // "Use this piñata" was pressed while a design made here was still saving.
   const [wanted, setWanted] = useState(false);
-  const [sent, setSent] = useState<Sent | null>(null);
+  // The pick last sent to the framing page, or null (none yet, or let go again).
+  const [sent, setSent] = useState<EmbedSent | null>(null);
+  const seq = useRef(0);
   const [framed, setFramed] = useState(true);
   const parentOrigin = useRef<string | null>(null);
   const libraryScroll = useRef(0);
@@ -147,6 +158,12 @@ export default function EmbedSample({
       if (ev.source !== window.parent) return;
       // The framing page's answer to "ready" says which origin it is.
       if (readInit(ev.origin, ev.data, parents)) parentOrigin.current = ev.origin;
+      // What it did with a pick: only the answer about the latest one counts.
+      const held = readHeld(ev.origin, ev.data, parents);
+      if (held) {
+        parentOrigin.current = ev.origin;
+        setSent((s) => embedSentAfterHeld(s, held));
+      }
     };
     window.addEventListener("message", onMessage);
     for (const origin of parents) window.parent.postMessage(embedMessage("ready"), origin);
@@ -172,16 +189,18 @@ export default function EmbedSample({
     const picked = embedGraphicFor(graphic);
     if (!picked || !style) return;
     const preview = graphic.type === "custom" ? graphic.preview || null : previewArt(graphic, 720);
+    seq.current += 1;
     post(
       embedChoiceMessage({
         style: { id: style.id, name: style.name },
         graphic: picked,
         messageCard: messageCardFor(graphic),
         preview,
+        seq: seq.current,
       }),
     );
     setWanted(false);
-    setSent({ styleName: style.name, name: designName(graphic), preview });
+    setSent({ key: embedPickKey(style.id, graphic), seq: seq.current, held: "sent" });
   }, [graphic, post, style]);
 
   // Pressed while saving: it goes the moment the print file is staged.
@@ -193,6 +212,19 @@ export default function EmbedSample({
     if (reported) send();
     else setWanted(true);
   };
+
+  // The framing page is told how what is showing stands against what it was
+  // sent, so it can ask before using a pick that is no longer on screen.
+  const nowKey = style ? embedPickKey(style.id, graphic) : "";
+  const pickState = embedPickState({
+    sentKey: sent?.key ?? null,
+    nowKey,
+    waiting: wanted && saving,
+    editing: editor !== null,
+  });
+  useEffect(() => {
+    post(embedPickStateMessage(pickState));
+  }, [pickState, post]);
 
   /* --- choices (as the journey makes them) -------------------------------------- */
 
@@ -260,34 +292,11 @@ export default function EmbedSample({
   // No header here, so nothing for the pinned Stage to sit under.
   const frame = { "--pg-header-h": "0px" } as CSSProperties;
 
-  if (sent) {
-    return (
-      <main className={e.page} style={frame}>
-        <div className={e.panel}>
-          {sent.preview && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img className={e.preview} src={sent.preview} alt="The front you picked" />
-          )}
-          {framed ? (
-            <Callout tone="success" role="status">
-              Sent to Paper: {sent.styleName}, {sent.name}. To pick something else — or to send it
-              again — press &ldquo;Change this piñata&rdquo;.
-            </Callout>
-          ) : (
-            <Callout tone="info" role="status">
-              Picked: {sent.styleName}, {sent.name}. Nothing was sent anywhere, because this page
-              isn&apos;t open inside Paper.
-            </Callout>
-          )}
-          <div className={e.actions}>
-            <Button variant="secondary" onClick={() => setSent(null)}>
-              Change this piñata
-            </Button>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  // The pick on screen is the one that was sent — or has been changed since.
+  const isSent = sent !== null && sent.key === nowKey;
+  const changedSinceSent = sent !== null && !isSent;
+  // Paper answered that it could not take it (its own page says why).
+  const refused = isSent && sent.held === "failed";
 
   return (
     <main className={f.flow} style={frame}>
@@ -370,8 +379,10 @@ export default function EmbedSample({
               main={style.name}
               sub={designName(graphic)}
               cta={{
-                label: "Use this piñata",
-                short: "Use this",
+                // Opened on its own nothing is sent, so the button does not say so.
+                label:
+                  isSent && !refused ? (framed ? "Sent to Paper ✓" : "Picked ✓") : "Use this piñata",
+                short: isSent && !refused ? (framed ? "Sent ✓" : "Picked ✓") : "Use this",
                 onClick: use,
                 busy: wanted && saving,
                 notReady: failed,
@@ -392,6 +403,22 @@ export default function EmbedSample({
                 ) : wanted && saving ? (
                   <Callout tone="info" role="status">
                     Saving your design at print size… it is sent the moment it is ready.
+                  </Callout>
+                ) : refused ? (
+                  <Callout tone="error" role="alert">
+                    Paper could not take this pick — its page says why, just under this box. Press
+                    &ldquo;Use this piñata&rdquo; to send it again.
+                  </Callout>
+                ) : isSent ? (
+                  <Callout tone="success" role="status">
+                    {framed
+                      ? `Sent to Paper: ${style.name} · ${designName(graphic)}. To change it, pick another piñata or design here and press the button again.`
+                      : `Picked: ${style.name} · ${designName(graphic)}. Nothing was sent anywhere, because this page isn't open inside Paper.`}
+                  </Callout>
+                ) : changedSinceSent && framed ? (
+                  <Callout tone="warning" role="status">
+                    This is not what was sent to Paper. Press &ldquo;Use this piñata&rdquo; to send this
+                    one instead.
                   </Callout>
                 ) : null
               }

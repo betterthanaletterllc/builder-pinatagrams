@@ -180,11 +180,13 @@ test("the choice message names the body, the front and the card the message prin
       graphic,
       messageCard: "https://cdn.shopify.com/card.svg",
       preview: "https://cdn.shopify.com/thumb.png",
+      seq: 3,
     }),
     {
       source: EMBED_SOURCE,
       v: EMBED_VERSION,
       type: "choice",
+      seq: 3,
       style: { id: "pink-uni", name: "Pink Unicorn", body: "PINK UNICORN" },
       graphic,
       messageCard: "https://cdn.shopify.com/card.svg",
@@ -204,4 +206,141 @@ test("the sample page is under /embed, so it gets the framing rule and no chrome
   for (const banned of ["saveCart", "startCheckout", "trackV2", "trackAddToCart"]) {
     assert.equal(page.includes(banned), false, `the sample page uses ${banned}`);
   }
+});
+
+test("the sample page keeps the box on screen after the pick is sent", () => {
+  const page = readFileSync(new URL("../src/app/embed/sample/embed-sample.tsx", import.meta.url), "utf8");
+  // Once past its guard for "no body styles at all", the page returns ONE
+  // tree: the editor, or the step with the Stage. Nothing about a sent pick
+  // can swap the Stage for a flat picture of the label.
+  const body = page.slice(page.indexOf("export default function EmbedSample"));
+  // every place the component hands back something to draw, however nested
+  const screens = body.match(/\breturn\s*\(?\s*</g) ?? [];
+  assert.equal(screens.length, 1, "the page has more than one screen");
+  assert.equal(body.split("<Stage").length - 1, 1, "the Stage is drawn in exactly one place");
+  // The Stage's only alternative is the editor, never a "sent" state…
+  assert.match(body, /\{editor \? \(\s*<EditorView[\s\S]*?\) : \(\s*<div className=\{f\.layout\}>/);
+  // …and the page draws no picture of its own: no <img>, no flat preview.
+  assert.equal(/<img\b/.test(body), false, "the page draws a flat picture");
+  assert.equal(page.includes("embed.module.css"), false, "the flat-preview styles are back");
+});
+
+/* --- "held" and "pick-state": the two pages keep each other honest ------------- */
+
+const embed = await import("../src/lib/embed.ts");
+const { embedPickKey, embedPickState, embedPickStateMessage, readHeld } = embed;
+
+test("a pick is its body and its front; a design changed since is another pick", () => {
+  const store = { type: "shopify", design: "HBD01" };
+  assert.equal(embedPickKey("googly", store), embedPickKey("googly", { ...store, title: "any" }));
+  assert.notEqual(embedPickKey("googly", store), embedPickKey("tropical", store));
+  assert.notEqual(embedPickKey("googly", store), embedPickKey("googly", { type: "shopify", design: "HBD05" }));
+  // a hub graphic and a store design that share a code are still different picks
+  assert.notEqual(embedPickKey("googly", store), embedPickKey("googly", { type: "hub", design: "HBD01" }));
+
+  const made = { type: "custom", artSha256: "a".repeat(64) };
+  assert.equal(embedPickKey("googly", made), embedPickKey("googly", { ...made }));
+  assert.notEqual(embedPickKey("googly", made), embedPickKey("googly", { type: "custom", artSha256: "b".repeat(64) }));
+  // a design whose print file is not staged yet is never the one that was sent
+  assert.notEqual(embedPickKey("googly", made), embedPickKey("googly", { type: "custom", artSha256: null }));
+  assert.notEqual(embedPickKey("googly", made), embedPickKey("googly", { type: "custom" }));
+});
+
+test("what is showing is told against what was sent", () => {
+  const sent = embedPickKey("googly", { type: "shopify", design: "HBD01" });
+  const other = embedPickKey("camo", { type: "shopify", design: "HBD01" });
+  assert.equal(embedPickState({ sentKey: null, nowKey: sent, waiting: false }), "none");
+  assert.equal(embedPickState({ sentKey: sent, nowKey: sent, waiting: false }), "current");
+  assert.equal(embedPickState({ sentKey: sent, nowKey: other, waiting: false }), "changed");
+  // the button was pressed and the design is still saving: that wins, sent before or not
+  assert.equal(embedPickState({ sentKey: null, nowKey: other, waiting: true }), "saving");
+  assert.equal(embedPickState({ sentKey: sent, nowKey: other, waiting: true }), "saving");
+  assert.deepEqual(embedPickStateMessage("changed"), {
+    source: EMBED_SOURCE,
+    v: EMBED_VERSION,
+    type: "pick-state",
+    state: "changed",
+  });
+});
+
+test("only the framing page's own answer about a numbered pick is read", () => {
+  const held = { source: EMBED_SOURCE, v: EMBED_VERSION, type: "held", seq: 2, state: "kept" };
+  assert.deepEqual(readHeld(PAPER, held, [PAPER]), { seq: 2, state: "kept" });
+  assert.deepEqual(readHeld(PAPER, { ...held, state: "failed" }, [PAPER]), { seq: 2, state: "failed" });
+  assert.deepEqual(readHeld(PAPER, { ...held, state: "released" }, [PAPER]), { seq: 2, state: "released" });
+  assert.equal(readHeld("https://evil.example", held, [PAPER]), null);
+  assert.equal(readHeld(PAPER, { ...held, v: 2 }, [PAPER]), null);
+  assert.equal(readHeld(PAPER, { ...held, source: "someone-else" }, [PAPER]), null);
+  assert.equal(readHeld(PAPER, { ...held, type: "init" }, [PAPER]), null);
+  for (const seq of [0, -1, 1.5, "2", null, undefined, Number.NaN]) {
+    assert.equal(readHeld(PAPER, { ...held, seq }, [PAPER]), null, String(seq));
+  }
+  for (const state of ["ok", "", null, undefined, true]) {
+    assert.equal(readHeld(PAPER, { ...held, state }, [PAPER]), null, String(state));
+  }
+  assert.equal(readHeld(PAPER, "held", [PAPER]), null);
+  assert.equal(readHeld(PAPER, null, [PAPER]), null);
+  // an "init" is not a "held", and the other way round
+  assert.equal(readInit(PAPER, held, [PAPER]), null);
+});
+
+test("an open editor is something else until its design is used — once something was sent", () => {
+  const sent = embedPickKey("googly", { type: "shopify", design: "HBD01" });
+  assert.equal(embedPickState({ sentKey: sent, nowKey: sent, waiting: false, editing: true }), "changed");
+  assert.equal(embedPickState({ sentKey: sent, nowKey: sent, waiting: false, editing: false }), "current");
+  // with nothing sent there is nothing to be different from
+  assert.equal(embedPickState({ sentKey: null, nowKey: sent, waiting: false, editing: true }), "none");
+  // and a pick waiting for its print file is still "saving"
+  assert.equal(embedPickState({ sentKey: sent, nowKey: sent, waiting: true, editing: true }), "saving");
+});
+
+test("only the answer about the latest pick changes what is remembered as sent", () => {
+  const { embedSentAfterHeld } = embed;
+  const sent = { key: "googly|shopify:HBD01", seq: 3, held: "sent" };
+  assert.deepEqual(embedSentAfterHeld(sent, { seq: 3, state: "kept" }), { ...sent, held: "kept" });
+  assert.deepEqual(embedSentAfterHeld(sent, { seq: 3, state: "failed" }), { ...sent, held: "failed" });
+  // a failed pick that Paper then manages to keep (its "Try again") is kept
+  assert.deepEqual(
+    embedSentAfterHeld({ ...sent, held: "failed" }, { seq: 3, state: "kept" }),
+    { ...sent, held: "kept" },
+  );
+  // let go again: nothing is sent any more
+  assert.equal(embedSentAfterHeld(sent, { seq: 3, state: "released" }), null);
+  // an answer about an older (or any other) pick changes nothing
+  for (const state of ["kept", "failed", "released"]) {
+    assert.equal(embedSentAfterHeld(sent, { seq: 2, state }), sent, state);
+    assert.equal(embedSentAfterHeld(sent, { seq: 4, state }), sent, state);
+  }
+  // and with nothing sent there is nothing to answer
+  assert.equal(embedSentAfterHeld(null, { seq: 1, state: "kept" }), null);
+});
+
+test("a choice is numbered when it is sent, and unnumbered otherwise", () => {
+  const graphic = { kind: "shopify", design: "HBD01", title: "Confetti Birthday", art: "https://cdn.shopify.com/a.png" };
+  const base = { style: { id: "googly", name: "Googly" }, graphic, messageCard: null, preview: null };
+  assert.equal(embedChoiceMessage({ ...base, seq: 7 }).seq, 7);
+  assert.equal(embedChoiceMessage(base).seq, null);
+});
+
+/* --- /embed/design?side=inside: the card inside the box ------------------------ */
+
+const { embedEditorStyle, embedSide } = await import("../src/lib/embed.ts");
+
+test("only ?side=inside makes the inside card; anything else is the front label", () => {
+  assert.equal(embedSide("inside"), "inside");
+  assert.equal(embedSide(" Inside "), "inside");
+  for (const other of [null, undefined, "", "front", "outside", "insides", "1"]) {
+    assert.equal(embedSide(other), "front", String(other));
+  }
+});
+
+test("the inside card's editor is given no box photo, so it works flat", () => {
+  const style = { id: "googly", name: "Googly", boxImageUrl: "https://x/box.png", logoZone: { x: 0.2 }, inStock: true };
+  assert.deepEqual(embedEditorStyle(style, "inside"), { ...style, boxImageUrl: null, logoZone: null });
+  // the front label's editor gets the style untouched, and nothing is changed in place
+  assert.equal(embedEditorStyle(style, "front"), style);
+  assert.equal(style.boxImageUrl, "https://x/box.png");
+
+  const page = readFileSync(new URL("../src/app/embed/design/page.tsx", import.meta.url), "utf8");
+  assert.ok(page.includes("embedEditorStyle(style, side)"), "the page no longer strips the box photo for the inside card");
 });
