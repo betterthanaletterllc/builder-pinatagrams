@@ -835,6 +835,36 @@ h1 {
   background: rgba(255, 255, 255, 0.92);
 }
 
+/* layout row caption: the layouts, named, right above the label */
+.tmpl-caption {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* the blank single-box label: photos or words, straight from the box */
+.slot-start {
+  z-index: 4;
+  padding: 10px;
+  text-align: center;
+}
+
+.slot-menu.slot-start .btn {
+  min-width: 170px;
+  font-size: 15px;
+  padding: 10px 16px;
+}
+
+.slot-start-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .slot-menu .btn {
   font-size: 13px;
   padding: 7px 10px;

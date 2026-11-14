@@ -522,12 +522,7 @@ export default function Editor({
       ),
     };
   });
-  // Fresh designs start at "Add your photos"; edits (and labels that start
-  // with words) skip straight in.
-  const [picked, setPicked] = useState(!!editable || !!seedText);
-  // The start screen can open the full layout picker instead.
-  const [showLayouts, setShowLayouts] = useState(false);
-  // "Adding your photos (2 of 3)…" on the start screen.
+  // "Adding your photos (2 of 3)…" while a blank label takes several.
   const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [editingText, setEditingText] = useState<number | null>(null);
@@ -584,7 +579,7 @@ export default function Editor({
     ro.observe(el);
     return () => ro.disconnect();
     // re-run when the loading gate lifts and the wrapper first renders
-  }, [boxImg, boxFailed, picked]);
+  }, [boxImg, boxFailed]);
 
   /* --- autosave -------------------------------------------------------------
    * Debounced while editing, flushed when the tab hides or the editor
@@ -600,8 +595,12 @@ export default function Editor({
   );
   const initialDoc = useRef(doc);
   const hasContent = doc.slots.some(Boolean);
-  const dirty =
-    picked && (editable ? doc !== initialDoc.current : hasContent);
+  const dirty = editable ? doc !== initialDoc.current : hasContent;
+  // A fresh design only clears the saved one once it has had something in
+  // it — opening on a blank label mustn't wipe the "Continue your design?"
+  // offer before it's answered.
+  const hadContent = useRef(false);
+  if (hasContent) hadContent.current = true;
   const sessionToken = useRef(0);
   const finished = useRef(false);
   const autosaveTimer = useRef<number | undefined>(undefined);
@@ -654,7 +653,7 @@ export default function Editor({
   }, []);
 
   useEffect(() => {
-    if (!picked || finished.current) return;
+    if (finished.current) return;
     window.clearTimeout(autosaveTimer.current);
     autosaveTimer.current = window.setTimeout(() => {
       if (finished.current) return;
@@ -663,7 +662,7 @@ export default function Editor({
           { doc, mode, baseKey, savedAt: Date.now() },
           sessionToken.current,
         );
-      } else if (!editable) {
+      } else if (!editable && hadContent.current) {
         // a fresh design emptied back out — nothing worth resuming
         void clearEditorAutosave();
       }
@@ -671,7 +670,7 @@ export default function Editor({
     return () => window.clearTimeout(autosaveTimer.current);
     // doc identity changes on every edit
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, picked]);
+  }, [doc]);
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -742,6 +741,29 @@ export default function Editor({
   );
   useEffect(() => setTextFull(false), [editingText]);
 
+  // The words field takes the cursor whenever a box opens for editing — and
+  // again on "Edit text" / ✏️ while it's already open (a tap elsewhere had
+  // taken the cursor, so the next keys went nowhere).
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  const [focusTick, setFocusTick] = useState(0);
+  useEffect(() => {
+    const el = textRef.current;
+    if (editingText === null || !el) return;
+    el.focus({ preventScroll: true });
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [editingText, focusTick]);
+  const editText = (i: number) => {
+    setSelectedSlot(i);
+    setEditingText(i);
+    setFocusTick((n) => n + 1);
+  };
+  // Font / colour / edit buttons while typing: don't take the cursor out of
+  // the words (on a phone that also drops the keyboard).
+  const keepTyping = (e: { preventDefault(): void }) => {
+    if (editingText !== null) e.preventDefault();
+  };
+
   // Touch devices get "tap" wording; mice get "double-click".
   const coarsePointer = useMemo(
     () =>
@@ -804,7 +826,6 @@ export default function Editor({
 
   const pickTemplate = (id: TemplateId) => {
     setDoc(newDesign(bodyStyleId, id));
-    setPicked(true);
     setSelectedSlot(null);
     setEditingText(null);
     setMenuFor(null);
@@ -882,11 +903,11 @@ export default function Editor({
     }
   };
 
-  /* --- start screen: photos first ------------------------------------------
-   * People arrive thinking "I want to use my photo", not "how should my
-   * label split?". So the start is "Add your photos": pick 1–4 and the
-   * layout follows from how many — with a box left for words where it
-   * fits. Layouts stay switchable from the toolbar afterwards. */
+  /* --- a fresh design opens on the single-box layout ----------------------
+   * The label shows one big box (the other layouts sit right above it).
+   * Its "Add photos" takes 1–4 at once while the label is still blank: one
+   * fills the box, more pick the layout from how many — with a box left for
+   * words where it fits. */
   const startPhotos = () => {
     setNotice(null);
     startFileRef.current?.click();
@@ -895,10 +916,10 @@ export default function Editor({
   const onStartPhotos = async (files: File[]) => {
     const list = files.slice(0, MAX_START_PHOTOS);
     if (!list.length) return;
-    // 1 photo + words · photo, words, photo · 3 photos + words · 4 photos
+    // 1 photo fills the label · photo, words, photo · 3 photos + words · 4 photos
     const plan: { template: TemplateId; boxes: number[] } =
       list.length === 1
-        ? { template: "halves", boxes: [0] }
+        ? { template: "whole", boxes: [0] }
         : list.length === 2
           ? { template: "thirds", boxes: [0, 2] }
           : { template: "quarters", boxes: [0, 1, 2, 3].slice(0, list.length) };
@@ -936,7 +957,6 @@ export default function Editor({
       return;
     }
     setDoc({ ...newDesign(bodyStyleId, plan.template), slots });
-    setPicked(true);
     setSelectedSlot(null);
     setEditingText(null);
     setMenuFor(null);
@@ -951,25 +971,10 @@ export default function Editor({
     track("editor_photos_first", { count: list.length, failed });
   };
 
-  /** "Just words": one box across the whole label, straight into typing. */
-  const startWords = () => {
-    setDoc({
-      ...newDesign(bodyStyleId, "whole"),
-      slots: [{ kind: "text", text: "", fill: TEXT_SWATCHES[0], font: "bold" }],
-    });
-    setPicked(true);
-    setMenuFor(null);
-    setSelectedSlot(0);
-    setEditingText(0);
-    setResume(null);
-    track("editor_words_first");
-  };
-
   const addTextTo = (i: number) => {
     setSlot(i, { kind: "text", text: "", fill: TEXT_SWATCHES[0], font: "bold" });
     setMenuFor(null);
-    setSelectedSlot(i);
-    setEditingText(i); // straight into typing
+    editText(i); // straight into typing
   };
 
   const doneEditingText = () => {
@@ -1136,7 +1141,6 @@ export default function Editor({
   const resumeDesign = () => {
     if (!resume) return;
     setDoc({ ...resume.doc, bodyStyleId });
-    setPicked(true);
     setSelectedSlot(null);
     setEditingText(null);
     setMenuFor(null);
@@ -1187,7 +1191,7 @@ export default function Editor({
     </div>
   ) : null;
 
-  /* --- start screen (fresh designs) --------------------------------------- */
+  /* --- a blank label takes several photos at once ------------------------ */
   const startInput = (
     <input
       ref={startFileRef}
@@ -1202,69 +1206,10 @@ export default function Editor({
       }}
     />
   );
-  if (!picked) {
-    return (
-      <div className="editor-v4">
-        {resumeCard}
-        {startInput}
-        <div className="start-photos">
-          <p className="tmpl-heading">Start with your photos</p>
-          <button
-            className="btn primary block start-add"
-            onClick={startPhotos}
-            disabled={!!adding}
-          >
-            {adding ? (
-              <>
-                <span className="mini-spinner" aria-hidden /> Adding your photos ({adding.done} of{" "}
-                {adding.total})…
-              </>
-            ) : (
-              "📷 Add your photos"
-            )}
-          </button>
-          <p className="note start-note">
-            Pick 1 to {MAX_START_PHOTOS} — we&apos;ll lay them out, with room for your words.
-          </p>
-          {notice && (
-            <div className="notice warn editor-notice" role="alert">
-              <span>{notice}</span>
-            </div>
-          )}
-          <button className="btn block" onClick={startWords} disabled={!!adding}>
-            ✏️ Just words
-          </button>
-          {!showLayouts && (
-            <button className="link-btn start-layouts" onClick={() => setShowLayouts(true)}>
-              Or choose a layout yourself
-            </button>
-          )}
-        </div>
-        {showLayouts && (
-          <>
-            <p className="tmpl-heading">How should your label split?</p>
-            <div className="tmpl-grid">
-              {TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  className="tmpl-card"
-                  onClick={() => pickTemplate(t.id)}
-                >
-                  <TmplMini id={t.id} />
-                  <span className="tmpl-label">{t.label}</span>
-                </button>
-              ))}
-            </div>
-            <p className="note">
-              Each box holds a photo or some text — you can switch layouts later.
-            </p>
-          </>
-        )}
-      </div>
-    );
-  }
-
   /* --- the editor ---------------------------------------------------------- */
+  // A blank single-box label: its box offers photos (several at once) or words.
+  const blank = !doc.slots.some(Boolean);
+  const startBox = blank && doc.template === "whole";
   const selected = selectedSlot !== null ? (doc.slots[selectedSlot] ?? null) : null;
   const editingSlot =
     editingText !== null && doc.slots[editingText]?.kind === "text"
@@ -1325,7 +1270,10 @@ export default function Editor({
   return (
     <div className="editor-v4">
       <div className="editor-toolbar">
-        <div className="tmpl-switch" role="group" aria-label="Layout">
+        <p className="tmpl-caption" id="tmpl-caption">
+          {startBox ? "One big box — or pick a layout:" : "Layout"}
+        </p>
+        <div className="tmpl-switch" role="group" aria-labelledby="tmpl-caption">
           {TEMPLATES.map((t) => (
             <button
               key={t.id}
@@ -1338,6 +1286,7 @@ export default function Editor({
             </button>
           ))}
         </div>
+        {startInput}
         <input
           ref={fileRef}
           type="file"
@@ -1470,10 +1419,7 @@ export default function Editor({
                       rect={r}
                       fontsReady={fontsReady}
                       onSelect={() => setSelectedSlot(i)}
-                      onEdit={() => {
-                        setSelectedSlot(i);
-                        setEditingText(i);
-                      }}
+                      onEdit={() => editText(i)}
                     />
                   );
                 })}
@@ -1507,9 +1453,29 @@ export default function Editor({
           </Stage>
 
           {/* DOM overlays: ＋ on empty boxes, action menu, per-box controls */}
+          {startBox && rects[0] && (
+            <div className="slot-menu slot-start" style={slotCss(rects[0])}>
+              {adding ? (
+                <span className="slot-start-busy" role="status">
+                  <span className="mini-spinner" aria-hidden /> Adding your photos ({adding.done} of{" "}
+                  {adding.total})…
+                </span>
+              ) : (
+                <>
+                  <button className="btn primary" onClick={startPhotos}>
+                    📷 Add photos
+                  </button>
+                  <button className="btn" onClick={() => addTextTo(0)}>
+                    ✏️ Add words
+                  </button>
+                  <span className="slot-hint">Up to {MAX_START_PHOTOS} photos — we&apos;ll lay them out</span>
+                </>
+              )}
+            </div>
+          )}
           {rects.map((r, i) => {
             const c = doc.slots[i];
-            if (c) return null;
+            if (c || (startBox && i === 0)) return null;
             return menuFor === i ? (
               <div key={i} className="slot-menu" style={slotCss(r)}>
                 <button className="btn" onClick={() => requestPhoto(i)}>
@@ -1555,10 +1521,8 @@ export default function Editor({
                   <button
                     title="Edit text"
                     aria-label="Edit text"
-                    onClick={() => {
-                      setSelectedSlot(i);
-                      setEditingText(i);
-                    }}
+                    onMouseDown={keepTyping}
+                    onClick={() => editText(i)}
                   >
                     ✏️
                   </button>
@@ -1611,7 +1575,9 @@ export default function Editor({
                 ? coarsePointer
                   ? "Tap the text to edit it — it sizes itself to fit."
                   : "Double-click the text to edit it — it sizes itself to fit."
-                : boxed
+                : startBox
+                  ? "Start with one photo across the whole label — or pick a layout above for more boxes."
+                  : boxed
                   ? "This is the printed area on your box — tap a ＋ to fill a box."
                   : "Your label, edge to edge — tap a ＋ to fill a box."}
         </p>
@@ -1638,7 +1604,8 @@ export default function Editor({
             <>
               <button
                 className="btn mini"
-                onClick={() => setEditingText(selectedSlot)}
+                onMouseDown={keepTyping}
+                onClick={() => editText(selectedSlot)}
               >
                 Edit text
               </button>
@@ -1651,6 +1618,7 @@ export default function Editor({
                       key={f.id}
                       className={"font-btn" + (on ? " on" : "")}
                       aria-pressed={on}
+                      onMouseDown={keepTyping}
                       onClick={() => setFont(selectedSlot, f.id)}
                       style={{ fontFamily: face.family, fontWeight: face.style === "bold" ? 700 : 400 }}
                     >
@@ -1666,6 +1634,7 @@ export default function Editor({
                     "swatch" + (selected.fill === c ? " active" : "")
                   }
                   style={{ background: c }}
+                  onMouseDown={keepTyping}
                   onClick={() => patchSlot(selectedSlot, { fill: c })}
                   title={SWATCH_NAMES[c] ?? c}
                   aria-label={`Text color: ${SWATCH_NAMES[c] ?? c}`}
@@ -1806,6 +1775,7 @@ export default function Editor({
         <div className="edit-sheet">
           <div className="edit-sheet-field">
             <textarea
+              ref={textRef}
               autoFocus
               rows={2}
               placeholder="Type the words for the front"
