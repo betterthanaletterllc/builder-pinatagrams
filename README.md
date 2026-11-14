@@ -65,6 +65,39 @@ Server pieces added with the overhaul:
   Test with `node --test tests/openai-ads.test.mjs`; verify live page/checkout
   events in OpenAI Ads Manager and a completed test purchase in Shopify.
 
+## The staff embed: `/embed/design`
+
+The label editor on a page of its own, for Paper
+(paper.betterthanaletter.com) to show in a frame when staff make a one-off
+sample — so samples are designed with the editor customers use, and a change
+to the editor reaches them the moment it is deployed. The whole story and the
+message contract are in `src/lib/embed.ts`; Paper keeps the other copy in
+`paper-next: src/lib/builder-embed.ts`. Change both together.
+
+- It is the journey's own "Make your own" view (`EditorView`), nothing else:
+  no cart, no checkout, no site header or footer (`src/app/layout.tsx`), and
+  no analytics — `analyticsEnabled()` is false on `/embed/*`, so staff never
+  reach the funnel, the pixels or session replay.
+- "Use this design" stages the print file and its `design.json` under
+  `builder-art/` exactly as for an order, then tells the framing page where
+  they are (URL + sha256). Paper downloads the file, checks the hash and
+  keeps its own copy; the staged one is swept after 90 days like any other.
+- Only Paper may frame it: `src/middleware.ts` sets
+  `Content-Security-Policy: frame-ancestors https://paper.betterthanaletter.com`
+  on `/embed/*` (plus `http://localhost:3000`, Paper's dev server, off
+  production). No other page gets that header — framing of the rest of the
+  site is unchanged.
+- Opened directly (not in a frame) it still works, so it can be looked at;
+  the design just isn't sent anywhere.
+- `?style=` names the body whose box the "On the box" preview shows (hub id
+  or name; unknown → the default).
+
+Test with `node --test tests/embed.test.mjs`. To try it with Paper locally:
+run this app on a port of your choice and start paper-next with
+`BUILDER_EMBED_ORIGIN=http://localhost:<port>` (its dev server must be on
+:3000). Note a browser does not run a framed page from another site while
+its tab is in the background — test in a visible tab.
+
 ## Current state (B2C flow v1)
 
 Full flow: body style (live availability from the hub) → graphic — "Pick a

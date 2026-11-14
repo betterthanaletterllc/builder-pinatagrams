@@ -9,6 +9,7 @@ import {
   previewOverridesAllowed,
   type FlowVersion,
 } from "@/lib/flow-version";
+import { EMBED_HEADER, embedFrameAncestors, isEmbedPath } from "@/lib/embed";
 
 /**
  * Variant hosts must never be indexed: a search engine finding an A/B arm
@@ -59,6 +60,10 @@ export function middleware(req: NextRequest) {
   // header — always set, never appended, so a client can't smuggle its own.
   const headers = new Headers(req.headers);
   headers.set(FLOW_HEADER, flow);
+  // The staff embed (lib/embed, /embed/*): tell the layout to leave out the
+  // site chrome. Set on EVERY request, like the flow, so it can't be sent in.
+  const embed = isEmbedPath(req.nextUrl.pathname);
+  headers.set(EMBED_HEADER, embed ? "1" : "0");
   const res = NextResponse.next({ request: { headers } });
 
   if (flowCookie) res.cookies.set(FLOW_COOKIE, flowCookie, PREVIEW_COOKIE);
@@ -67,6 +72,16 @@ export function middleware(req: NextRequest) {
   else if (variantCookie === null) res.cookies.delete(VARIANT_COOKIE);
 
   if (process.env.VERCEL_ENV === "production" && host !== CANONICAL_HOST) {
+    res.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+  if (embed) {
+    // Only Paper may frame the embed (plus its dev server off production),
+    // and it is never a search result. No other page gets this header:
+    // framing of the rest of the site is exactly as it was.
+    res.headers.set(
+      "Content-Security-Policy",
+      embedFrameAncestors(!previewOverridesAllowed()),
+    );
     res.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   return res;

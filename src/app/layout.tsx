@@ -10,6 +10,7 @@ import "./globals.css";
 // without it Next preloads a 3840px-wide file for a 70-80px logo.
 import logo from "../../public/pinatagrams-logo.png";
 import { flowFromHeaders } from "@/lib/flow-version";
+import { isEmbedRequest } from "@/lib/embed";
 import SiteFooterV2 from "@/v2/chrome/site-footer";
 import SiteHeaderV2 from "@/v2/chrome/site-header";
 import v2Theme from "@/v2/ui/theme.module.css";
@@ -69,7 +70,24 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // Which journey this request gets (src/middleware.ts → x-pg-flow). v2
   // (every host since v1's sunset) swaps the site chrome for its own header/footer and scopes
   // its design tokens to <body>; client code reads body[data-flow].
-  const flow = flowFromHeaders(await headers());
+  const h = await headers();
+  // The staff embed (lib/embed, /embed/*) is the editor alone, framed inside
+  // Paper: the journey's fonts and colours, and none of the site around it —
+  // no header, footer, analytics or discount capture.
+  if (isEmbedRequest(h)) {
+    return (
+      <html lang="en" className={v2Theme.html}>
+        <body
+          className={`${poppins.variable} ${arbotek.variable} ${v2Theme.theme} ${v2Theme.body}`}
+          data-flow="v2"
+          data-embed="1"
+        >
+          {children}
+        </body>
+      </html>
+    );
+  }
+  const flow = flowFromHeaders(h);
   const v2 = flow === "v2";
   return (
     <html lang="en" className={v2 ? v2Theme.html : undefined}>

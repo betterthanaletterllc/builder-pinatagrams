@@ -14,6 +14,7 @@
 import type { PostHog, SessionRecordingOptions } from "posthog-js";
 import { GA_ID, META_PIXEL_ID, OPENAI_PIXEL_ID, POSTHOG_HOST, POSTHOG_KEY } from "./analytics-config";
 import { startOpenAiAnalytics, trackOpenAiCommerce, trackOpenAiPageView } from "./openai-ads";
+import { isEmbedPath } from "./embed";
 
 // The ids live in a browser-free module so server routes can share them.
 export { GA_ID, META_PIXEL_ID, POSTHOG_HOST, POSTHOG_KEY };
@@ -28,10 +29,14 @@ declare global {
   }
 }
 
-/** True only for real shoppers: a production build on *.pinatagrams.com. */
+/** True only for real shoppers: a production build on *.pinatagrams.com —
+ *  and never the staff embed (/embed/*, the editor framed inside Paper:
+ *  lib/embed). Staff making a sample are not shoppers; nothing they do may
+ *  reach the funnel, the pixels or session replay. */
 export function analyticsEnabled(): boolean {
   if (process.env.NODE_ENV !== "production") return false;
   if (typeof window === "undefined") return false;
+  if (isEmbedPath(window.location.pathname)) return false;
   const host = window.location.hostname.toLowerCase();
   return host === "pinatagrams.com" || host.endsWith(".pinatagrams.com");
 }
