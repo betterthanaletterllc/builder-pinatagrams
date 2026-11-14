@@ -144,7 +144,8 @@ export type PhotoSlot = {
   offset: number;
   // Optional, added 2026-11 (absent = the original behaviour, so every
   // saved design renders exactly as before):
-  /** ≥ 1: how far past "just covers the box" the photo is scaled (crop). */
+  /** 1 = just covers the box; above 1 crops closer, below 1 shrinks the
+   *  photo inside its box (the background shows around it). */
   zoom?: number;
   /** Quarter turns, clockwise. */
   rot?: 0 | 90 | 180 | 270;
@@ -242,17 +243,21 @@ export function coverFit(
 /** Photo zoom never goes past this (a 4× crop of a phone photo is already
  *  soft at label size — the low-res warning says so). */
 export const MAX_PHOTO_ZOOM = 4;
+/** …nor under this: a fifth of "just covers the box" (a small photo with
+ *  the label background around it). */
+export const MIN_PHOTO_ZOOM = 0.2;
 
 /** Whether a photo has left the original one-axis framing. */
 export function isFreeFrame(p: PhotoSlot): boolean {
-  return (p.zoom ?? 1) > 1.001 || (p.rot ?? 0) !== 0 || p.fx !== undefined || p.fy !== undefined;
+  return Math.abs((p.zoom ?? 1) - 1) > 0.001 || (p.rot ?? 0) !== 0 || p.fx !== undefined || p.fy !== undefined;
 }
 
 /**
  * Where a photo sits in its box — ONE function for the editor and the print
  * render. Scale = cover the box (after any quarter turn) × zoom; the scaled
  * photo's bounding box then overflows by overX/overY, and fx/fy (0..1) pick
- * which part shows. Photos that were never zoomed, turned or freely dragged
+ * which part shows. Zoomed below 1 it is SMALLER than the box (overX/overY
+ * negative): fx/fy then place it inside, 0 = left/top, 1 = right/bottom. Photos that were never zoomed, turned or freely dragged
  * use the original framing: `offset` along the one overflowing axis —
  * identical to coverFit, so saved designs print as they always did.
  *
@@ -278,7 +283,7 @@ export function photoFrame(
   scale: number;
 } {
   const rot = p.rot ?? 0;
-  const zoom = Math.min(MAX_PHOTO_ZOOM, Math.max(1, p.zoom ?? 1));
+  const zoom = Math.min(MAX_PHOTO_ZOOM, Math.max(MIN_PHOTO_ZOOM, p.zoom ?? 1));
   const natW = Math.max(1, p.natW);
   const natH = Math.max(1, p.natH);
   const turned = rot === 90 || rot === 270;
@@ -287,8 +292,9 @@ export function photoFrame(
   const scale = Math.max(rect.w / w0, rect.h / h0) * zoom;
   const bw = w0 * scale;
   const bh = h0 * scale;
-  const overX = Math.max(0, bw - rect.w);
-  const overY = Math.max(0, bh - rect.h);
+  // negative when the photo is smaller than the box on that axis
+  const overX = bw - rect.w;
+  const overY = bh - rect.h;
   let fx: number;
   let fy: number;
   if (isFreeFrame(p)) {

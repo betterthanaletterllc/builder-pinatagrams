@@ -19,6 +19,7 @@ import {
   designKey,
   isCurrentDesign,
   MAX_PHOTO_ZOOM,
+  MIN_PHOTO_ZOOM,
   newDesign,
   photoFrame,
   templateSlotRects,
@@ -345,15 +346,22 @@ function PhotoSlotEl({
   // Same placement the print render uses (photoFrame): zoom, quarter
   // turns and the framing on each axis.
   const fr = photoFrame(rect, slot);
-  const movable = fr.overX > 1 || fr.overY > 1;
+  // Movable whenever it doesn't exactly match the box on an axis: bigger
+  // (choose the part that shows) or smaller (place it inside the box).
+  const movable = Math.abs(fr.overX) > 1 || Math.abs(fr.overY) > 1;
   // The node is positioned by its CENTRE (offset = half its size, so it
   // can rotate in place). Keep the centre where the photo still covers
   // the box; dragBoundFunc works in ABSOLUTE stage coords, so convert
   // through the design group's transform (gx/gy + scale).
-  const minCx = rect.x + fr.bw / 2 - fr.overX;
-  const maxCx = rect.x + fr.bw / 2;
-  const minCy = rect.y + fr.bh / 2 - fr.overY;
-  const maxCy = rect.y + fr.bh / 2;
+  // fx = 0 puts the centre at c0, fx = 1 at c1 (either may be the larger).
+  const cx0 = rect.x + fr.bw / 2;
+  const cx1 = cx0 - fr.overX;
+  const cy0 = rect.y + fr.bh / 2;
+  const cy1 = cy0 - fr.overY;
+  const minCx = Math.min(cx0, cx1);
+  const maxCx = Math.max(cx0, cx1);
+  const minCy = Math.min(cy0, cy1);
+  const maxCy = Math.max(cy0, cy1);
   return (
     <Group clip={{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}>
       <KonvaImage
@@ -375,8 +383,8 @@ function PhotoSlotEl({
         })}
         onDragEnd={(e) => {
           const n = e.target;
-          const fx = fr.overX > 1 ? clamp((maxCx - n.x()) / fr.overX, 0, 1) : fr.fx;
-          const fy = fr.overY > 1 ? clamp((maxCy - n.y()) / fr.overY, 0, 1) : fr.fy;
+          const fx = Math.abs(fr.overX) > 1 ? clamp((cx0 - n.x()) / fr.overX, 0, 1) : fr.fx;
+          const fy = Math.abs(fr.overY) > 1 ? clamp((cy0 - n.y()) / fr.overY, 0, 1) : fr.fy;
           onFrame(fx, fy);
         }}
       />
@@ -1040,7 +1048,7 @@ export default function Editor({
     }));
 
   const zoomPhoto = (i: number, zoom: number) =>
-    reframe(i, { zoom: Math.round(clamp(zoom, 1, MAX_PHOTO_ZOOM) * 100) / 100 });
+    reframe(i, { zoom: Math.round(clamp(zoom, MIN_PHOTO_ZOOM, MAX_PHOTO_ZOOM) * 100) / 100 });
 
   const rotatePhoto = (i: number) => {
     const s = doc.slots[i];
@@ -1279,7 +1287,8 @@ export default function Editor({
   // (touch-action: none) — ONLY then, so a swipe over the rest of the
   // preview still scrolls the page.
   const framing = !!selectedFrame;
-  const canDrag = !!selectedFrame && (selectedFrame.overX > 1 || selectedFrame.overY > 1);
+  const canDrag =
+    !!selectedFrame && (Math.abs(selectedFrame.overX) > 1 || Math.abs(selectedFrame.overY) > 1);
 
   // Print sharpness: fitting a photo into its slot (and any zoom) upscales
   // it by photoFrame's scale; at the 300-DPI print that's an effective DPI
@@ -1594,8 +1603,8 @@ export default function Editor({
         <p className="note">
           {canDrag
             ? coarsePointer
-              ? "Drag your photo to frame it — pinch or use the zoom below to crop closer."
-              : "Drag your photo to frame it — use the zoom below to crop closer."
+              ? "Drag your photo to frame it — pinch or use the zoom below to crop closer or shrink it."
+              : "Drag your photo to frame it — use the zoom below to crop closer or shrink it."
             : framing
               ? "Zoom in below to crop closer, or turn the photo."
               : selected?.kind === "text"
@@ -1686,7 +1695,7 @@ export default function Editor({
                 <span aria-hidden>Zoom</span>
                 <input
                   type="range"
-                  min={100}
+                  min={MIN_PHOTO_ZOOM * 100}
                   max={MAX_PHOTO_ZOOM * 100}
                   step={5}
                   value={Math.round((selected.zoom ?? 1) * 100)}
@@ -1696,7 +1705,7 @@ export default function Editor({
               </label>
               {/* The single-pointer alternative to dragging (WCAG 2.5.7):
                   the same framing the drag writes, as plain sliders. */}
-              {selectedFrame.overX > 1 && (
+              {Math.abs(selectedFrame.overX) > 1 && (
                 <label className="frame-slider">
                   <span aria-hidden>◀ ▶</span>
                   <input
@@ -1712,7 +1721,7 @@ export default function Editor({
                   />
                 </label>
               )}
-              {selectedFrame.overY > 1 && (
+              {Math.abs(selectedFrame.overY) > 1 && (
                 <label className="frame-slider">
                   <span aria-hidden>▲ ▼</span>
                   <input
