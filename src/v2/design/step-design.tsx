@@ -168,11 +168,12 @@ const StepDesign = forwardRef<
       className={`${s.tile} ${s.makeOwn}`}
       onClick={p.onMakeOwn}
       data-priced={(ownCents > 0 && !editing) || undefined}
+      aria-label={editing ? "Edit your design" : undefined}
     >
       <span className={s.makeOwnInner}>
         {editing ? <Pencil size={18} /> : <Photo size={20} />}
-        <span className={s.makeOwnLabel}>{editing ? "Edit your design" : "Your photo"}</span>
-        {!editing && <span className={s.makeOwnSub}>Make your own</span>}
+        <span className={s.makeOwnLabel}>{editing ? "Your design" : "Your photo"}</span>
+        <span className={s.makeOwnSub}>{editing ? "Tap to edit" : "Make your own"}</span>
       </span>
       {ownCents > 0 && !editing && (
         <span className={s.tier} data-included={false}>

@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,6 +11,7 @@ import {
 } from "react";
 import { Group, Image as KonvaImage, Layer, Rect, Stage, Text } from "react-konva";
 import Konva from "konva";
+import { flushSync } from "react-dom";
 import type { LogoZone } from "@/lib/hub";
 import type { DesignAssets } from "@/lib/flow";
 import {
@@ -746,13 +748,53 @@ export default function Editor({
   // taken the cursor, so the next keys went nowhere).
   const textRef = useRef<HTMLTextAreaElement>(null);
   const [focusTick, setFocusTick] = useState(0);
-  useEffect(() => {
+  // Layout effect: it runs inside the tap that opened the sheet — iOS only
+  // raises the keyboard for a focus made during the user's gesture.
+  useLayoutEffect(() => {
     const el = textRef.current;
     if (editingText === null || !el) return;
     el.focus({ preventScroll: true });
     const end = el.value.length;
     el.setSelectionRange(end, end);
   }, [editingText, focusTick]);
+
+  // Phones: the words sheet rides on top of the on-screen keyboard (iOS
+  // leaves fixed elements behind it), and the label scrolls into the space
+  // above the sheet — so you watch the words fit as you type.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [kbInset, setKbInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (editingText === null || !vv) {
+      setKbInset(0);
+      return;
+    }
+    let raf = 0;
+    const update = () => {
+      setKbInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const art = wrapRef.current?.querySelector(".artboard-wrap");
+        const sheet = sheetRef.current;
+        if (!art || !sheet) return;
+        const a = art.getBoundingClientRect();
+        const room = sheet.getBoundingClientRect().top - 8;
+        const visTop = vv.offsetTop + 64; // clear of the sticky header
+        if (a.bottom <= room && a.top >= visTop) return;
+        let dy = a.bottom - room;
+        if (a.top - dy < visTop) dy = a.top - visTop;
+        if (Math.abs(dy) > 1) window.scrollBy(0, dy);
+      });
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      cancelAnimationFrame(raf);
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [editingText]);
   const editText = (i: number) => {
     setSelectedSlot(i);
     setEditingText(i);
@@ -1419,7 +1461,9 @@ export default function Editor({
                       rect={r}
                       fontsReady={fontsReady}
                       onSelect={() => setSelectedSlot(i)}
-                      onEdit={() => editText(i)}
+                      // Konva's tap isn't a React event: flush now so the
+                      // field mounts and focuses inside the tap (iOS keyboard)
+                      onEdit={() => flushSync(() => editText(i))}
                     />
                   );
                 })}
@@ -1598,7 +1642,7 @@ export default function Editor({
         )}
       </div>
 
-      {selected && selectedSlot !== null && (
+      {selected && selectedSlot !== null && !(selected.kind === "text" && editingSlot) && (
         <div className="context-bar">
           {selected.kind === "text" && (
             <>
@@ -1772,11 +1816,49 @@ export default function Editor({
       {/* text edits in a fixed bottom sheet (16px input, no iOS zoom); the
           canvas text above is the live preview of what's typed */}
       {editingSlot && editingText !== null && (
-        <div className="edit-sheet">
+        <div
+          ref={sheetRef}
+          className="edit-sheet"
+          style={kbInset ? { bottom: kbInset, paddingBottom: 10 } : undefined}
+        >
+          <div className="edit-sheet-tools">
+            <div className="font-pick" role="group" aria-label="Font">
+              {TEXT_FONTS.map((f) => {
+                const on = (editingSlot.font ?? "classic") === f.id;
+                const face = textFontFor(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    className={"font-btn" + (on ? " on" : "")}
+                    aria-pressed={on}
+                    onMouseDown={keepTyping}
+                    onClick={() => setFont(editingText, f.id)}
+                    style={{ fontFamily: face.family, fontWeight: face.style === "bold" ? 700 : 400 }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="edit-sheet-swatches">
+              {TEXT_SWATCHES.map((c) => (
+                <button
+                  key={c}
+                  className={"swatch" + (editingSlot.fill === c ? " active" : "")}
+                  style={{ background: c }}
+                  onMouseDown={keepTyping}
+                  onClick={() => patchSlot(editingText, { fill: c })}
+                  title={SWATCH_NAMES[c] ?? c}
+                  aria-label={`Text color: ${SWATCH_NAMES[c] ?? c}`}
+                  aria-pressed={editingSlot.fill === c}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="edit-sheet-row">
           <div className="edit-sheet-field">
             <textarea
               ref={textRef}
-              autoFocus
               rows={2}
               placeholder="Type the words for the front"
               aria-label="Words for the front of the box"
@@ -1805,6 +1887,7 @@ export default function Editor({
           <button className="btn primary" onClick={doneEditingText}>
             Done
           </button>
+          </div>
         </div>
       )}
     </div>

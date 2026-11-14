@@ -217,7 +217,7 @@
 
 /* Browsing the designs (scrolled into the grid): the pinned Stage becomes a
    mini preview — just the box, with the style arrows — so the grid gets
-   the screen. The flow scrolls by the height it lost, so nothing jumps. */
+   the screen. The designs move up under it. */
 @media (max-width: 1023px) {
   .stagePin[data-compact] .stage[data-step="design"] {
     height: 136px;

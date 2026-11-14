@@ -566,7 +566,8 @@ h1 {
   margin-top: 10px;
 }
 
-.context-bar .swatch {
+.context-bar .swatch,
+.edit-sheet .swatch {
   width: 26px;
   height: 26px;
 }
@@ -673,10 +674,35 @@ h1 {
   border-top: 1px solid var(--line);
   box-shadow: 0 -4px 16px rgba(24, 13, 56, 0.16);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px max(14px, env(safe-area-inset-right))
+    calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
+
+/* words + Done; fonts and colours above them, reachable while typing */
+.edit-sheet-row {
+  display: flex;
   gap: 10px;
   align-items: flex-end;
-  padding: 12px max(14px, env(safe-area-inset-right))
-    calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
+
+.edit-sheet-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px 8px;
+  flex-wrap: wrap;
+}
+
+/* one row on a 375px phone: slimmer font buttons, tighter colours */
+.edit-sheet .font-btn {
+  padding-inline: 8px;
+}
+
+.edit-sheet-swatches {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .edit-sheet textarea {
@@ -1230,10 +1256,18 @@ body:has(.bottom-stack) .site-footer {
   .context-bar .swatch {
     margin-inline: 5px;
   }
-  .context-bar .swatch::after {
+  .edit-sheet .swatch {
+    margin-inline: 4px;
+  }
+  .context-bar .swatch::after,
+  .edit-sheet .swatch::after {
     content: "";
     position: absolute;
     inset: -11px;
+  }
+  /* tighter in the words sheet: 34px targets that meet, not overlap */
+  .edit-sheet .swatch::after {
+    inset: -6px;
   }
 }
 

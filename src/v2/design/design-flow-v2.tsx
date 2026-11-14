@@ -151,11 +151,10 @@ type Problem = {
 const MESSAGE_ID = "pg-message";
 const MESSAGE_REQUIRED = "Write a message — it's printed on the inside flap of the box.";
 
-// The mini Stage: shrinks past COMPACT_ENTER_Y of scroll, grows back under
-// COMPACT_EXIT_Y. Its lost height stays in the page as margin, which only
-// shows as a gap above ~180px of scroll — so it never grows back lower.
-const COMPACT_ENTER_Y = 300;
-const COMPACT_EXIT_Y = 220;
+// The mini Stage: shrinks after a short scroll into the designs, grows back
+// right at the top (the two apart so it can't flicker).
+const COMPACT_ENTER_Y = 60;
+const COMPACT_EXIT_Y = 16;
 
 const EMPTY_PREFS: OrderPrefs = {
   carrier: null,
@@ -203,6 +202,7 @@ export default function DesignFlowV2(data: FlowData) {
   const [compactStage, setCompactStage] = useState(false);
   const stagePinRef = useRef<HTMLDivElement>(null);
   const stagePinH = useRef(0);
+  const stageScrollY = useRef(0);
   // Custom-design print uploads live in lib/design-upload (they outlive the
   // editor); re-render when any of them changes state.
   useSyncExternalStore(subscribeDesignSaves, designSavesVersion, () => 0);
@@ -719,7 +719,10 @@ export default function DesignFlowV2(data: FlowData) {
       const y = window.scrollY;
       setCompactStage((c) => {
         const next = mq.matches && (c ? y > COMPACT_EXIT_Y : y > COMPACT_ENTER_Y);
-        if (next !== c) stagePinH.current = stagePinRef.current?.offsetHeight ?? 0;
+        if (next !== c) {
+          stagePinH.current = stagePinRef.current?.offsetHeight ?? 0;
+          stageScrollY.current = y;
+        }
         return next;
       });
     };
@@ -727,9 +730,16 @@ export default function DesignFlowV2(data: FlowData) {
       if (!raf) raf = requestAnimationFrame(check);
     };
     check();
+    // The Stage resizing above the grid must not trigger the browser's
+    // scroll anchoring — it "corrects" the scroll by the height lost, which
+    // threw the page back to the top (and the Stage open again).
+    const roots = [document.documentElement, document.body];
+    const anchors = roots.map((r) => r.style.overflowAnchor);
+    roots.forEach((r) => (r.style.overflowAnchor = "none"));
     window.addEventListener("scroll", onScroll, { passive: true });
     mq.addEventListener("change", onScroll);
     return () => {
+      roots.forEach((r, i) => (r.style.overflowAnchor = anchors[i]));
       if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("scroll", onScroll);
       mq.removeEventListener("change", onScroll);
@@ -742,14 +752,23 @@ export default function DesignFlowV2(data: FlowData) {
       el.style.marginBottom = "";
       return;
     }
-    // The shrunk Stage keeps its old footprint in the page as margin: the
-    // grid never moves, so there's nothing to correct (scroll position,
-    // anchoring, a page end that would clamp) — only the pinned box gets
-    // smaller and the designs under it come into view.
+    // It shrinks after a short scroll, so the designs move up to sit right
+    // under the mini preview (no blank gap). The margin keeps just enough
+    // of its old footprint for that — the page never gets shorter than the
+    // scroll it's at (nothing clamps, nothing flickers).
     const before = stagePinH.current;
     el.style.marginBottom = "";
     const lost = before - el.offsetHeight;
-    if (lost > 0) el.style.marginBottom = `${lost}px`;
+    // (backstop: if anything moved the page as the Stage shrank, put it back)
+    if (Math.abs(window.scrollY - stageScrollY.current) > 1) window.scrollTo(0, stageScrollY.current);
+    // what follows it on the page (the panel of designs, beside its column)
+    let next: Element | null = null;
+    for (let p: Element | null = el; p && !next; p = p.parentElement) next = p.nextElementSibling;
+    if (lost <= 0 || !next) return;
+    const gapToClose =
+      el.getBoundingClientRect().bottom - next.getBoundingClientRect().top;
+    const keep = Math.min(lost, Math.max(0, Math.round(gapToClose)));
+    if (keep > 0) el.style.marginBottom = `${keep}px`;
   }, [compactStage]);
 
   /* --- choices --------------------------------------------------------------- */
