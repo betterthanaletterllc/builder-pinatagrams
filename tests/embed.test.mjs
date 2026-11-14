@@ -121,3 +121,87 @@ test("analytics are off on the embed", () => {
   const body = fn.slice(0, fn.indexOf("\n}\n"));
   assert.ok(body.includes("if (isEmbedPath(window.location.pathname)) return false;"));
 });
+
+/* --- /embed/sample: the journey's step one, and "this piñata" ----------------- */
+
+const {
+  embedBodyToken,
+  embedChoiceMessage,
+  embedGraphicFor,
+} = await import("../src/lib/embed.ts");
+
+test("the body is named as checkout names it in a line's SKU", () => {
+  assert.equal(embedBodyToken("googly"), "GOOGLY");
+  assert.equal(embedBodyToken("checkered"), "CHECKERED");
+  assert.equal(embedBodyToken("white-uni"), "WHITE UNICORN");
+  assert.equal(embedBodyToken("pink-uni"), "PINK UNICORN");
+  // spaces, never hyphens: Paper's parser splits a SKU on its LAST hyphen
+  assert.equal(embedBodyToken("some-new-style"), "SOME NEW STYLE");
+
+  // Checkout holds the other copy of this rule; the two must not drift.
+  const checkout = readFileSync(new URL("../src/app/api/checkout/route.ts", import.meta.url), "utf8");
+  const table = /const SKU_SUFFIX_SPECIAL: Record<string, string> = \{([^}]*)\};/.exec(checkout);
+  assert.ok(table, "checkout's table of special body names was not found");
+  const special = [...table[1].matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map(([, id, name]) => [id, name]);
+  assert.ok(special.length >= 2);
+  for (const [id, name] of special) assert.equal(embedBodyToken(id), name, id);
+  assert.match(checkout, /styleId\.toUpperCase\(\)\.replace\(\/-\/g, " "\)/);
+});
+
+test("a pick is reported in the journey's three shapes, and not before it can be", () => {
+  // A store design: its print file on the store's CDN.
+  assert.deepEqual(
+    embedGraphicFor({ type: "shopify", design: "HBD01", title: "Confetti Birthday", art: "https://cdn.shopify.com/s/files/1/1116/8788/files/HBD01_front.png" }),
+    { kind: "shopify", design: "HBD01", title: "Confetti Birthday", art: "https://cdn.shopify.com/s/files/1/1116/8788/files/HBD01_front.png" },
+  );
+  assert.equal(embedGraphicFor({ type: "shopify", design: "HBD01", title: "x", art: null }), null);
+
+  // A hub graphic: its print file and the sha256 of it.
+  assert.deepEqual(
+    embedGraphicFor({ type: "hub", design: "H0001", title: "Logo", art: "https://x.public.blob.vercel-storage.com/library/graphics/H0001.png", artSha256: "a".repeat(64) }),
+    { kind: "hub", design: "H0001", title: "Logo", art: { url: "https://x.public.blob.vercel-storage.com/library/graphics/H0001.png", sha256: "a".repeat(64) } },
+  );
+  assert.equal(embedGraphicFor({ type: "hub", design: "H0001", title: "Logo", art: "https://x/y.png", artSha256: null }), null);
+
+  // A design made in the editor: only once its print file is staged.
+  assert.equal(embedGraphicFor({ type: "custom" }), null);
+  assert.equal(embedGraphicFor({ type: "custom", art: "https://x/front.png", artSha256: null }), null);
+  assert.deepEqual(
+    embedGraphicFor({ type: "custom", art: "https://x/front.png", artSha256: "b".repeat(64), designUrl: "https://x/design.json" }),
+    { kind: "custom", art: { url: "https://x/front.png", sha256: "b".repeat(64) }, designUrl: "https://x/design.json" },
+  );
+});
+
+test("the choice message names the body, the front and the card the message prints on", () => {
+  const graphic = { kind: "shopify", design: "HBD01", title: "Confetti Birthday", art: "https://cdn.shopify.com/a.png" };
+  assert.deepEqual(
+    embedChoiceMessage({
+      style: { id: "pink-uni", name: "Pink Unicorn" },
+      graphic,
+      messageCard: "https://cdn.shopify.com/card.svg",
+      preview: "https://cdn.shopify.com/thumb.png",
+    }),
+    {
+      source: EMBED_SOURCE,
+      v: EMBED_VERSION,
+      type: "choice",
+      style: { id: "pink-uni", name: "Pink Unicorn", body: "PINK UNICORN" },
+      graphic,
+      messageCard: "https://cdn.shopify.com/card.svg",
+      preview: "https://cdn.shopify.com/thumb.png",
+    },
+  );
+});
+
+test("the sample page is under /embed, so it gets the framing rule and no chrome", () => {
+  assert.equal(isEmbedPath("/embed/sample"), true);
+  const page = readFileSync(new URL("../src/app/embed/sample/embed-sample.tsx", import.meta.url), "utf8");
+  // It is built from the journey's own step-one components, not copies of them.
+  for (const part of ["@/v2/design/stage", "@/v2/design/step-design", "@/v2/design/sheets", "@/v2/design/editor-view"]) {
+    assert.ok(page.includes(part), `the sample page no longer uses ${part}`);
+  }
+  // No cart, no checkout, no analytics calls.
+  for (const banned of ["saveCart", "startCheckout", "trackV2", "trackAddToCart"]) {
+    assert.equal(page.includes(banned), false, `the sample page uses ${banned}`);
+  }
+});

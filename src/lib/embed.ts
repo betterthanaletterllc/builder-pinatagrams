@@ -4,6 +4,15 @@
  * with the very editor customers use — a change to the editor reaches
  * samples the moment it is deployed.
  *
+ * There are two pages:
+ *   /embed/design — the "Make your own" editor alone, for changing the label
+ *     of a piñata that already exists in Paper;
+ *   /embed/sample — the journey's own step one ("Pick your design"), for
+ *     starting a sample: cycle through the body styles, pick a design from
+ *     the store's library or make your own. It is built from the very
+ *     components the journey renders (Stage, StepDesign, the sheets, the
+ *     editor), so step one here is step one there.
+ *
  * What the embed is: the "Make your own" editor, nothing else. No cart, no
  * checkout, no analytics (lib/analytics switches itself off on /embed/), no
  * site header or footer. "Use this design" does exactly what it does for a
@@ -26,6 +35,9 @@
  *   embed → parent   { source, v, type: "design",
  *                      art: { url, sha256 }, designUrl, preview }
  *   embed → parent   { source, v, type: "close" }
+ *   embed → parent   { source, v, type: "choice",                 (/embed/sample)
+ *                      style: { id, name, body },
+ *                      graphic: custom | shopify | hub, messageCard, preview }
  *
  * Import-free on purpose: the edge middleware, the server page, the client
  * component and the node tests all load this file.
@@ -162,4 +174,83 @@ export function pickEmbedStyle<T extends { id: string; name: string }>(
     if (hit) return hit;
   }
   return styles.find((s) => s.id === fallbackId) ?? styles[0] ?? null;
+}
+
+/* --- /embed/sample: "this piñata" ------------------------------------------ */
+
+// Checkout sells every piñata as the Custom Built product's CUSTOM-{BODY}
+// variant, and Paper reads the body from that SKU (api/checkout: customSkuFor).
+// A sample has no checkout, so the embed tells Paper the same body token.
+// tests/embed.test.mjs holds this table and checkout's together.
+const BODY_TOKEN_SPECIAL: Record<string, string> = {
+  "white-uni": "WHITE UNICORN",
+  "pink-uni": "PINK UNICORN",
+};
+
+/** The body as Paper names it: what follows "CUSTOM-" in a builder line's SKU. */
+export function embedBodyToken(styleId: string): string {
+  return BODY_TOKEN_SPECIAL[styleId] ?? styleId.toUpperCase().replace(/-/g, " ");
+}
+
+/** What was picked for the front, in the three shapes the journey has. */
+export type EmbedGraphic =
+  /** Made in the editor: the staged print file, as in a "design" message. */
+  | { kind: "custom"; art: { url: string; sha256: string }; designUrl: string | null }
+  /** A design the store sells: its print file on the store's own CDN. */
+  | { kind: "shopify"; design: string; title: string; art: string }
+  /** A graphic uploaded in the hub: its print file and the sha256 of it. */
+  | { kind: "hub"; design: string; title: string; art: { url: string; sha256: string } };
+
+export type EmbedChoice = {
+  source: typeof EMBED_SOURCE;
+  v: typeof EMBED_VERSION;
+  type: "choice";
+  /** The body style: the hub's id and name, and the body as Paper names it. */
+  style: { id: string; name: string; body: string };
+  graphic: EmbedGraphic;
+  /** The inside-flap card the gift message prints on, or null for a plain one. */
+  messageCard: string | null;
+  /** A small picture of the front: a data URL, or the design's thumbnail. */
+  preview: string | null;
+};
+
+export function embedChoiceMessage(input: {
+  style: { id: string; name: string };
+  graphic: EmbedGraphic;
+  messageCard: string | null;
+  preview: string | null;
+}): EmbedChoice {
+  return {
+    source: EMBED_SOURCE,
+    v: EMBED_VERSION,
+    type: "choice",
+    style: { id: input.style.id, name: input.style.name, body: embedBodyToken(input.style.id) },
+    graphic: input.graphic,
+    messageCard: input.messageCard,
+    preview: input.preview,
+  };
+}
+
+/**
+ * The journey's pick, as the embed reports it. Null while it cannot be
+ * reported: a design made in the editor whose print file is not staged yet,
+ * or a library design with no print file at all.
+ */
+export function embedGraphicFor(
+  g:
+    | { type: "custom"; art?: string | null; artSha256?: string | null; designUrl?: string | null }
+    | { type: "shopify"; design: string; title: string; art: string | null }
+    | { type: "hub"; design: string; title: string; art: string | null; artSha256: string | null },
+): EmbedGraphic | null {
+  if (g.type === "custom") {
+    return g.art && g.artSha256
+      ? { kind: "custom", art: { url: g.art, sha256: g.artSha256 }, designUrl: g.designUrl ?? null }
+      : null;
+  }
+  if (g.type === "hub") {
+    return g.art && g.artSha256
+      ? { kind: "hub", design: g.design, title: g.title, art: { url: g.art, sha256: g.artSha256 } }
+      : null;
+  }
+  return g.art ? { kind: "shopify", design: g.design, title: g.title, art: g.art } : null;
 }

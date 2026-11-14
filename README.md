@@ -92,6 +92,30 @@ message contract are in `src/lib/embed.ts`; Paper keeps the other copy in
 - `?style=` names the body whose box the "On the box" preview shows (hub id
   or name; unknown → the default).
 
+### `/embed/sample` — the journey's step one, for starting a sample
+
+Paper's "New sample" page frames this one. It is step one of the journey as
+a shopper meets it — the Stage with its body chip and style arrows, "Pick
+your design" with the occasion chips, the grid, search and the whole
+library, and "Make your own" opening the editor — built from the journey's
+own components (`Stage`, `StepDesign`, the sheets in `sheets.tsx`,
+`EditorView`), so a change to step one is a change here. The wiring
+(`src/app/embed/sample/embed-sample.tsx`) follows `DesignFlowV2`'s for that
+step; a test fails if the page stops importing those components.
+
+- Differences from the journey: every body style is offered, in stock or not
+  (a sample can be of anything); nothing is priced; nothing is kept in the
+  browser; no cart, checkout or analytics.
+- The one button is "Use this piñata". It sends the framing page a `choice`
+  message: the body (hub id, name, and the body as Paper names it —
+  `embedBodyToken`, the same token checkout puts after `CUSTOM-` in a SKU),
+  the front (a store design's print file on the store's CDN; a hub
+  graphic's file and sha256; or a design made here, staged as for an order),
+  and the card the message prints on. Paper checks every address and keeps
+  its own copies.
+- Same framing rule and the same `ready` / `init` / `close` messages as
+  `/embed/design`.
+
 Test with `node --test tests/embed.test.mjs`. To try it with Paper locally:
 run this app on a port of your choice and start paper-next with
 `BUILDER_EMBED_ORIGIN=http://localhost:<port>` (its dev server must be on
