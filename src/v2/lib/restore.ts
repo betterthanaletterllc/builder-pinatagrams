@@ -6,6 +6,16 @@ import { hasMessage } from "./message";
 import { parseStep, STEPS } from "./steps";
 import type { Preset, StepId, StepVia } from "./types";
 
+/**
+ * Said when the piñata in progress names a body style that is not offered
+ * (any more): it sold out, or the builder stopped offering it. The piñata
+ * keeps its design and its message and gets the default body — on a page
+ * load (resolveRestore below) and when one is opened from the order (the
+ * flow's own check).
+ */
+export const STYLE_GONE_NOTE =
+  "That piñata style isn't available anymore, so we picked another — change it anytime.";
+
 /** Library and hub picks are ready as they are; a custom design needs its
  *  uploaded print file AND its sha256, or checkout refuses the line. */
 export function graphicReady(g: GraphicChoice): boolean {
@@ -109,7 +119,7 @@ export function resolveRestore(input: {
 
   if (d && !input.inStock(d.styleId)) {
     d = { ...d, styleId: input.preset.styleId };
-    note = "That piñata style just sold out, so we picked another — change it anytime.";
+    note = STYLE_GONE_NOTE;
   }
 
   let step: StepId = parseStep(url.searchParams.get("step")) ?? "design";

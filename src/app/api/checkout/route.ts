@@ -3,6 +3,7 @@ import { after, NextResponse } from "next/server";
 import {
   catalogUrl,
   HUB_URL,
+  offeredStyles,
   resolveBuilderPricing,
   resolveHubGraphics,
   type HubAddon,
@@ -34,6 +35,7 @@ import {
   type Carrier,
 } from "@/lib/delivery";
 import { flowFromHeaders } from "@/lib/flow-version";
+import { isOfferedDesign } from "@/lib/library-data";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { ensureOrdersPaidWebhookOnce } from "@/lib/webhooks";
 import {
@@ -631,7 +633,10 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const styleById = new Map(catalog.bodyStyles.map((s) => [s.id, s]));
+  // A style the builder does not offer (lib/hub styleOffered) is not in its
+  // catalog here either: a line naming one is refused below like a style
+  // that is gone, whatever the hub lists and whatever the cart claims.
+  const styleById = new Map(offeredStyles(catalog.bodyStyles).map((s) => [s.id, s]));
   const deliveryCfg = resolveDeliveryConfig(catalog.delivery);
   // Graphic-tier upcharges + USPS rate — hub-controlled, re-read at order
   // time exactly like fillings/add-ons. The client's display math ran the
@@ -734,6 +739,15 @@ export async function POST(req: Request) {
           ok: false,
           code: "graphic_invalid",
           message: "we couldn't read its graphic — edit the piñata and pick the graphic again.",
+        };
+      // A store listing the library leaves out (lib/library-data: the Chonky
+      // Donkey's NO FRONT GRAPHIC placeholder, the client one-offs) is not a
+      // design sold here — also from a cart saved while it was still a tile.
+      if (!isOfferedDesign(design))
+        return {
+          ok: false,
+          code: "graphic_unavailable",
+          message: "that graphic is no longer available — edit the piñata and pick another.",
         };
       const title = `${str(g.title, 120) || design} — ${styleName}`;
       return {

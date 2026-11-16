@@ -4,6 +4,10 @@
  * builder is a READER of the public plane only. These types mirror exactly
  * what /api/public/* returns — customer-safe fields, no COGS, availability
  * as a boolean. If a field isn't here, the builder shouldn't want it.
+ *
+ * One thing the builder decides for itself: which of the hub's body styles
+ * it offers at all (styleOffered below — the hub lists every style the
+ * business stocks, and not all of them are sold here).
  */
 
 export const HUB_URL =
@@ -61,6 +65,77 @@ export function withBoxZones(styles: HubBodyStyle[]): HubBodyStyle[] {
     const zone = measuredZone(b.boxImageUrl);
     return zone ? { ...b, logoZone: zone } : { ...b, boxImageUrl: null };
   });
+}
+
+/**
+ * Hub body styles this builder does not offer.
+ *
+ * The hub's catalog is every style the business stocks. Its "active" tick
+ * (admin /catalog) is what lists a style on the hub's own Inventory page, in
+ * its stock digest and its alerts — and, with the same tick, on every site
+ * that reads the hub. So a style that is stocked but not sold HERE stays
+ * ticked there, and is left out here.
+ *
+ * Nathan, 2026-11-15, when two of them turned up in the journey's style
+ * picker and on the staff page Paper frames: "Chonky and checkered should
+ * not appear on the builder. chonky never should because it is a completely
+ * different product and has different options and checkered shouldn't until
+ * we have a photo".
+ *
+ * NEVER — the Chonky: a bigger piñata in its own box, with its own options
+ * and its own price ("Every piñata is 11 inches tall" is not true of it).
+ * Any hub style whose id or name says Chonky, so that a second one
+ * ("chonky-pink", "chonky2") does not walk in the way the first did. Mind
+ * the other edge of that: a style NAMED with the word — "Standard (not the
+ * Chonky)" — is left out as well, so a name in the hub is not only a label.
+ *
+ * NOT YET — the Checkered, by hub id. It comes back when ALL of these are
+ * true, and not before; each one missing is an empty tile or a dead end:
+ *   1. its cut-out is in the hub's store (catalog/cutouts/checkered.png).
+ *      The style sheet and the Stage draw that file; without it the tile is
+ *      an empty frame — the photo "until we have a photo" was about;
+ *   2. its box photo AND the label placement on it are set in the hub's
+ *      /catalog (on 2026-11-15 the box picture there is a mock-up, with no
+ *      placement);
+ *   3. the Custom Built Piñatagram product in Shopify has a CUSTOM-CHECKERED
+ *      variant. Without it checkout answers "temporarily unavailable" for
+ *      good (api/checkout: customSkuFor) — which is how these two sat in
+ *      the picker with nobody able to buy one;
+ *   4. then take "checkered" out of NOT_YET_OFFERED and out of
+ *      tests/styles.test.mjs, drop the "for now" / "not yet" about it from
+ *      README.md (two places) and app/embed/design/page.tsx, and put one
+ *      through a REAL checkout: the answer has to carry an invoice link. A
+ *      deployment without the Shopify keys answers `dryRun` before it ever
+ *      looks for the variant, and proves nothing about step 3. (A variant
+ *      made a moment ago can be refused for up to ten minutes: checkout
+ *      keeps its list of them that long.)
+ *
+ * What it covers: every page as it loads (the style pickers, ?style=, the
+ * home page, the staff embed), and checkout, which refuses a line that
+ * names one. A piñata saved in a shopper's browser before a style left
+ * still shows in their order; the journey gives it another body, out loud,
+ * when it is opened (STYLE_GONE_NOTE in v2/lib/restore).
+ */
+export const NOT_YET_OFFERED: ReadonlySet<string> = new Set(["checkered"]);
+
+// "chonky" with no letter against it, in an id or a name: chonky,
+// chonky-pink, chonky2, "Chonky Donkey" — not "chonkyish".
+const CHONKY = /(^|[^a-z])chonky([^a-z]|$)/i;
+
+/** Does this builder offer the hub's style? */
+export function styleOffered(
+  style: { id?: unknown; name?: unknown } | null | undefined,
+): boolean {
+  const id = String(style?.id ?? "").trim().toLowerCase();
+  if (CHONKY.test(id) || CHONKY.test(String(style?.name ?? ""))) return false;
+  return !NOT_YET_OFFERED.has(id);
+}
+
+/** The hub's body styles, minus the ones this builder does not offer. */
+export function offeredStyles<T extends { id: string; name?: string }>(
+  styles: readonly T[],
+): T[] {
+  return styles.filter((s) => styleOffered(s));
 }
 
 export type HubBodyStyle = {
@@ -352,7 +427,10 @@ const LAST_GOOD_MAX_KEYS = 32; // a handful of hosts; bounded regardless
  *
  *  Capped at HUB_TIMEOUT_MS. When the hub is slow or down, the last copy
  *  this instance fetched for the same host is returned instead, marked
- *  `stale` (≤ 24h old); with no such copy it throws, as before. */
+ *  `stale` (≤ 24h old); with no such copy it throws, as before.
+ *
+ *  bodyStyles is the hub's list minus the styles this builder does not
+ *  offer (styleOffered), in the hub's order — the stale copy included. */
 export async function getCatalog(opts?: {
   host?: string | null;
   previewVariant?: string | null;
@@ -365,7 +443,7 @@ export async function getCatalog(opts?: {
     if (!Array.isArray(catalog?.bodyStyles)) {
       throw new Error("hub catalog: malformed response");
     }
-    catalog.bodyStyles = withBoxZones(catalog.bodyStyles);
+    catalog.bodyStyles = withBoxZones(offeredStyles(catalog.bodyStyles));
     lastGoodCatalog.delete(url); // re-insert = most recent last
     lastGoodCatalog.set(url, { catalog, at: Date.now() });
     if (lastGoodCatalog.size > LAST_GOOD_MAX_KEYS) {

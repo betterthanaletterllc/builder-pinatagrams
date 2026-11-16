@@ -62,6 +62,7 @@ import {
   type HubGraphicEntry,
   type HubPrice,
   type LogoZone,
+  offeredStyles,
   withBoxZones,
 } from "@/lib/hub";
 import {
@@ -77,8 +78,8 @@ import {
 import {
   cdnThumb,
   clearLibraryState,
-  EXCLUDED_PREFIXES,
   HOLIDAY_LABELS,
+  isOfferedDesign,
   loadJson,
   OCCASIONS,
   occasionOf,
@@ -518,7 +519,7 @@ export default function DesignFlow({
         : null;
     }
     if (variant.library === "none") return null;
-    if (EXCLUDED_PREFIXES.has(code.replace(/[0-9]+$/, ""))) return null;
+    if (!isOfferedDesign(code)) return null;
     const manifest = await loadJson<{ graphics: LibraryGraphic[] }>(
       "/graphics.json",
     );
@@ -1199,7 +1200,9 @@ export default function DesignFlow({
     if (switcherStyles) return;
     try {
       const r = await fetch(`${HUB_URL}/api/public/catalog`);
-      if (r.ok) setSwitcherStyles(withBoxZones((await r.json()).bodyStyles ?? []));
+      if (r.ok) {
+        setSwitcherStyles(withBoxZones(offeredStyles((await r.json()).bodyStyles ?? [])));
+      }
     } catch {}
   };
 
