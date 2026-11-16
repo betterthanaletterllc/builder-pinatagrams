@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import {
-  getCatalog,
   resolveBuilderPricing,
   resolveGraphicCategories,
   resolveHubGraphics,
@@ -13,6 +12,7 @@ import {
   type HubGraphicEntry,
   type LogoZone,
 } from "@/lib/hub";
+import { getSellableCatalog } from "@/lib/sellable-server";
 import { resolveFillings } from "@/lib/flow";
 import { resolveDeliveryConfig, type DeliveryConfig } from "@/lib/delivery";
 import {
@@ -70,7 +70,7 @@ export default async function DesignPage({
   let hubCategories: HubGraphicCategory[] = [];
   let hubDown = false;
   try {
-    const catalog = await getCatalog({ host, previewVariant });
+    const catalog = await getSellableCatalog({ host, previewVariant });
     requested = catalog.bodyStyles.find((s) => s.id === style) ?? null;
     match = requested?.inStock ? requested : null;
     if (!match) {

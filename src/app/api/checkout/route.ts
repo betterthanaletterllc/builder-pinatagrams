@@ -37,6 +37,8 @@ import {
 import { flowFromHeaders } from "@/lib/flow-version";
 import { isOfferedDesign } from "@/lib/library-data";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { customSkuFor } from "@/lib/sellable";
+import { customVariants, recheckCustomVariants } from "@/lib/sellable-server";
 import { ensureOrdersPaidWebhookOnce } from "@/lib/webhooks";
 import {
   NONCE_ATTR,
@@ -99,21 +101,10 @@ const NONCE_RE = /^[a-f0-9]{32}$/;
 const STORE_UNREACHABLE =
   "Checkout couldn't reach our store just now — nothing was charged. Please try again in a minute.";
 
-/**
- * The generic "Custom Built Piñatagram" product: one variant per body style,
- * SKU CUSTOM-{BODY}. Paper derives the body style from that SKU exactly like
- * legacy orders (spaces not hyphens — its parser splits on the LAST hyphen),
- * Shopify reporting sees a real product, and the invoice shows its image.
- * A style whose variant doesn't resolve refuses checkout loudly — a custom
- * line item without a SKU would strand the order for Paper.
- */
-const CUSTOM_PRODUCT_GID = "gid://shopify/Product/7741496623202";
-const SKU_SUFFIX_SPECIAL: Record<string, string> = {
-  "white-uni": "WHITE UNICORN",
-  "pink-uni": "PINK UNICORN",
-};
-const customSkuFor = (styleId: string) =>
-  `CUSTOM-${SKU_SUFFIX_SPECIAL[styleId] ?? styleId.toUpperCase().replace(/-/g, " ")}`;
+// The generic "Custom Built Piñatagram" product — one variant per body style,
+// SKU CUSTOM-{BODY} — lives in lib/sellable (customSkuFor) and
+// lib/sellable-server (the store's list of variants, which the style pickers
+// read too: a body with no variant is not listed, and is refused here).
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -125,45 +116,6 @@ function logGqlFailure(what: string, r: GqlResponse<unknown>): void {
   console.error(`${what} failed (HTTP ${r.status})`, raw);
   if (raw?.includes("Access denied")) {
     console.error(`${what}: token scopes: ${shopifyTokenScope() || "(none)"}`);
-  }
-}
-
-// Variant ids by SKU, cached for the life of the serverless instance
-// (10-minute TTL). Only a real answer is cached: an empty or failed lookup
-// cached here would keep refusing orders for ten minutes after the fix.
-let variantCache: { at: number; bySku: Map<string, string> } | null = null;
-
-/** null = Shopify unreachable/unreadable (retry); a map missing a SKU = a
- *  config problem the fail-fast check below refuses per piñata. */
-async function customVariantsBySku(
-  creds: ShopifyCreds,
-): Promise<Map<string, string> | null> {
-  if (variantCache && Date.now() - variantCache.at < 10 * 60_000) {
-    return variantCache.bySku;
-  }
-  try {
-    const r = await shopifyGraphql<{
-      product: { variants: { nodes: { id: string; sku: string | null }[] } } | null;
-    }>(
-      creds,
-      `query($id: ID!) {
-        product(id: $id) { variants(first: 50) { nodes { id sku } } }
-      }`,
-      { id: CUSTOM_PRODUCT_GID },
-    );
-    if (r.status !== 200 || r.errors) {
-      logGqlFailure("checkout: custom variant lookup", r);
-      return null;
-    }
-    const bySku = new Map<string, string>();
-    for (const n of r.data?.product?.variants?.nodes ?? []) {
-      if (n?.sku) bySku.set(n.sku, n.id);
-    }
-    if (bySku.size) variantCache = { at: Date.now(), bySku };
-    return bySku;
-  } catch (e) {
-    console.error(`checkout: custom variant lookup failed: ${errText(e)}`);
-    return null;
   }
 }
 
@@ -620,7 +572,7 @@ export async function POST(req: Request) {
     "price",
   );
   const shippingRuleP = freeShippingRule(discountCodes);
-  const customVariantsP = creds ? customVariantsBySku(creds) : Promise.resolve(null);
+  const customVariantsP = creds ? customVariants() : Promise.resolve(null);
 
   // Live catalog: styles must exist and be in stock at order time. Money
   // path = NO builder-side cache — the hub's edge cache is the only layer,
@@ -1237,7 +1189,14 @@ export async function POST(req: Request) {
   // body style (real SKU → Paper parses the body like any legacy order; the
   // product image shows on the invoice). priceOverride keeps the hub's
   // price authoritative.
-  const variantBySku = await customVariantsP;
+  const firstList = await customVariantsP;
+  // A body that is not on the list may be missing from a list that is
+  // minutes old (its variant added since): ask the store once more before a
+  // piñata is refused for it. Unreadable this time → the list we have stands.
+  const variantBySku =
+    firstList?.size && lines.some((l) => !firstList.has(customSkuFor(l.styleId)))
+      ? ((await recheckCustomVariants()) ?? firstList)
+      : firstList;
   const addonSkus = [
     ...new Set(
       lines.flatMap((l) =>
@@ -1245,16 +1204,23 @@ export async function POST(req: Request) {
       ),
     ),
   ];
-  const addonVariants = variantBySku ? await addonVariantIds(creds, addonSkus) : null;
-  if (!variantBySku || !addonVariants) {
+  if (variantBySku && variantBySku.size === 0) {
+    // The store answered, with no variant at all: the product itself is gone
+    // or unreadable. That is the store's trouble, not any one piñata's.
+    console.error("checkout: the Custom Built Piñatagram product has no variant with a SKU");
+  }
+  const addonVariants = variantBySku?.size ? await addonVariantIds(creds, addonSkus) : null;
+  if (!variantBySku?.size || !addonVariants) {
     return NextResponse.json({ error: STORE_UNREACHABLE }, { status: 502 });
   }
 
   // Fail-fast BEFORE creating anything: every piñata must attach to its
   // CUSTOM-{BODY} variant and every add-on to its own product's variant.
-  // A miss is a config error (deleted variant, SKU typo) — refuse loudly,
-  // naming every affected piñata; a silent fallback shape would strand
-  // orders Paper can't parse (no SKU → no body style) and rot sales reporting.
+  // A body with no variant is not sold here (lib/sellable — the style pickers
+  // leave it out too; this is a cart saved before, or a variant deleted
+  // since): refuse loudly, naming every affected piñata, with the way out —
+  // another body. A silent fallback shape would strand orders Paper can't
+  // parse (no SKU → no body style) and rot sales reporting.
   const configProblems: LineError[] = [];
   for (const l of lines) {
     if (!variantBySku.has(customSkuFor(l.styleId))) {
@@ -1262,7 +1228,7 @@ export async function POST(req: Request) {
       configProblems.push({
         lineId: l.lineId,
         code: "style_checkout_unavailable",
-        message: `${l.name}: Checkout is temporarily unavailable for the ${l.styleName} body — try again in a minute.`,
+        message: `${l.name}: The ${l.styleName} body can't be ordered right now — swap its style and try again.`,
       });
     }
     const dead = l.addons.find((a) => !a.sku || !addonVariants.has(a.sku));

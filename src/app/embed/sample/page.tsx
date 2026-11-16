@@ -3,12 +3,12 @@ import { preload } from "react-dom";
 import { embedParentOrigins } from "@/lib/embed";
 import { previewOverridesAllowed } from "@/lib/flow-version";
 import {
-  getCatalog,
   resolveBuilderPricing,
   resolveGraphicCategories,
   resolveHubGraphics,
   type HubCatalog,
 } from "@/lib/hub";
+import { getSellableCatalog } from "@/lib/sellable-server";
 import { resolveVariantProfile } from "@/lib/variant";
 import {
   defaultGraphic,
@@ -37,10 +37,12 @@ export const metadata: Metadata = {
  *
  * Everything is resolved here exactly as /design resolves it for a shopper
  * (the same catalog, the same occasion strips, the same starting design and
- * body), with two differences: every body style the builder offers is shown,
+ * body), with two differences: every body style the builder sells is shown,
  * in stock or not — a sample can be of a style that has sold out — and there
- * are no prices. (A style the builder does not offer at all — the Chonky,
- * say — is not here either: lib/hub styleOffered.)
+ * are no prices. (A style the builder does not sell at all is not here
+ * either: one it leaves out by name — the Chonky, say, lib/hub styleOffered —
+ * or one the store has no variant for, lib/sellable. Paper's own "another
+ * body style" list is where a sample of one of those starts.)
  *
  * ?style= names the body to start on (a hub id). Without the hub there is no
  * box and no library to show, so the page says so instead.
@@ -55,7 +57,7 @@ export default async function EmbedSamplePage({
 
   let catalog: HubCatalog | null = null;
   try {
-    catalog = await getCatalog({ host, previewVariant });
+    catalog = await getSellableCatalog({ host, previewVariant });
   } catch {
     catalog = null;
   }

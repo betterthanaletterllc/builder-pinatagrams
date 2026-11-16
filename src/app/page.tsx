@@ -3,13 +3,13 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   formatCents,
-  getCatalog,
   getReviews,
   HUB_URL,
   priceUrl,
   resolveBuilderPricing,
   type HubPrice,
 } from "@/lib/hub";
+import { getSellableCatalog } from "@/lib/sellable-server";
 import {
   formatYmd,
   minDeliveryDate,
@@ -84,7 +84,7 @@ export default async function Home({
         ? ([(await searchParams).variant].flat()[0] ?? null)
         : null;
     const [catalog, price, reviews] = await Promise.all([
-      getCatalog({ host, previewVariant }),
+      getSellableCatalog({ host, previewVariant }),
       b2cPrice(),
       // Extra headroom so the strip still finds 4 five-star-or-verified
       // cards after filtering; null on any hiccup → review UI just absent.

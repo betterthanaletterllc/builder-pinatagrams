@@ -223,9 +223,10 @@ export function embedEditorStyle<T extends { boxImageUrl: string | null; logoZon
 /* --- /embed/sample: "this piñata" ------------------------------------------ */
 
 // Checkout sells every piñata as the Custom Built product's CUSTOM-{BODY}
-// variant, and Paper reads the body from that SKU (api/checkout: customSkuFor).
+// variant, and Paper reads the body from that SKU (lib/sellable: customSkuFor).
 // A sample has no checkout, so the embed tells Paper the same body token.
-// tests/embed.test.mjs holds this table and checkout's together.
+// That file holds the other copy of this table (both are import-free);
+// tests/embed.test.mjs and tests/sellable.test.mjs hold the two together.
 const BODY_TOKEN_SPECIAL: Record<string, string> = {
   "white-uni": "WHITE UNICORN",
   "pink-uni": "PINK UNICORN",
