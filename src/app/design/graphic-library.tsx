@@ -10,12 +10,12 @@ import {
   buildSearchIndex,
   byPopularity,
   cdnThumb,
-  EXCLUDED_PREFIXES,
   FALLBACK_OCCASION,
   FAMILY_RECIPIENTS,
   FRIEND_RECIPIENTS,
   HOLIDAY_LABELS,
   holidaysFromToday,
+  isOfferedDesign,
   loadJson,
   loadLibraryState,
   occasionOf,
@@ -311,7 +311,7 @@ export default function GraphicLibrary({
         restrict === "none"
           ? []
           : manifest.graphics.filter(
-              (g) => !EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, "")),
+              (g) => isOfferedDesign(g.design),
             );
       if (restrict === "birthday") {
         const extra = new Set(collections?.birthday ?? []);

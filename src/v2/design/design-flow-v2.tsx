@@ -89,7 +89,7 @@ import {
 } from "../lib/occasions";
 import { computeOrder, designName, type OrderPiece } from "../lib/order";
 import { deliveredCents, priceRows, type PriceCtx } from "../lib/pricing";
-import { graphicReady, resolveRestore } from "../lib/restore";
+import { graphicReady, resolveRestore, STYLE_GONE_NOTE } from "../lib/restore";
 import { parseStep, stepAt, STEPS } from "../lib/steps";
 import type { FlowData, GraphicSource, StepId, StepVia } from "../lib/types";
 import BoxThumb from "../ui/box-thumb";
@@ -517,6 +517,21 @@ export default function DesignFlowV2(data: FlowData) {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [navigate, freshPiece, resumeLastLine]);
+
+  /* --- a piñata whose body style has left ---------------------------------- */
+
+  // A body that isn't offered (any more) has no entry in stylesById: step 1
+  // would draw an empty panel for it, and commitDraft would have nothing to
+  // save while "Save changes" said it had. A page load swaps the body in
+  // resolveRestore; this covers every other way such a piñata becomes the
+  // one in progress — "Edit" on a line of the order, a piñata set aside
+  // coming back. Out loud, never silently; its design and message stay.
+  useEffect(() => {
+    if (!hydrated || !draft || stylesById.has(draft.styleId)) return;
+    if (!stylesById.has(data.preset.styleId)) return;
+    patch({ styleId: data.preset.styleId });
+    showToast(STYLE_GONE_NOTE);
+  }, [hydrated, draft, stylesById, data.preset.styleId, patch, showToast]);
 
   /* --- persistence + outside changes -------------------------------------- */
 

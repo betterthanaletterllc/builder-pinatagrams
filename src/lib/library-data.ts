@@ -19,8 +19,24 @@ export type GraphicTags = { r: string[]; v: string[]; m: number[] };
 export type TagIndex = Record<string, GraphicTags>;
 export type PopularRanking = { design: string; units: number }[];
 
-// Client-specific one-off designs that shouldn't appear in a public library.
-export const EXCLUDED_PREFIXES = new Set(["BSG", "BRYNNEIL", "RETENTION"]);
+// Store listings that are not designs to pick here, by design-code prefix:
+//  - BSG, BRYNNEIL, RETENTION: client-specific one-offs.
+//  - CHONKY: the Chonky Donkey's own listing (CHONKY01). The Chonky is a
+//    different product (see styleOffered in lib/hub); its "front graphic" in
+//    the store is a placeholder that reads NO FRONT GRAPHIC, so as a tile
+//    here it put those words on a regular piñata's box.
+export const EXCLUDED_PREFIXES = new Set(["BSG", "BRYNNEIL", "RETENTION", "CHONKY"]);
+
+/**
+ * Is this store listing a design the builder offers? One rule for every
+ * place a store design is shown (the occasion strips, the whole library and
+ * its search, a ?design= link) and for checkout, which refuses a line that
+ * carries one of the others — a cart saved while it was still a tile.
+ */
+export function isOfferedDesign(design: string): boolean {
+  const prefix = String(design ?? "").trim().toUpperCase().replace(/[0-9]+$/, "");
+  return !EXCLUDED_PREFIXES.has(prefix);
+}
 
 export const OCCASIONS: Record<string, string> = {
   HBD: "Birthday",

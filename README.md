@@ -10,6 +10,7 @@ project memory / ROADMAP.md (workstream #7).
 | Concern | Home |
 |---|---|
 | Catalog, availability, pricing numbers | **the hub** (admin.betterthanaletter.com) — this app reads `/api/public/*` only, never COGS |
+| Which of the hub's body styles are sold here | **here**: `styleOffered` in `src/lib/hub.ts`. The hub lists every style the business stocks (its "active" tick is also what puts a style on the hub's own Inventory page); the Chonky is never offered here and the Checkered not yet — that file says what has to be true before it is |
 | Pricing math at checkout | server-side here, recomputed from hub numbers — the client sends a selection, never a price |
 | Design documents (saved designs) | `builder_*` schema on the customer Neon instance (later milestone) |
 | Flattened print art | Vercel Blob, public https URLs handed to Paper as the `_frontGraphic` line-item property |
@@ -90,7 +91,10 @@ message contract are in `src/lib/embed.ts`; Paper keeps the other copy in
 - Opened directly (not in a frame) it still works, so it can be looked at;
   the design just isn't sent anywhere.
 - `?style=` names the body whose box the "On the box" preview shows (hub id
-  or name; unknown → the default).
+  or name; unknown → the default's box). A body the builder does not offer
+  (`styleOffered`: the Chonky, the Checkered for now) gets no box at all —
+  its label is made flat. (Any other body the hub does not list still opens
+  on the default's box, as it always has.)
 - `?side=inside` makes the card inside the box (the one the message prints
   on) instead of the front label: the same editor and print size, flat only
   — the box photo shows the front (`embedSide`, `embedEditorStyle`).
@@ -106,18 +110,23 @@ own components (`Stage`, `StepDesign`, the sheets in `sheets.tsx`,
 (`src/app/embed/sample/embed-sample.tsx`) follows `DesignFlowV2`'s for that
 step; a test fails if the page stops importing those components.
 
-- Differences from the journey: every body style is offered, in stock or not
-  (a sample can be of anything); nothing is priced; nothing is kept in the
-  browser; no cart, checkout or analytics.
-- The one button is "Use this piñata". The step stays on screen afterwards
-  — the box with the pick on it — saying what was sent, so it can be changed
-  and sent again. It sends the framing page a `choice`
+- Differences from the journey: every body style the builder offers is
+  shown, in stock or not (a sample can be of a style that has sold out);
+  nothing is priced; nothing is kept in the browser; no cart, checkout or
+  analytics.
+- The one button is "Use this piñata". Inside the frame the step stays as
+  it is afterwards — the box with the pick on it — saying what was sent, so
+  it can be changed and sent again. (Paper folds the frame away once a
+  piñata is picked and brings it back, as it was left, with "Change".) It
+  sends the framing page a `choice`
   message: the body (hub id, name, and the body as Paper names it —
   `embedBodyToken`, the same token checkout puts after `CUSTOM-` in a SKU),
   the front (a store design's print file on the store's CDN; a hub
   graphic's file and sha256; or a design made here, staged as for an order),
-  and the card the message prints on. Paper checks every address and keeps
-  its own copies.
+  the card the message prints on, and `box` — the style's box photo and
+  where the label sits on it (`embedBoxFor`), so Paper can go on showing
+  the design on the box while the frame is folded away. Paper checks every
+  address and keeps its own copies of the files it prints.
 - Paper answers each pick with `held` (kept · failed · released), and this
   page tells Paper with `pick-state` when what is showing is no longer what
   it was sent (or the editor is open on something not used yet) — so

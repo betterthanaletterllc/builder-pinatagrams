@@ -5,9 +5,9 @@ import tagsFile from "../../../public/library-index.json";
 import popularFile from "../../../public/popular.json";
 import { CLASSIC_GRAPHIC, type GraphicChoice } from "@/lib/flow";
 import type { HubBodyStyle, HubGraphicEntry } from "@/lib/hub";
-import { EXCLUDED_PREFIXES, occasionOf } from "@/lib/library-data";
+import { isOfferedDesign, occasionOf } from "@/lib/library-data";
 import type { VariantProfile } from "@/lib/variant";
-import { BEST_SELLER_BODIES, designPrefix } from "./defaults";
+import { BEST_SELLER_BODIES } from "./defaults";
 import {
   activeOccasions,
   isSchoolDesign,
@@ -58,9 +58,11 @@ const RECIPIENTS = new Map(
 const byPopularity = (a: ManifestGraphic, b: ManifestGraphic) =>
   (RANK.get(a.design) ?? 1e6) - (RANK.get(b.design) ?? 1e6);
 
-// Every sellable Shopify design (client one-offs excluded, as in the library).
+// Every sellable Shopify design: the store listings the builder offers as
+// designs (lib/library-data isOfferedDesign — the same rule the whole
+// library and checkout use).
 const SELLABLE = MANIFEST.graphics.filter(
-  (g) => !!g.art && !EXCLUDED_PREFIXES.has(designPrefix(g.design)),
+  (g) => !!g.art && isOfferedDesign(g.design),
 );
 
 const isBirthday = (design: string) =>

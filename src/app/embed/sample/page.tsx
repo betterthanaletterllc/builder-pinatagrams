@@ -37,8 +37,10 @@ export const metadata: Metadata = {
  *
  * Everything is resolved here exactly as /design resolves it for a shopper
  * (the same catalog, the same occasion strips, the same starting design and
- * body), with two differences: every body style is offered, in stock or not
- * — a sample can be of anything — and there are no prices.
+ * body), with two differences: every body style the builder offers is shown,
+ * in stock or not — a sample can be of a style that has sold out — and there
+ * are no prices. (A style the builder does not offer at all — the Chonky,
+ * say — is not here either: lib/hub styleOffered.)
  *
  * ?style= names the body to start on (a hub id). Without the hub there is no
  * box and no library to show, so the page says so instead.

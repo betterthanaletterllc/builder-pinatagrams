@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { embedEditorStyle, embedParentOrigins, embedSide, pickEmbedStyle } from "@/lib/embed";
 import { previewOverridesAllowed } from "@/lib/flow-version";
-import { getCatalog, type HubBodyStyle } from "@/lib/hub";
+import { getCatalog, styleOffered, type HubBodyStyle } from "@/lib/hub";
 import { param, requestContext } from "@/v2/lib/server";
 import EmbedDesign from "./embed-design";
 
@@ -17,8 +17,11 @@ export const metadata: Metadata = {
  * make a one-off sample (lib/embed has the whole story and the contract).
  *
  * ?style= names the body whose box the "On the box" preview shows (a hub id,
- * or the name Paper prints). Any body will do, in stock or not — a sample
- * can be of anything — and an unknown one falls back to the usual default.
+ * or the name Paper prints). Any body the builder offers will do, in stock
+ * or not, and an unknown one falls back to the usual default.
+ * A body the builder does not offer (lib/hub styleOffered — the Chonky and,
+ * for now, the Checkered; Paper has orders for both) has no box here, and
+ * another piñata's box would be the wrong picture: its label is made flat.
  * With the hub unreachable the editor still opens, flat only.
  *
  * ?side=inside makes the card inside the box (the one the message prints
@@ -53,9 +56,13 @@ export default async function EmbedDesignPage({
     };
   }
 
+  const editorStyle = embedEditorStyle(style, side);
+  // Asked for a body the builder does not offer: no box to show it on.
+  const noBox = !!wanted && !styleOffered({ id: wanted, name: wanted });
+
   return (
     <EmbedDesign
-      style={embedEditorStyle(style, side)}
+      style={noBox ? { ...editorStyle, boxImageUrl: null, logoZone: null } : editorStyle}
       side={side}
       parents={embedParentOrigins(!previewOverridesAllowed())}
     />
