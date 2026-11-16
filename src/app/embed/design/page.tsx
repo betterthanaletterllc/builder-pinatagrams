@@ -18,7 +18,10 @@ export const metadata: Metadata = {
  *
  * ?style= names the body whose box the "On the box" preview shows (a hub id,
  * or the name Paper prints). Any body the builder offers will do, in stock
- * or not, and an unknown one falls back to the usual default.
+ * or not, and an unknown one falls back to the usual default. "Offers" here
+ * is lib/hub's list alone (getCatalog, on purpose — not getSellableCatalog):
+ * the label is for an order that already has its body, so a style the store
+ * has no variant for still gets its own box.
  * A body the builder does not offer (lib/hub styleOffered — the Chonky and,
  * for now, the Checkered; Paper has orders for both) has no box here, and
  * another piñata's box would be the wrong picture: its label is made flat.

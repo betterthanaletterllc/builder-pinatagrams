@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { formatYmd, resolveDeliveryConfig } from "@/lib/delivery";
 import {
   formatCents,
-  getCatalog,
   getReviews,
   resolveBuilderPricing,
   resolveHubGraphics,
   type HubReview,
 } from "@/lib/hub";
+import { getSellableCatalog } from "@/lib/sellable-server";
 import { cdnThumb } from "@/lib/library-data";
 import { priceForVariant, resolveVariantProfile } from "@/lib/variant";
 import VariantBoot from "@/app/variant-boot";
@@ -52,7 +52,7 @@ export default async function HomeV2({
 
   let catalog;
   try {
-    catalog = await getCatalog({ host, previewVariant });
+    catalog = await getSellableCatalog({ host, previewVariant });
   } catch {
     return <HubDown />;
   }

@@ -2,12 +2,12 @@ import { preload } from "react-dom";
 import { resolveDeliveryConfig } from "@/lib/delivery";
 import { resolveFillings } from "@/lib/flow";
 import {
-  getCatalog,
   resolveBuilderPricing,
   resolveGraphicCategories,
   resolveHubGraphics,
   type HubCatalog,
 } from "@/lib/hub";
+import { getSellableCatalog } from "@/lib/sellable-server";
 import { priceForVariant, resolveVariantProfile } from "@/lib/variant";
 import VariantBoot from "@/app/variant-boot";
 import HubDown from "../chrome/hub-down";
@@ -45,7 +45,7 @@ export default async function DesignPageV2({
 
   let catalog: HubCatalog;
   try {
-    catalog = await getCatalog({ host, previewVariant });
+    catalog = await getSellableCatalog({ host, previewVariant });
   } catch {
     // Without the catalog there's no box, price or stock to build against.
     return <HubDown />;

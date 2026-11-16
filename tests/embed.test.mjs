@@ -157,14 +157,20 @@ test("the body is named as checkout names it in a line's SKU", () => {
   // spaces, never hyphens: Paper's parser splits a SKU on its LAST hyphen
   assert.equal(embedBodyToken("some-new-style"), "SOME NEW STYLE");
 
-  // Checkout holds the other copy of this rule; the two must not drift.
-  const checkout = readFileSync(new URL("../src/app/api/checkout/route.ts", import.meta.url), "utf8");
-  const table = /const SKU_SUFFIX_SPECIAL: Record<string, string> = \{([^}]*)\};/.exec(checkout);
-  assert.ok(table, "checkout's table of special body names was not found");
+  // lib/sellable holds the other copy of this rule — the SKU checkout sells a
+  // body under — and the two must not drift. (tests/sellable.test.mjs runs
+  // both over every style the hub has.)
+  const sellable = readFileSync(new URL("../src/lib/sellable.ts", import.meta.url), "utf8");
+  const table = /const SKU_SUFFIX_SPECIAL: Record<string, string> = \{([^}]*)\};/.exec(sellable);
+  assert.ok(table, "lib/sellable's table of special body names was not found");
   const special = [...table[1].matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map(([, id, name]) => [id, name]);
   assert.ok(special.length >= 2);
   for (const [id, name] of special) assert.equal(embedBodyToken(id), name, id);
-  assert.match(checkout, /styleId\.toUpperCase\(\)\.replace\(\/-\/g, " "\)/);
+  assert.match(sellable, /styleId\.toUpperCase\(\)\.replace\(\/-\/g, " "\)/);
+  // …and checkout uses that one, not a copy of its own.
+  const checkout = readFileSync(new URL("../src/app/api/checkout/route.ts", import.meta.url), "utf8");
+  assert.match(checkout, /import \{[^}]*\bcustomSkuFor\b[^}]*\} from "@\/lib\/sellable";/);
+  assert.equal(/SKU_SUFFIX_SPECIAL|const customSkuFor\b/.test(checkout), false, "checkout spells the SKU rule itself again");
 });
 
 test("a pick is reported in the journey's three shapes, and not before it can be", () => {

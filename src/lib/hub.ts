@@ -98,23 +98,37 @@ export function withBoxZones(styles: HubBodyStyle[]): HubBodyStyle[] {
  *      /catalog (on 2026-11-15 the box picture there is a mock-up, with no
  *      placement);
  *   3. the Custom Built Piñatagram product in Shopify has a CUSTOM-CHECKERED
- *      variant. Without it checkout answers "temporarily unavailable" for
- *      good (api/checkout: customSkuFor) — which is how these two sat in
- *      the picker with nobody able to buy one;
+ *      variant. Without it nobody can buy one — which is how these two sat
+ *      in the picker on 2026-11-15, checkout answering "temporarily
+ *      unavailable". Since then a style without its variant is not listed
+ *      at all (lib/sellable), so this step alone would bring the Checkered
+ *      back were it not for the list below: steps 1 and 2 are why it is on
+ *      that list;
  *   4. then take "checkered" out of NOT_YET_OFFERED and out of
- *      tests/styles.test.mjs, drop the "for now" / "not yet" about it from
- *      README.md (two places) and app/embed/design/page.tsx, and put one
- *      through a REAL checkout: the answer has to carry an invoice link. A
- *      deployment without the Shopify keys answers `dryRun` before it ever
- *      looks for the variant, and proves nothing about step 3. (A variant
- *      made a moment ago can be refused for up to ten minutes: checkout
- *      keeps its list of them that long.)
+ *      tests/styles.test.mjs and tests/sellable.test.mjs (both expect it to
+ *      be left out), drop the "for now" / "not yet" about it from README.md
+ *      (two places) and app/embed/design/page.tsx, and put one through a
+ *      REAL checkout: the answer has to carry an invoice link. A deployment
+ *      without the Shopify keys answers `dryRun` before it ever looks for
+ *      the variant, and proves nothing about step 3. (A variant made a
+ *      moment ago can take ten to twenty minutes to show in the picker —
+ *      lib/sellable says why. Adding its SKU to SEEN_IN_STORE there spares
+ *      a just-started server a short wait: do that only AFTER the variant
+ *      exists in the store — the server log says when the list needs it.)
+ *   5. the quote tool keeps its own copy of this rule (quote repo:
+ *      src/lib/styles-offered.ts, with its own "comes back when"). Lift it
+ *      there in the same go, or the Checkered is back here and still hidden
+ *      there.
  *
  * What it covers: every page as it loads (the style pickers, ?style=, the
  * home page, the staff embed), and checkout, which refuses a line that
  * names one. A piñata saved in a shopper's browser before a style left
  * still shows in their order; the journey gives it another body, out loud,
  * when it is opened (STYLE_GONE_NOTE in v2/lib/restore).
+ *
+ * This list is the styles left out BY NAME. The other half of "what is sold
+ * here" needs no list: a hub style the store has no variant for is not
+ * listed either (lib/sellable, lib/sellable-server getSellableCatalog).
  */
 export const NOT_YET_OFFERED: ReadonlySet<string> = new Set(["checkered"]);
 
@@ -430,7 +444,11 @@ const LAST_GOOD_MAX_KEYS = 32; // a handful of hosts; bounded regardless
  *  `stale` (≤ 24h old); with no such copy it throws, as before.
  *
  *  bodyStyles is the hub's list minus the styles this builder does not
- *  offer (styleOffered), in the hub's order — the stale copy included. */
+ *  offer (styleOffered), in the hub's order — the stale copy included.
+ *
+ *  A page that lists styles to CHOOSE from does not call this: it calls
+ *  lib/sellable-server's getSellableCatalog, which also leaves out the
+ *  styles the store has no variant for. */
 export async function getCatalog(opts?: {
   host?: string | null;
   previewVariant?: string | null;

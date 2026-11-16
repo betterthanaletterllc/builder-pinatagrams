@@ -10,7 +10,7 @@ project memory / ROADMAP.md (workstream #7).
 | Concern | Home |
 |---|---|
 | Catalog, availability, pricing numbers | **the hub** (admin.betterthanaletter.com) — this app reads `/api/public/*` only, never COGS |
-| Which of the hub's body styles are sold here | **here**: `styleOffered` in `src/lib/hub.ts`. The hub lists every style the business stocks (its "active" tick is also what puts a style on the hub's own Inventory page); the Chonky is never offered here and the Checkered not yet — that file says what has to be true before it is |
+| Which of the hub's body styles are sold here | **here**, two rules. (1) `src/lib/sellable.ts`: a style is listed only when the store has its variant — SKU exactly `CUSTOM-{BODY}` on the "Custom Built Piñatagram" product — because that is what checkout sells it as. In production a style ticked active in the hub without one is left out of the pickers (the only trace is a `[sellable] not listed` line in the server log); add the variant and it shows by itself, usually within ten to twenty minutes. Where the store cannot be asked — no keys (local, previews), or a just-started server while the store is down — every style is listed as before, and checkout refuses what it cannot sell. (2) `styleOffered` in `src/lib/hub.ts`: the styles left out by name, whatever the store has — the Chonky never, the Checkered not yet (that file says what has to be true before it is). The hub lists every style the business stocks (its "active" tick is also what puts a style on the hub's own Inventory page), so neither rule is a reason to untick one there |
 | Pricing math at checkout | server-side here, recomputed from hub numbers — the client sends a selection, never a price |
 | Design documents (saved designs) | `builder_*` schema on the customer Neon instance (later milestone) |
 | Flattened print art | Vercel Blob, public https URLs handed to Paper as the `_frontGraphic` line-item property |
@@ -94,7 +94,9 @@ message contract are in `src/lib/embed.ts`; Paper keeps the other copy in
   or name; unknown → the default's box). A body the builder does not offer
   (`styleOffered`: the Chonky, the Checkered for now) gets no box at all —
   its label is made flat. (Any other body the hub does not list still opens
-  on the default's box, as it always has.)
+  on the default's box, as it always has.) This page reads the hub's styles
+  whether or not the store sells them here (`getCatalog`, not
+  `getSellableCatalog`): it shows the box of the body an order already has.
 - `?side=inside` makes the card inside the box (the one the message prints
   on) instead of the front label: the same editor and print size, flat only
   — the box photo shows the front (`embedSide`, `embedEditorStyle`).
@@ -110,7 +112,7 @@ own components (`Stage`, `StepDesign`, the sheets in `sheets.tsx`,
 (`src/app/embed/sample/embed-sample.tsx`) follows `DesignFlowV2`'s for that
 step; a test fails if the page stops importing those components.
 
-- Differences from the journey: every body style the builder offers is
+- Differences from the journey: every body style the builder sells is
   shown, in stock or not (a sample can be of a style that has sold out);
   nothing is priced; nothing is kept in the browser; no cart, checkout or
   analytics.
