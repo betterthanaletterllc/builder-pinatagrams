@@ -100,6 +100,25 @@ test("the box shown is the body asked for, by id or by printed name", () => {
   assert.equal(pickEmbedStyle([], "green"), null);
 });
 
+test("a body is also found by the name Paper has for it, where the hub's differs", async () => {
+  const { embedBodyToken: bodyToken } = await import("../src/lib/embed.ts");
+  // Paper reads a body from a line's SKU ("CUSTOM-WHITE UNICORN") and asks
+  // for it in lower case; the hub calls that style white-uni, "White Uni".
+  const styles = [
+    { id: "googly", name: "Googly" },
+    { id: "white-uni", name: "White Uni" },
+    { id: "pink-uni", name: "Pink Uni" },
+    { id: "star-spangled", name: "Star Spangled" },
+  ];
+  assert.equal(pickEmbedStyle(styles, "white unicorn")?.id, "white-uni");
+  assert.equal(pickEmbedStyle(styles, "PINK UNICORN")?.id, "pink-uni");
+  assert.equal(pickEmbedStyle(styles, "star spangled")?.id, "star-spangled");
+  // every style is found by its own token — the one the sample page sends Paper
+  for (const s of styles) assert.equal(pickEmbedStyle(styles, bodyToken(s.id))?.id, s.id, s.id);
+  // a body nobody has is still the default
+  assert.equal(pickEmbedStyle(styles, "unicorn")?.id, "googly");
+});
+
 test("the embed module imports nothing: the edge middleware loads it", () => {
   const source = readFileSync(new URL("../src/lib/embed.ts", import.meta.url), "utf8");
   assert.equal(/^\s*import\s/m.test(source), false);

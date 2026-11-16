@@ -102,7 +102,8 @@ export default function EmbedSample({
 }: {
   /** The origins allowed to frame this page and to talk to it. */
   parents: string[];
-  /** Every body style, in stock or not: a sample can be of anything. */
+  /** Every body style the builder offers, in stock or not: a sample can be
+   *  of a style that has sold out. */
   styles: HubBodyStyle[];
   box: BoxInterior | null;
   pricing: BuilderPricing;
