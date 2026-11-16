@@ -5,6 +5,7 @@ import {
   createVariantBook,
   CUSTOM_PRODUCT_GID,
   SEEN_IN_STORE,
+  seenInStoreDrift,
   sellableNote,
   variantsForDisplay,
   withSellableStyles,
@@ -103,11 +104,25 @@ export const recheckCustomVariants = (): Promise<VariantsBySku | null> => book.r
 // read beside it has 3s. Every other page does not wait at all.
 const DISPLAY_WAIT_MS = 1500;
 
-/** Keep this server alive until the store's answer has landed in the book:
- *  the page that asked has usually been sent by then. */
+// How long a page that has already been sent keeps its server alive for the
+// store's answer. A store that hangs (its own deadline is 10s a call) must
+// not hold every page's invocation open that long.
+const KEEP_ALIVE_MS = 5_000;
+
+/** Keep this server alive until the store's answer has landed in the book —
+ *  the page that asked has usually been sent by then — but not for long. */
 function keepAliveFor(question: Promise<unknown>): void {
   try {
-    after(() => question);
+    after(
+      () =>
+        new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, KEEP_ALIVE_MS);
+          void question.finally(() => {
+            clearTimeout(timer);
+            resolve();
+          });
+        }),
+    );
   } catch {
     // Not inside a request (a build step, a test): the question simply runs.
   }
@@ -116,6 +131,7 @@ function keepAliveFor(question: Promise<unknown>): void {
 // What was last said to the log, so one situation is said once per server
 // process, not once per page view.
 let lastSaid = "";
+let lastDrift = "";
 
 /**
  * The hub's catalog as the style pickers list it: lib/hub's getCatalog (the
@@ -151,6 +167,14 @@ export async function getSellableCatalog(opts?: {
   if ((note?.key ?? "") !== lastSaid) {
     lastSaid = note?.key ?? "";
     if (note) (note.level === "error" ? console.error : console.warn)(note.line);
+  }
+  // The shortcut list is a hand-kept copy of the store: once this server has
+  // heard from the store itself, say where the two disagree.
+  const heard = book.held();
+  const drift = heard ? seenInStoreDrift(SEEN_IN_STORE, heard.variants, catalog.bodyStyles) : null;
+  if (heard && (drift?.key ?? "") !== lastDrift) {
+    lastDrift = drift?.key ?? "";
+    if (drift) console.warn(drift.line);
   }
   return result.catalog;
 }

@@ -73,9 +73,17 @@ export type SkuList = { has(sku: string): boolean };
  * but only while it covers every style the hub lists, so it can never hide a
  * style, and the store is still asked behind the page. A style that is not
  * on it (a new one) makes such a server wait for the store's own answer;
- * adding its SKU here takes that wait away again, nothing more. The one
- * thing it can get wrong: a variant deleted since still counts on a server's
- * first page — checkout refuses it and says so.
+ * adding its SKU here takes that wait away again, nothing more.
+ *
+ * It is a hand-kept copy of the store, and it can go stale two ways. A SKU
+ * on it that the store does not have — a variant deleted since, or a SKU
+ * added here before its variant existed — is LISTED by every just-started
+ * server until the store's own answer lands on it (normally within a second
+ * of its first page; not at all while the store cannot be reached); checkout
+ * refuses that body and says so. A sellable style missing from it only
+ * costs just-started servers the short wait. seenInStoreDrift names both in
+ * the server log the moment a server hears from the store. So: add a SKU
+ * here only AFTER its variant exists, and take it out when its variant goes.
  */
 export const SEEN_IN_STORE: ReadonlySet<string> = new Set([
   "CUSTOM-STANDARD",
@@ -174,6 +182,38 @@ export function sellableNote(
   };
 }
 
+/**
+ * Where SEEN_IN_STORE and the store's own answer disagree, for the log:
+ *   notInStore — SKUs on the shortcut list that the store does not have. A
+ *     just-started server lists those styles until it hears from the store:
+ *     take them off the list.
+ *   notOnList — styles being listed that the store can sell and the shortcut
+ *     does not know. They make a just-started server wait: add them.
+ * null when the two agree about everything that matters.
+ */
+export function seenInStoreDrift(
+  seen: Iterable<string>,
+  store: SkuList,
+  styles: readonly ({ id?: unknown } | null | undefined)[],
+): { key: string; line: string } | null {
+  const known = new Set(seen);
+  const notInStore = [...known].filter((sku) => !store.has(sku));
+  const notOnList = styleSkus(styles).filter((sku) => store.has(sku) && !known.has(sku));
+  if (notInStore.length === 0 && notOnList.length === 0) return null;
+  const parts = [
+    notInStore.length
+      ? `it has ${notInStore.map((s) => JSON.stringify(s)).join(", ")}, which the store does not — a just-started server lists those styles until it hears from the store: take them out`
+      : "",
+    notOnList.length
+      ? `it lacks ${notOnList.map((s) => JSON.stringify(s)).join(", ")}, which the store sells — a just-started server waits on the store because of them: add them`
+      : "",
+  ].filter(Boolean);
+  return {
+    key: `${notInStore.join("|")}//${notOnList.join("|")}`,
+    line: `[sellable] SEEN_IN_STORE (lib/sellable) is out of date: ${parts.join("; ")}.`,
+  };
+}
+
 /* --- the store's list, remembered ------------------------------------------- */
 
 /** How long an answer from the store is used without asking again. */
@@ -226,7 +266,10 @@ type Open = { answer: Promise<VariantsBySku | null>; since: number };
  * Checkouts that ask at the same moment share one question, and so do pages.
  * A page may ride on a checkout's question; a checkout never rides on a
  * page's — nothing waits for a page's question once the page has gone, and
- * an order must not hang on that.
+ * an order must not hang on that. So two questions can be open at once, and
+ * their answers can land in either order: the answer kept is always the one
+ * to the question put LAST — a slow, older answer never replaces a newer one
+ * (a variant added between the two would vanish again for ten minutes).
  */
 export function createVariantBook(
   lookup: () => Promise<VariantsBySku | null>,
@@ -236,18 +279,22 @@ export function createVariantBook(
   const ttlMs = opts.ttlMs ?? VARIANTS_TTL_MS;
   const keepMs = opts.keepMs ?? VARIANTS_KEEP_MS;
   const retryMs = opts.retryMs ?? DISPLAY_RETRY_MS;
-  let good: { at: number; bySku: VariantsBySku } | null = null;
+  // `put`: which question this answer was to (they are numbered as they are put).
+  let good: { at: number; put: number; bySku: VariantsBySku } | null = null;
   let failedAt: number | null = null;
   let forCheckout: Open | null = null;
   let forPages: Open | null = null;
+  let questions = 0;
 
-  const ask = (): Promise<VariantsBySku | null> =>
-    Promise.resolve()
+  const ask = (): Promise<VariantsBySku | null> => {
+    const put = ++questions;
+    return Promise.resolve()
       .then(lookup)
       .then(
         (bySku) => {
           if (bySku && bySku.size > 0) {
-            good = { at: now(), bySku };
+            // kept unless the list in hand answers a question put after this one
+            if (!good || put > good.put) good = { at: now(), put, bySku };
             failedAt = null;
           } else {
             failedAt = now();
@@ -259,6 +306,7 @@ export function createVariantBook(
           return null;
         },
       );
+  };
 
   const askForCheckout = (): Promise<VariantsBySku | null> => {
     if (forCheckout) return forCheckout.answer;
@@ -324,8 +372,11 @@ export async function variantsForDisplay(input: {
   if (styleSkus(input.styles).every((sku) => input.seen.has(sku))) {
     return { variants: input.seen, from: "seen" };
   }
-  const answer = await input.book.answerWithin(input.waitMs);
-  return answer ? { variants: answer, from: "store" } : { variants: null, from: "unknown" };
+  await input.book.answerWithin(input.waitMs);
+  // Whatever the wait brought, the book knows best: an answer that landed is
+  // in it — and if two landed, it kept the one to the later question.
+  const landed = input.book.held();
+  return landed ? { variants: landed.variants, from: "store" } : { variants: null, from: "unknown" };
 }
 
 /* --- checkout's two decisions ------------------------------------------------- */

@@ -37,7 +37,12 @@ import {
 import { flowFromHeaders } from "@/lib/flow-version";
 import { isOfferedDesign } from "@/lib/library-data";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { checkoutVariantVerdict, customSkuFor, variantsForCheckout } from "@/lib/sellable";
+import {
+  checkoutVariantVerdict,
+  customSkuFor,
+  styleSkus,
+  variantsForCheckout,
+} from "@/lib/sellable";
 import { customVariants, recheckCustomVariants } from "@/lib/sellable-server";
 import { ensureOrdersPaidWebhookOnce } from "@/lib/webhooks";
 import {
@@ -1203,7 +1208,9 @@ export async function POST(req: Request) {
   );
   const verdict = checkoutVariantVerdict({
     variants: variantBySku,
-    offeredSkus: [...styleById.keys()].map(customSkuFor),
+    // styleSkus, not a bare map over the ids: a hub row that is not a style
+    // (no text id) has no SKU, and must not take every checkout down.
+    offeredSkus: styleSkus([...styleById.values()]),
     lineSkus,
   });
   if (!verdict.go && verdict.why !== "unreadable") {

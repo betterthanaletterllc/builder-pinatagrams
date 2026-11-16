@@ -9,6 +9,7 @@ import {
   customSkuFor,
   DISPLAY_RETRY_MS,
   SEEN_IN_STORE,
+  seenInStoreDrift,
   sellableNote,
   sellableStyles,
   styleSkus,
@@ -276,6 +277,53 @@ test("a checkout never rides on a page's question", async () => {
   assert.equal(await book.current(), STORE);
 });
 
+test("a slow, older answer never replaces a newer one", async () => {
+  // A page's question is open and slow; meanwhile a variant is added and an
+  // order asks for itself. The page's answer — from before the variant —
+  // lands last, and must not become the list.
+  const { asked, clock, book } = fakeStore();
+  const older = variants(STORE_SKUS);
+  const newer = variants([...STORE_SKUS, "CUSTOM-GLITTER"]);
+  const page = book.refresh();
+  await tick();
+  const order = book.current();
+  await tick();
+  assert.equal(asked.length, 2);
+  asked[1].resolve(newer);
+  assert.equal(await order, newer);
+  clock.t += 2_000;
+  asked[0].resolve(older);
+  assert.equal(await page, older);
+  assert.equal(book.held().variants, newer, "the older answer replaced the newer one");
+  // the order's second look, two seconds on, still goes by the newer list
+  assert.equal(await book.recheck(), newer);
+  assert.equal(asked.length, 2);
+  // the other way round: a variant deleted between the two reads stays deleted
+  const { asked: asked2, book: book2 } = fakeStore();
+  const without = variants(STORE_SKUS.filter((sku) => sku !== "CUSTOM-MONEY"));
+  const page2 = book2.refresh();
+  await tick();
+  const order2 = book2.current();
+  await tick();
+  asked2[1].resolve(without);
+  await order2;
+  asked2[0].resolve(STORE);
+  await page2;
+  assert.equal(book2.held().variants, without);
+  // in the usual order — the later question answered last — the later answer is kept
+  const { asked: asked3, book: book3 } = fakeStore();
+  const page3 = book3.refresh();
+  await tick();
+  const order3 = book3.current();
+  await tick();
+  asked3[0].resolve(older);
+  await page3;
+  assert.equal(book3.held().variants, older);
+  asked3[1].resolve(newer);
+  await order3;
+  assert.equal(book3.held().variants, newer);
+});
+
 test("a store that cannot be read is null to checkout, and is not remembered", async () => {
   for (const fail of [(d) => d.resolve(null), (d) => d.reject(new Error("timeout"))]) {
     const { asked, book } = fakeStore();
@@ -416,12 +464,13 @@ test("a hung store costs one page a short wait, not every page", async () => {
   const started = Date.now();
   assert.equal(await book.answerWithin(30), null);
   assert.ok(Date.now() - started >= 20, "the first page did not wait at all");
-  // the question has now been open that long: the next pages do not wait again
-  clock.t += 30;
+  // the question has now been open longer than a page waits: the next pages
+  // do not wait on it again (they would take half a second each if they did)
+  clock.t += 500;
   const again = Date.now();
-  assert.equal(await book.answerWithin(30), null);
-  assert.equal(await book.answerWithin(30), null);
-  assert.ok(Date.now() - again < 20, "a later page waited on the same hung question");
+  assert.equal(await book.answerWithin(500), null);
+  assert.equal(await book.answerWithin(500), null);
+  assert.ok(Date.now() - again < 250, "a later page waited on the same hung question");
   assert.equal(asked.length, 1);
   // the slow answer still lands, for the pages after it
   await answer(STORE);
@@ -453,6 +502,31 @@ async function page(book, styles, waitMs = 30) {
 test("the shortcut list is exactly what the store had, and every entry is a style's SKU", () => {
   assert.deepEqual([...SEEN_IN_STORE].sort(), [...STORE_SKUS].sort());
   assert.deepEqual([...SEEN_IN_STORE].sort(), SOLD_IDS.map(customSkuFor).sort());
+});
+
+test("the shortcut list is a hand-kept copy of the store: the log says when it has gone stale", () => {
+  // today the two agree
+  assert.equal(seenInStoreDrift(SEEN_IN_STORE, STORE, listed()), null);
+  // a variant deleted since: every just-started server would list that style
+  const withoutMoney = variants(STORE_SKUS.filter((sku) => sku !== "CUSTOM-MONEY"));
+  const gone = seenInStoreDrift(SEEN_IN_STORE, withoutMoney, listed());
+  assert.match(gone.line, /^\[sellable\] SEEN_IN_STORE/);
+  assert.ok(gone.line.includes('it has "CUSTOM-MONEY", which the store does not'), gone.line);
+  assert.ok(gone.line.includes("take them out"));
+  assert.equal(gone.line.includes("add them"), false);
+  // a new style that has its variant: just-started servers wait because of it
+  const withGlitter = variants([...STORE_SKUS, "CUSTOM-GLITTER"]);
+  const added = seenInStoreDrift(SEEN_IN_STORE, withGlitter, listed([style("glitter")]));
+  assert.ok(added.line.includes('it lacks "CUSTOM-GLITTER", which the store sells'), added.line);
+  assert.ok(added.line.includes("add them"));
+  // a new style WITHOUT its variant is not the list's business (the "not listed" line covers it)
+  assert.equal(seenInStoreDrift(SEEN_IN_STORE, STORE, listed([style("glitter")])), null);
+  // a variant in the store that no listed style uses is nobody's business
+  assert.equal(seenInStoreDrift(SEEN_IN_STORE, withGlitter, listed()), null);
+  // both at once, one line, one key — and rows that are not styles do not break it
+  const both = seenInStoreDrift(SEEN_IN_STORE, variants(["CUSTOM-GOOGLY", "CUSTOM-GLITTER"]), [style("glitter"), {}, null]);
+  assert.ok(both.line.includes("take them out") && both.line.includes("add them"));
+  assert.equal(both.key, seenInStoreDrift(SEEN_IN_STORE, variants(["CUSTOM-GOOGLY", "CUSTOM-GLITTER"]), [style("glitter")]).key);
 });
 
 test("a page with a list in hand never waits on the store — fresh or a day old", async () => {
@@ -639,9 +713,20 @@ test("source guard: the sellable catalog is built from the tested pieces, and on
   const server = source("lib/sellable-server.ts");
   assert.ok(server.trimStart().startsWith('import "server-only";'), "the store's keys must never reach a browser bundle");
   assert.ok(server.includes("createVariantBook(lookupCustomVariants)"));
-  for (const piece of ["book.refresh()", "keepAliveFor(question)", "variantsForDisplay({", "seen: SEEN_IN_STORE", "withSellableStyles(catalog, variants)", "sellableNote(result,"]) {
+  for (const piece of [
+    "book.refresh()",
+    "keepAliveFor(question)",
+    "variantsForDisplay({",
+    "seen: SEEN_IN_STORE",
+    "withSellableStyles(catalog, variants)",
+    "sellableNote(result,",
+    "seenInStoreDrift(SEEN_IN_STORE, heard.variants, catalog.bodyStyles)",
+  ]) {
     assert.ok(server.includes(piece), `getSellableCatalog no longer uses ${piece}`);
   }
+  // a page that has been sent holds its server for the store's answer, but not for long
+  const keep = /const KEEP_ALIVE_MS = (\d[\d_]*);/.exec(server)?.[1];
+  assert.ok(keep && Number(keep.replace(/_/g, "")) <= 10_000, "a sent page may hold its server ten seconds at most");
   // without the store's keys it is the hub's catalog, untouched
   assert.ok(server.includes("if (!shopifyCreds()) return getCatalog(opts);"));
   const wait = /const DISPLAY_WAIT_MS = (\d[\d_]*);/.exec(server)?.[1];
@@ -660,8 +745,11 @@ test("source guard: checkout decides with the tested rules, before anything is c
   // the list it goes by: the shared one, looked up once more before a body is refused
   assert.ok(checkout.includes("creds ? customVariants() : Promise.resolve(null)"));
   assert.match(checkout, /variantsForCheckout\( ?await customVariantsP, lineSkus, recheckCustomVariants,? ?\)/);
-  // the verdict is asked about every style sold here and every piñata in the cart
-  assert.match(checkout, /checkoutVariantVerdict\(\{ variants: variantBySku, offeredSkus: \[\.\.\.styleById\.keys\(\)\]\.map\(customSkuFor\), lineSkus,? \}\)/);
+  // the verdict is asked about every style sold here and every piñata in the
+  // cart — through styleSkus, so a hub row that is not a style (no text id)
+  // cannot make every checkout throw
+  assert.match(checkout, /checkoutVariantVerdict\(\{ variants: variantBySku, offeredSkus: styleSkus\(\[\.\.\.styleById\.values\(\)\]\), lineSkus,? \}\)/);
+  assert.equal(/\.map\(customSkuFor\)/.test(checkout), false, "checkout maps raw ids to SKUs again");
   // the store's trouble: the usual answer, nothing created
   const stop = checkout.indexOf("if (!verdict.go || !variantBySku || !addonVariants)");
   assert.ok(stop !== -1, "checkout no longer stops when the verdict is no-go");

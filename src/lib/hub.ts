@@ -112,8 +112,9 @@ export function withBoxZones(styles: HubBodyStyle[]): HubBodyStyle[] {
  *      without the Shopify keys answers `dryRun` before it ever looks for
  *      the variant, and proves nothing about step 3. (A variant made a
  *      moment ago can take ten to twenty minutes to show in the picker —
- *      lib/sellable says why — and adding its SKU to SEEN_IN_STORE there
- *      spares a just-started server a short wait.)
+ *      lib/sellable says why. Adding its SKU to SEEN_IN_STORE there spares
+ *      a just-started server a short wait: do that only AFTER the variant
+ *      exists in the store — the server log says when the list needs it.)
  *   5. the quote tool keeps its own copy of this rule (quote repo:
  *      src/lib/styles-offered.ts, with its own "comes back when"). Lift it
  *      there in the same go, or the Checkered is back here and still hidden
