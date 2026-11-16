@@ -174,9 +174,11 @@ export function readInit(
 
 /**
  * Which body the editor's "On the box" preview shows: the one asked for (by
- * hub id, or by name as Paper prints it — "Googly", "CLASSIC"), else the
- * usual default, else the first there is. Null only with nothing to choose
- * from (the editor then works flat, without the box view).
+ * hub id, by the hub's name for it — "Googly", "CLASSIC" — or by the name
+ * Paper has for it, which is not always the hub's: Paper's "WHITE UNICORN"
+ * is the hub's white-uni, "White Uni"), else the usual default, else the
+ * first there is. Null only with nothing to choose from (the editor then
+ * works flat, without the box view).
  */
 export function pickEmbedStyle<T extends { id: string; name: string }>(
   styles: readonly T[],
@@ -186,7 +188,10 @@ export function pickEmbedStyle<T extends { id: string; name: string }>(
   const key = (wanted ?? "").trim().toLowerCase();
   if (key) {
     const hit = styles.find(
-      (s) => s.id.toLowerCase() === key || s.name.trim().toLowerCase() === key,
+      (s) =>
+        s.id.toLowerCase() === key ||
+        s.name.trim().toLowerCase() === key ||
+        embedBodyToken(s.id).toLowerCase() === key,
     );
     if (hit) return hit;
   }
