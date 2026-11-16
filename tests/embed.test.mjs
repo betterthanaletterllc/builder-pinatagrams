@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   EMBED_HEADER,
   EMBED_SOURCE,
@@ -410,7 +411,8 @@ test("the inside card's editor is given no box photo, so it works flat", () => {
 });
 
 test("the editor's text box names the card being made — the front, for every shopper", () => {
-  const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+  // Read with Unix line ends: a Windows checkout hands these files over with \r\n.
+  const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const editor = read("../src/app/design/editor.tsx");
   // The default is the front, and the front's words are the ones shoppers have always seen.
   assert.match(editor, /\n  surface = "front",\n/);
@@ -428,7 +430,7 @@ test("the editor's text box names the card being made — the front, for every s
       else if (/\.tsx?$/.test(name)) tsx.push(full);
     }
   };
-  walk(new URL("../src", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+  walk(fileURLToPath(new URL("../src", import.meta.url)));
   const passers = tsx
     .filter((file) => /\bsurface=\{/.test(readFileSync(file, "utf8")))
     .map((file) => file.replace(/\\/g, "/").replace(/^.*\/src\//, "src/"))
