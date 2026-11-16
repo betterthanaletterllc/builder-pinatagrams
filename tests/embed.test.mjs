@@ -145,6 +145,7 @@ test("analytics are off on the embed", () => {
 
 const {
   embedBodyToken,
+  embedBoxFor,
   embedChoiceMessage,
   embedGraphicFor,
 } = await import("../src/lib/embed.ts");
@@ -210,8 +211,51 @@ test("the choice message names the body, the front and the card the message prin
       graphic,
       messageCard: "https://cdn.shopify.com/card.svg",
       preview: "https://cdn.shopify.com/thumb.png",
+      // no box was given: the framing page shows the pick in words
+      box: null,
     },
   );
+});
+
+test("a pick carries the box it was shown on, so Paper can keep showing the design on the box", () => {
+  const zone = { x: 0.17, y: 0.64, w: 0.65, h: 0.32 };
+  const style = { id: "googly", name: "Googly", boxImageUrl: "https://hub.example/catalog/boxes/googly.webp", logoZone: zone };
+  assert.deepEqual(embedBoxFor(style), { photo: style.boxImageUrl, zone });
+  // a copy, not the style's own object
+  assert.notEqual(embedBoxFor(style).zone, zone);
+
+  const graphic = { kind: "shopify", design: "HBD01", title: "Confetti Birthday", art: "https://cdn.shopify.com/a.png" };
+  const message = embedChoiceMessage({
+    style,
+    graphic,
+    messageCard: null,
+    preview: "https://cdn.shopify.com/thumb.png",
+    box: embedBoxFor(style),
+    seq: 1,
+  });
+  assert.deepEqual(message.box, { photo: style.boxImageUrl, zone });
+  // the style's own fields never ride along: only id, name and the body token
+  assert.deepEqual(message.style, { id: "googly", name: "Googly", body: "GOOGLY" });
+
+  // No photo, no placement, or a placement that is not on the photo: no box at all.
+  assert.equal(embedBoxFor({ boxImageUrl: null, logoZone: zone }), null);
+  assert.equal(embedBoxFor({ boxImageUrl: style.boxImageUrl, logoZone: null }), null);
+  for (const bad of [
+    { ...zone, w: 0 },
+    { ...zone, x: -0.1 },
+    { ...zone, x: 0.6 },
+    { ...zone, y: 0.9 },
+    { ...zone, h: Number.NaN },
+    { ...zone, w: "0.65" },
+  ]) {
+    assert.equal(embedBoxFor({ boxImageUrl: style.boxImageUrl, logoZone: bad }), null, JSON.stringify(bad));
+  }
+
+  // The sample page sends it with every pick.
+  const page = readFileSync(new URL("../src/app/embed/sample/embed-sample.tsx", import.meta.url), "utf8");
+  assert.match(page, /box: embedBoxFor\(style\)/);
+  // …and no longer says where on Paper's page to look: Paper moved it.
+  assert.doesNotMatch(page, /just under this box/);
 });
 
 test("the sample page is under /embed, so it gets the framing rule and no chrome", () => {

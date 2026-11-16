@@ -17,6 +17,7 @@ import {
   subscribeDesignSaves,
 } from "@/lib/design-upload";
 import {
+  embedBoxFor,
   embedChoiceMessage,
   embedGraphicFor,
   embedMessage,
@@ -65,10 +66,13 @@ import { Callout } from "@/v2/ui/feedback";
  *  - the one button says "Use this piñata", and instead of moving on to the
  *    card it tells the page that framed it what was picked: the body, the
  *    front (a store design, a hub graphic, or a design made here — staged
- *    exactly as for an order), and the card the message prints on. The step
- *    stays on screen afterwards — the box with the design on it, the grid,
- *    everything — saying what was sent, so the pick is still seen on the box
- *    and can be changed and sent again;
+ *    exactly as for an order), the card the message prints on, and the box
+ *    it is showing on (the photo and where the label sits). In here the
+ *    step stays as it is afterwards — the box with the design on it, the
+ *    grid, everything — saying what was sent, so it can be changed and sent
+ *    again. Paper, for its part, folds this frame away once a piñata is
+ *    picked and shows the pick on that box itself; "Change" there brings
+ *    this page back exactly as it was left;
  *  - the two pages keep each other honest: Paper answers each pick ("held":
  *    kept it, could not take it, let it go again), and this page tells Paper
  *    when what is showing is no longer what it was sent ("pick-state").
@@ -197,6 +201,8 @@ export default function EmbedSample({
         graphic: picked,
         messageCard: messageCardFor(graphic),
         preview,
+        // the box it is showing on, so Paper can keep showing it there
+        box: embedBoxFor(style),
         seq: seq.current,
       }),
     );
@@ -407,7 +413,7 @@ export default function EmbedSample({
                   </Callout>
                 ) : refused ? (
                   <Callout tone="error" role="alert">
-                    Paper could not take this pick — its page says why, just under this box. Press
+                    Paper could not take this pick — Paper&apos;s own page says why. Press
                     &ldquo;Use this piñata&rdquo; to send it again.
                   </Callout>
                 ) : isSent ? (

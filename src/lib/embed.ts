@@ -40,7 +40,8 @@
  *   embed → parent   { source, v, type: "close" }
  *   embed → parent   { source, v, type: "choice", seq,            (/embed/sample)
  *                      style: { id, name, body },
- *                      graphic: custom | shopify | hub, messageCard, preview }
+ *                      graphic: custom | shopify | hub, messageCard, preview,
+ *                      box: { photo, zone: { x, y, w, h } } | null }
  *   parent → embed   { source, v, type: "held", seq,              (/embed/sample)
  *                      state: "kept" | "failed" | "released" }
  *   embed → parent   { source, v, type: "pick-state",             (/embed/sample)
@@ -55,6 +56,10 @@
  * against what it was last sent, so it can ask before using a pick that is
  * no longer what is showing. A framing page that sends no "held" and reads no
  * "pick-state" still works: both are additions.
+ * "box" (2026-11-15) is the photo of the box the pick was shown on and where
+ * on it the front label sits, so that Paper — which folds this page away once
+ * a piñata is picked — can go on showing the design ON THE BOX and not flat.
+ * Also an addition: a framing page that does not read it loses nothing.
  *
  * Import-free on purpose: the edge middleware, the server page, the client
  * component and the node tests all load this file.
@@ -258,13 +263,48 @@ export type EmbedChoice = {
   messageCard: string | null;
   /** A small picture of the front: a data URL, or the design's thumbnail. */
   preview: string | null;
+  /** The box the pick was shown on, or null when the style has no photo or
+   *  no label placement (the Stage then shows no box either). */
+  box: EmbedBox | null;
 };
+
+/** A body style's box photo, and where on it the front label sits — the
+ *  placement as fractions of the photo, exactly as the Stage uses it. */
+export type EmbedBox = {
+  photo: string;
+  zone: { x: number; y: number; w: number; h: number };
+};
+
+/**
+ * The box a style is shown on, for the framing page to draw the pick the way
+ * this page showed it. Null unless there is a photo AND a placement that
+ * lies on it: a zone that is missing, not numbers, or off the photo is not
+ * passed on, so the framing page never draws a label somewhere it is not.
+ */
+export function embedBoxFor(style: {
+  boxImageUrl: string | null;
+  logoZone: { x: number; y: number; w: number; h: number } | null;
+}): EmbedBox | null {
+  const zone = style.logoZone;
+  if (!style.boxImageUrl || !zone) return null;
+  const { x, y, w, h } = zone;
+  const onPhoto =
+    [x, y, w, h].every((n) => typeof n === "number" && Number.isFinite(n)) &&
+    x >= 0 &&
+    y >= 0 &&
+    w > 0 &&
+    h > 0 &&
+    x + w <= 1.001 &&
+    y + h <= 1.001;
+  return onPhoto ? { photo: style.boxImageUrl, zone: { x, y, w, h } } : null;
+}
 
 export function embedChoiceMessage(input: {
   style: { id: string; name: string };
   graphic: EmbedGraphic;
   messageCard: string | null;
   preview: string | null;
+  box?: EmbedBox | null;
   seq?: number | null;
 }): EmbedChoice {
   return {
@@ -276,6 +316,7 @@ export function embedChoiceMessage(input: {
     graphic: input.graphic,
     messageCard: input.messageCard,
     preview: input.preview,
+    box: input.box ?? null,
   };
 }
 

@@ -114,15 +114,19 @@ step; a test fails if the page stops importing those components.
   shown, in stock or not (a sample can be of a style that has sold out);
   nothing is priced; nothing is kept in the browser; no cart, checkout or
   analytics.
-- The one button is "Use this piñata". The step stays on screen afterwards
-  — the box with the pick on it — saying what was sent, so it can be changed
-  and sent again. It sends the framing page a `choice`
+- The one button is "Use this piñata". Inside the frame the step stays as
+  it is afterwards — the box with the pick on it — saying what was sent, so
+  it can be changed and sent again. (Paper folds the frame away once a
+  piñata is picked and brings it back, as it was left, with "Change".) It
+  sends the framing page a `choice`
   message: the body (hub id, name, and the body as Paper names it —
   `embedBodyToken`, the same token checkout puts after `CUSTOM-` in a SKU),
   the front (a store design's print file on the store's CDN; a hub
   graphic's file and sha256; or a design made here, staged as for an order),
-  and the card the message prints on. Paper checks every address and keeps
-  its own copies.
+  the card the message prints on, and `box` — the style's box photo and
+  where the label sits on it (`embedBoxFor`), so Paper can go on showing
+  the design on the box while the frame is folded away. Paper checks every
+  address and keeps its own copies of the files it prints.
 - Paper answers each pick with `held` (kept · failed · released), and this
   page tells Paper with `pick-state` when what is showing is no longer what
   it was sent (or the editor is open on something not used yet) — so
