@@ -105,13 +105,19 @@ export function withBoxZones(styles: HubBodyStyle[]): HubBodyStyle[] {
  *      back were it not for the list below: steps 1 and 2 are why it is on
  *      that list;
  *   4. then take "checkered" out of NOT_YET_OFFERED and out of
- *      tests/styles.test.mjs, drop the "for now" / "not yet" about it from
- *      README.md (two places) and app/embed/design/page.tsx, and put one
- *      through a REAL checkout: the answer has to carry an invoice link. A
- *      deployment without the Shopify keys answers `dryRun` before it ever
- *      looks for the variant, and proves nothing about step 3. (A variant
- *      made a moment ago can take up to ten minutes to show in the picker:
- *      the store's list of them is kept that long.)
+ *      tests/styles.test.mjs and tests/sellable.test.mjs (both expect it to
+ *      be left out), drop the "for now" / "not yet" about it from README.md
+ *      (two places) and app/embed/design/page.tsx, and put one through a
+ *      REAL checkout: the answer has to carry an invoice link. A deployment
+ *      without the Shopify keys answers `dryRun` before it ever looks for
+ *      the variant, and proves nothing about step 3. (A variant made a
+ *      moment ago can take ten to twenty minutes to show in the picker —
+ *      lib/sellable says why — and adding its SKU to SEEN_IN_STORE there
+ *      spares a just-started server a short wait.)
+ *   5. the quote tool keeps its own copy of this rule (quote repo:
+ *      src/lib/styles-offered.ts, with its own "comes back when"). Lift it
+ *      there in the same go, or the Checkered is back here and still hidden
+ *      there.
  *
  * What it covers: every page as it loads (the style pickers, ?style=, the
  * home page, the staff embed), and checkout, which refuses a line that

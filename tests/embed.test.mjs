@@ -169,7 +169,7 @@ test("the body is named as checkout names it in a line's SKU", () => {
   assert.match(sellable, /styleId\.toUpperCase\(\)\.replace\(\/-\/g, " "\)/);
   // …and checkout uses that one, not a copy of its own.
   const checkout = readFileSync(new URL("../src/app/api/checkout/route.ts", import.meta.url), "utf8");
-  assert.match(checkout, /import \{ customSkuFor \} from "@\/lib\/sellable";/);
+  assert.match(checkout, /import \{[^}]*\bcustomSkuFor\b[^}]*\} from "@\/lib\/sellable";/);
   assert.equal(/SKU_SUFFIX_SPECIAL|const customSkuFor\b/.test(checkout), false, "checkout spells the SKU rule itself again");
 });
 

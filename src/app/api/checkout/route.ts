@@ -37,7 +37,7 @@ import {
 import { flowFromHeaders } from "@/lib/flow-version";
 import { isOfferedDesign } from "@/lib/library-data";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { customSkuFor } from "@/lib/sellable";
+import { checkoutVariantVerdict, customSkuFor, variantsForCheckout } from "@/lib/sellable";
 import { customVariants, recheckCustomVariants } from "@/lib/sellable-server";
 import { ensureOrdersPaidWebhookOnce } from "@/lib/webhooks";
 import {
@@ -1189,14 +1189,30 @@ export async function POST(req: Request) {
   // body style (real SKU → Paper parses the body like any legacy order; the
   // product image shows on the invoice). priceOverride keeps the hub's
   // price authoritative.
-  const firstList = await customVariantsP;
-  // A body that is not on the list may be missing from a list that is
-  // minutes old (its variant added since): ask the store once more before a
-  // piñata is refused for it. Unreadable this time → the list we have stands.
-  const variantBySku =
-    firstList?.size && lines.some((l) => !firstList.has(customSkuFor(l.styleId)))
-      ? ((await recheckCustomVariants()) ?? firstList)
-      : firstList;
+  //
+  // Which list of variants this order goes by, and whether it can go at all,
+  // are lib/sellable's two rules (tested there). A body missing from a list
+  // that may be minutes old is looked up once more before a piñata is
+  // refused for it. No list, an empty one, or one with nothing on it for any
+  // style sold here is the store's trouble, not a piñata's.
+  const lineSkus = lines.map((l) => customSkuFor(l.styleId));
+  const variantBySku = await variantsForCheckout(
+    await customVariantsP,
+    lineSkus,
+    recheckCustomVariants,
+  );
+  const verdict = checkoutVariantVerdict({
+    variants: variantBySku,
+    offeredSkus: [...styleById.keys()].map(customSkuFor),
+    lineSkus,
+  });
+  if (!verdict.go && verdict.why !== "unreadable") {
+    console.error(
+      verdict.why === "empty"
+        ? "checkout: the Custom Built Piñatagram product has no variant with a SKU"
+        : "checkout: none of the Custom Built Piñatagram product's variants is for a body style sold here — check its SKUs (CUSTOM-{BODY})",
+    );
+  }
   const addonSkus = [
     ...new Set(
       lines.flatMap((l) =>
@@ -1204,13 +1220,8 @@ export async function POST(req: Request) {
       ),
     ),
   ];
-  if (variantBySku && variantBySku.size === 0) {
-    // The store answered, with no variant at all: the product itself is gone
-    // or unreadable. That is the store's trouble, not any one piñata's.
-    console.error("checkout: the Custom Built Piñatagram product has no variant with a SKU");
-  }
-  const addonVariants = variantBySku?.size ? await addonVariantIds(creds, addonSkus) : null;
-  if (!variantBySku?.size || !addonVariants) {
+  const addonVariants = verdict.go ? await addonVariantIds(creds, addonSkus) : null;
+  if (!verdict.go || !variantBySku || !addonVariants) {
     return NextResponse.json({ error: STORE_UNREACHABLE }, { status: 502 });
   }
 
@@ -1221,9 +1232,10 @@ export async function POST(req: Request) {
   // since): refuse loudly, naming every affected piñata, with the way out —
   // another body. A silent fallback shape would strand orders Paper can't
   // parse (no SKU → no body style) and rot sales reporting.
+  const noVariant = new Set(verdict.missing);
   const configProblems: LineError[] = [];
   for (const l of lines) {
-    if (!variantBySku.has(customSkuFor(l.styleId))) {
+    if (noVariant.has(customSkuFor(l.styleId))) {
       console.error(`checkout: no variant for ${customSkuFor(l.styleId)}`);
       configProblems.push({
         lineId: l.lineId,

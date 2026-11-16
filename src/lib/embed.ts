@@ -234,7 +234,8 @@ const BODY_TOKEN_SPECIAL: Record<string, string> = {
 
 /** The body as Paper names it: what follows "CUSTOM-" in a builder line's SKU. */
 export function embedBodyToken(styleId: string): string {
-  return BODY_TOKEN_SPECIAL[styleId] ?? styleId.toUpperCase().replace(/-/g, " ");
+  const special = Object.hasOwn(BODY_TOKEN_SPECIAL, styleId) ? BODY_TOKEN_SPECIAL[styleId] : null;
+  return special ?? styleId.toUpperCase().replace(/-/g, " ");
 }
 
 /** What was picked for the front, in the three shapes the journey has. */
