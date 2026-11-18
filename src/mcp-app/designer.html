@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piñatagram Designer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+<style>
+/* Brand tokens — design-system/colors_and_type.css is the source of truth. */
+:root{
+  --navy:#180d38;--lavender:#b3b9ce;--peri:#627ae3;--peri-dark:#4a62c4;--peri-light:#8fa4ee;
+  --green:#55a871;--yellow:#f6de6b;--pink:#f2a7b0;--coral:#eb7c57;--cream:#f3e7e4;
+  --off-white:#faf8f6;--white:#ffffff;--navy-dark:#0d0820;--navy-light:#2d1e5e;
+  --fg:var(--navy);--fg-2:#4a4060;--fg-muted:var(--lavender);
+  --bg:var(--cream);--surface:var(--white);--surface-alt:var(--off-white);
+  --interactive:var(--peri);--interactive-hover:var(--peri-dark);
+  --border:rgba(24,13,56,.12);--border-strong:rgba(24,13,56,.25);
+  --shadow-sm:0 2px 8px rgba(24,13,56,.08);--shadow-md:0 4px 20px rgba(24,13,56,.12);
+  --r-sm:6px;--r-md:12px;--r-lg:20px;
+  --ok-bg:rgba(85,168,113,.14);--hi-bg:rgba(246,222,107,.35);
+  --on-interactive:#fff; /* text on an --interactive fill: white on periwinkle in light, navy on periwinkle-light in dark */
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --fg:var(--cream);--fg-2:var(--lavender);--fg-muted:var(--lavender);
+    --bg:var(--navy-dark);--surface:var(--navy-light);--surface-alt:var(--navy);
+    --interactive:var(--peri-light);--interactive-hover:var(--peri);
+    --border:rgba(243,231,228,.14);--border-strong:rgba(243,231,228,.3);
+    --shadow-sm:0 2px 8px rgba(0,0,0,.3);--shadow-md:0 4px 20px rgba(0,0,0,.4);
+    --ok-bg:rgba(85,168,113,.22);--hi-bg:rgba(246,222,107,.18);--on-interactive:var(--navy);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --fg:var(--cream);--fg-2:var(--lavender);--fg-muted:var(--lavender);
+  --bg:var(--navy-dark);--surface:var(--navy-light);--surface-alt:var(--navy);
+  --interactive:var(--peri-light);--interactive-hover:var(--peri);
+  --border:rgba(243,231,228,.14);--border-strong:rgba(243,231,228,.3);
+  --shadow-sm:0 2px 8px rgba(0,0,0,.3);--shadow-md:0 4px 20px rgba(0,0,0,.4);
+  --ok-bg:rgba(85,168,113,.22);--hi-bg:rgba(246,222,107,.18);--on-interactive:var(--navy);
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:400 16px/1.5 'Poppins',system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:3px solid var(--interactive);outline-offset:2px}
+img{display:block;max-width:100%}
+.hidden{display:none!important}
+.app{max-width:760px;margin:0 auto;padding:0 16px 16px}
+.hdr{display:flex;align-items:baseline;gap:10px;padding:16px 0 6px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:18px;letter-spacing:.01em}
+.tag{color:var(--fg-2);font-size:14px}
+.hdr-price{margin-left:auto;font-size:14px;font-weight:600}
+.hdr-price:empty{display:none}
+.ribbon{height:4px;border-radius:999px;background:linear-gradient(90deg,var(--peri),var(--pink),var(--yellow),var(--green));margin-bottom:14px}
+.state{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:20px;box-shadow:var(--shadow-sm)}
+.state h2{margin:0 0 8px;font-size:18px}
+.state p{margin:0 0 10px;color:var(--fg-2);font-size:14px}
+.skel{height:14px;border-radius:999px;background:var(--surface-alt);margin:10px 0;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+.step{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;margin-bottom:12px;box-shadow:var(--shadow-sm)}
+.step-h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.num{flex:none;width:28px;height:28px;border-radius:999px;background:var(--surface-alt);border:1px solid var(--border-strong);display:grid;place-items:center;font-weight:600;font-size:14px}
+.step[data-done="1"] .num{background:var(--green);border-color:var(--green);color:var(--on-interactive)}
+.step h2{margin:0;font-size:18px;font-weight:600;flex:1}
+.mark{font-size:12px;font-weight:600;color:var(--fg-2)}
+.step[data-done="1"] .mark{color:var(--green)}
+.step[data-done="0"] .mark{color:var(--coral)}
+.hint{color:var(--fg-2);font-size:14px;margin:0 0 10px}
+.sub-h{margin:16px 0 0;font-size:14px;font-weight:600}
+.gap{height:10px}
+.more{display:flex;justify-content:center;margin-top:10px}
+.more .hint,.more .err{margin:0}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (min-width:481px){.grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}}
+.card{position:relative;display:flex;flex-direction:column;gap:6px;padding:8px;background:var(--surface-alt);border:2px solid transparent;border-radius:var(--r-md);text-align:left;transition:border-color .15s,transform .15s}
+.card:hover:not(:disabled){border-color:var(--border-strong);transform:translateY(-1px)}
+.card.sel{border-color:var(--interactive);box-shadow:0 0 0 2px var(--interactive) inset}
+.card:disabled{opacity:.55}
+.card .ph{aspect-ratio:1;width:100%;border-radius:var(--r-sm);background:var(--surface);display:grid;place-items:center;color:var(--fg-muted);font-size:24px;font-weight:700;overflow:hidden}
+.card img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:var(--r-sm);background:#fff}
+.card .nm{font-size:12px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+@media (min-width:481px){.card .nm{font-size:14px}}
+.card .sub{font-size:12px;color:var(--fg-2)}
+.badge{position:absolute;top:8px;left:8px;background:var(--yellow);color:var(--navy);font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px}
+.tick{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:999px;background:var(--interactive);color:var(--on-interactive);display:grid;place-items:center;font-size:14px;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:40px;padding:8px 14px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface);font-size:14px;font-weight:500}
+.chip:hover{border-color:var(--interactive)}
+.chip.sel{background:var(--interactive);border-color:var(--interactive);color:var(--on-interactive)}
+.chip.sel:hover{background:var(--interactive-hover)}
+.blurb{min-height:22px;margin:10px 0 0;font-size:14px;color:var(--fg-2)}
+.toggle{display:flex;align-items:center;gap:12px;width:100%;padding:12px;margin-top:12px;border-radius:var(--r-md);border:2px solid var(--border);background:var(--surface-alt);text-align:left}
+.toggle[aria-pressed="true"]{border-color:var(--interactive)}
+.toggle .box{flex:none;width:22px;height:22px;border-radius:var(--r-sm);border:2px solid var(--border-strong);display:grid;place-items:center;color:var(--on-interactive);font-size:14px;font-weight:700}
+.toggle[aria-pressed="true"] .box{background:var(--interactive);border-color:var(--interactive)}
+.toggle .lbl{flex:1;font-weight:500}
+.toggle .pr{font-weight:600}
+.link{display:inline-flex;align-items:center;min-height:40px;background:none;border:0;padding:0;color:var(--interactive);text-decoration:underline;font-size:14px;font-weight:500}
+.link:hover{color:var(--interactive-hover)}
+.field{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.field label{font-size:14px;font-weight:600}
+.field label .opt{font-weight:400;color:var(--fg-2)}
+.in{width:100%;padding:10px 12px;border-radius:var(--r-sm);border:1px solid var(--border-strong);background:var(--surface);min-height:44px}
+.in:focus{border-color:var(--interactive)}
+.in[aria-invalid="true"]{border-color:var(--coral)}
+textarea.in{resize:vertical;min-height:96px}
+.row{display:grid;grid-template-columns:1fr;gap:0 12px}
+@media (min-width:481px){.row{grid-template-columns:1fr 1fr}.row-3{grid-template-columns:2fr 1fr 1fr}}
+.count{font-size:12px;color:var(--fg-2);text-align:right}
+.count.over{color:var(--coral);font-weight:600}
+.err{color:var(--coral);font-size:14px;font-weight:500;margin:6px 0 0}
+.note{font-size:14px;color:var(--fg-2);margin:8px 0 0}
+.note a{color:var(--interactive)}
+.info{background:var(--hi-bg);border-radius:var(--r-sm);padding:10px 12px;font-size:14px;margin-bottom:12px}
+.info ul{margin:6px 0 0;padding-left:18px}
+.info li{margin:2px 0}
+.carriers{display:grid;grid-template-columns:1fr;gap:10px}
+@media (min-width:481px){.carriers{grid-template-columns:1fr 1fr}}
+.opt-card{display:flex;flex-direction:column;gap:2px;padding:12px;border-radius:var(--r-md);border:2px solid var(--border);background:var(--surface-alt);text-align:left}
+.opt-card.sel{border-color:var(--interactive)}
+.opt-card .t{font-weight:600}
+.opt-card .d{font-size:14px;color:var(--fg-2)}
+.opt-card .p{font-size:14px;font-weight:600;margin-top:4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 18px;border-radius:999px;border:2px solid var(--interactive);background:var(--surface);color:var(--interactive);font-weight:600;text-decoration:none}
+.btn:hover:not(:disabled){border-color:var(--interactive-hover);color:var(--interactive-hover)}
+.btn-primary{background:var(--interactive);color:var(--on-interactive)}
+.btn-primary:hover:not(:disabled){background:var(--interactive-hover);color:var(--on-interactive)}
+.btn:disabled{opacity:.5}
+.btn-big{width:100%;font-size:18px;min-height:52px;margin-top:12px}
+.bar{position:sticky;bottom:0;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 16px;box-shadow:var(--shadow-md);margin-top:4px}
+.bar-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.price{flex:1;min-width:140px}
+.price .amt{font-size:24px;font-weight:700;line-height:1.2}
+.price .amt.empty{font-size:16px;font-weight:600}
+.price .sub{font-size:14px;color:var(--fg-2)}
+.brk-wrap{margin-top:6px}
+.brk{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:14px}
+.brk div{display:flex;justify-content:space-between;gap:12px;padding:2px 0}
+.brk .tot{font-weight:600;border-top:1px solid var(--border);margin-top:4px;padding-top:6px}
+.review{background:var(--surface);border:2px solid var(--interactive);border-radius:var(--r-md);padding:16px;margin-bottom:12px;box-shadow:var(--shadow-md)}
+.review h2{margin:0 0 10px;font-size:18px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:0}
+.kv dt{color:var(--fg-2);font-weight:500}
+.kv dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.lines{margin:12px 0;padding:10px 12px;background:var(--surface-alt);border-radius:var(--r-sm);font-size:14px}
+.lines div{display:flex;justify-content:space-between;gap:12px;padding:2px 0}
+.lines .tot{font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:6px;font-size:16px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.ok{background:var(--ok-bg);border-radius:var(--r-sm);padding:10px 12px;font-size:14px;margin-top:10px}
+.small{font-size:12px;color:var(--fg-2);overflow-wrap:anywhere}
+.busy{opacity:.7;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="hdr">
+    <span class="brand">Piñatagrams</span>
+    <span class="tag">The sweetest gift.</span>
+    <span class="hdr-price" id="hdrp" aria-hidden="true"></span>
+  </header>
+  <div class="ribbon"></div>
+  <div id="root"></div>
+</div>
+<script>
+(function () {
+'use strict';
+
+var PROTOCOL = '2026-01-26';
+var APP_INFO = { name: 'Piñatagrams Designer', version: '0.1.0' };
+var BUILDER_FALLBACK = 'https://builder.pinatagrams.com';
+var CLASSIC_CODE = 'STANDARD';
+var CLASSIC_THUMB = 'https://cdn.shopify.com/s/files/1/1116/8788/files/CLASSIC_STANDARD.png?v=1751310452';
+var IMG_OK = /^https:\/\/(cdn\.shopify\.com|[a-z0-9-]+\.public\.blob\.vercel-storage\.com)\//;
+var LINK_OK = /^https:\/\//;
+var MSG_MAX = 300;
+var ZIP_RE = /^\d{5}(-\d{4})?$/;
+var YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+var DESIGN_RE = /^[A-Z0-9]{2,24}$/;
+var STYLE_CAP = 9, DESIGN_CAP = 9;   // cards shown before "Show more" — keeps the price bar within a screen or two
+var CALL_TIMEOUT = 45000;            // price_order and the dry run
+var CONFIRM_TIMEOUT = 75000;         // the confirm create_checkout: at least the route's 60 s budget, so a timeout never invites an early duplicate
+var CONFIRM_TIMEOUT_TEXT = 'The store is taking a while. If a checkout link was created, trying again in a minute returns the same one.';
+// Prefill fields → what the buyer calls them (the dropped-prefill strip never shows API names).
+var FIELD_LABELS = { occasion: 'Occasion', recipient_name: 'Recipient', style_id: 'Piñata', filling: 'What’s inside', design: 'Front design', add_ons: 'Add-on',
+  message: 'Card message', carrier: 'Shipping', delivery_date: 'Arrival date', email: 'Email', ship_to: 'Address', 'ship_to.name': 'Recipient name',
+  'ship_to.address1': 'Street address', 'ship_to.address2': 'Apt or suite', 'ship_to.city': 'City', 'ship_to.state': 'State', 'ship_to.zip': 'ZIP', 'ship_to.phone': 'Phone' };
+var STATES ='AL Alabama,AK Alaska,AZ Arizona,AR Arkansas,CA California,CO Colorado,CT Connecticut,DE Delaware,DC District of Columbia,FL Florida,GA Georgia,HI Hawaii,ID Idaho,IL Illinois,IN Indiana,IA Iowa,KS Kansas,KY Kentucky,LA Louisiana,ME Maine,MD Maryland,MA Massachusetts,MI Michigan,MN Minnesota,MS Mississippi,MO Missouri,MT Montana,NE Nebraska,NV Nevada,NH New Hampshire,NJ New Jersey,NM New Mexico,NY New York,NC North Carolina,ND North Dakota,OH Ohio,OK Oklahoma,OR Oregon,PA Pennsylvania,RI Rhode Island,SC South Carolina,SD South Dakota,TN Tennessee,TX Texas,UT Utah,VT Vermont,VA Virginia,WA Washington,WV West Virginia,WI Wisconsin,WY Wyoming'
+  .split(',').map(function (s) { return [s.slice(0, 2), s.slice(3)]; });
+
+/* ---------------- JSON-RPC 2.0 bridge over postMessage ---------------- */
+
+var nextId = 1;
+var pending = new Map();
+var hostContext = {};
+
+function post(msg) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* no host */ } }
+function notify(method, params) {
+  var m = { jsonrpc: '2.0', method: method };
+  if (params !== undefined) m.params = params;
+  post(m);
+}
+function request(method, params, timeoutMs) {
+  return new Promise(function (resolve, reject) {
+    var id = nextId++;
+    var t = timeoutMs ? setTimeout(function () {
+      pending.delete(id);
+      reject(new Error('timeout:' + method));
+    }, timeoutMs) : 0;
+    pending.set(id, { resolve: resolve, reject: reject, t: t });
+    post({ jsonrpc: '2.0', id: id, method: method, params: params || {} });
+  });
+}
+function respond(id, result) { post({ jsonrpc: '2.0', id: id, result: result }); }
+function respondError(id, code, message) { post({ jsonrpc: '2.0', id: id, error: { code: code, message: message } }); }
+
+window.addEventListener('message', function (ev) {
+  if (ev.source !== window.parent) return;
+  var d = ev.data;
+  if (!d || typeof d !== 'object' || d.jsonrpc !== '2.0') return;
+  if (d.method === undefined && d.id !== undefined) {
+    var p = pending.get(d.id);
+    if (!p) return;
+    pending.delete(d.id);
+    if (p.t) clearTimeout(p.t);
+    if (d.error) {
+      var err = new Error((d.error && d.error.message) || 'Request failed');
+      err.code = d.error && d.error.code;
+      p.reject(err);
+    } else p.resolve(d.result);
+    return;
+  }
+  if (typeof d.method !== 'string') return;
+  if (d.id !== undefined) {
+    if (d.method === 'ping') return respond(d.id, {});
+    if (d.method === 'ui/resource-teardown') return respond(d.id, {});
+    return respondError(d.id, -32601, 'Method not found');
+  }
+  onNotification(d.method, d.params || {});
+});
+
+var rawInput = null; // ui/notifications/tool-input — kept only as a fallback; structuredContent.prefill wins
+function onNotification(method, params) {
+  switch (method) {
+    case 'ui/notifications/tool-input': rawInput = params.arguments || null; break;
+    case 'ui/notifications/tool-input-partial': break;
+    case 'ui/notifications/tool-result': onToolResult(params); break;
+    case 'ui/notifications/tool-cancelled': showCancelled(params.reason); break;
+    case 'ui/notifications/host-context-changed':
+      Object.assign(hostContext, params);
+      applyHostContext();
+      break;
+    default: break;
+  }
+}
+
+function applyHostContext() {
+  var html = document.documentElement;
+  var t = hostContext.theme;
+  if (t === 'dark' || t === 'light') html.setAttribute('data-theme', t);
+  else html.removeAttribute('data-theme');
+}
+
+/* size reporting */
+var lastW = 0, lastH = 0, rafId = 0;
+function measure() {
+  rafId = 0;
+  var html = document.documentElement;
+  var prev = html.style.height;
+  html.style.height = 'max-content';
+  var h = Math.ceil(html.getBoundingClientRect().height);
+  html.style.height = prev;
+  var w = Math.ceil(window.innerWidth);
+  if (w !== lastW || h !== lastH) {
+    lastW = w; lastH = h;
+    notify('ui/notifications/size-changed', { width: w, height: h });
+  }
+}
+function scheduleMeasure() { if (!rafId) rafId = requestAnimationFrame(measure); }
+function startSizeReporting() {
+  if (window.ResizeObserver) {
+    var ro = new ResizeObserver(scheduleMeasure);
+    ro.observe(document.documentElement);
+    ro.observe(document.body);
+  }
+  window.addEventListener('resize', scheduleMeasure);
+  scheduleMeasure();
+}
+
+/* tool calls: our tools answer JSON in content[0].text; isError = refusal text */
+function textOf(res) {
+  if (!res || !Array.isArray(res.content)) return '';
+  for (var i = 0; i < res.content.length; i++) {
+    var c = res.content[i];
+    if (c && c.type === 'text' && typeof c.text === 'string') return c.text;
+  }
+  return '';
+}
+function callTool(name, args, opts) {
+  opts = opts || {};
+  return request('tools/call', { name: name, arguments: args }, opts.timeoutMs || CALL_TIMEOUT).then(function (res) {
+    var text = textOf(res);
+    if (res && res.isError) return { ok: false, text: text || 'Something went wrong. Nothing was ordered.' };
+    var data = res && res.structuredContent;
+    if (!data && text) { try { data = JSON.parse(text); } catch (e) { data = null; } }
+    if (!data || typeof data !== 'object') return { ok: false, text: text || 'No answer came back. Nothing was ordered.' };
+    return { ok: true, data: data };
+  }, function (err) {
+    var m = (err && err.message) || '';
+    return { ok: false, text: m.indexOf('timeout') === 0
+      ? (opts.timeoutText || 'That took longer than usual — please try again. Nothing was ordered.')
+      : (m || 'The connection to Claude dropped — please try again.') };
+  });
+}
+function openLink(url) {
+  if (!LINK_OK.test(url)) return;
+  request('ui/open-link', { url: url }, 8000).catch(function (err) {
+    // Fall back only when the host lacks ui/open-link or never answered; a host's decline is final
+    // (the created card's <a target=_blank> still covers the pay link).
+    var m = (err && err.message) || '';
+    if ((err && err.code === -32601) || m.indexOf('timeout:') === 0) {
+      try { window.open(url, '_blank', 'noopener'); } catch (e) { /* blocked */ }
+    }
+  });
+}
+
+/* ---------------- DOM helpers (text only, never markup from data) ---------------- */
+
+var root = document.getElementById('root');
+function el(tag, attrs, children) {
+  var n = document.createElement(tag);
+  if (attrs) Object.keys(attrs).forEach(function (k) {
+    var v = attrs[k];
+    if (v === null || v === undefined || v === false) return;
+    if (k === 'class') n.className = v;
+    else if (k === 'text') n.textContent = v;
+    else if (k.slice(0, 2) === 'on') n.addEventListener(k.slice(2), v);
+    else if (k === 'disabled' || k === 'checked' || k === 'selected') n[k] = !!v;
+    else n.setAttribute(k, v === true ? '' : v);
+  });
+  (children || []).forEach(function (c) {
+    if (c === null || c === undefined || c === false) return;
+    n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  });
+  return n;
+}
+function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); return n; }
+function money(c) {
+  if (typeof c !== 'number' || !isFinite(c)) return '—';
+  return '$' + (c / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtDate(ymd) {
+  if (!YMD_RE.test(ymd || '')) return ymd || '';
+  var p = ymd.split('-').map(Number);
+  var d = new Date(p[0], p[1] - 1, p[2]);
+  if (d.getFullYear() !== p[0] || d.getMonth() !== p[1] - 1 || d.getDate() !== p[2]) return '';
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function picture(url, label) {
+  if (typeof url === 'string' && IMG_OK.test(url)) {
+    var src = url.indexOf('cdn.shopify.com') > 0 && url.indexOf('width=') < 0 ? url + (url.indexOf('?') > 0 ? '&' : '?') + 'width=320' : url;
+    return el('img', { src: src, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
+  }
+  return el('div', { class: 'ph', 'aria-hidden': 'true', text: (label || '?').trim().charAt(0).toUpperCase() });
+}
+function uuid() {
+  var c = window.crypto;
+  if (c && c.randomUUID) return c.randomUUID();
+  var b = new Uint8Array(16); c.getRandomValues(b);
+  return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+}
+function fieldLabel(field) {
+  var base = String(field).replace(/\[\d+\]$/, ''); // add_ons[1] → add_ons
+  if (FIELD_LABELS[base]) return FIELD_LABELS[base];
+  if (base.indexOf('ship_to.') === 0) return 'Address';
+  return '“' + base.slice(0, 40) + '”'; // a field the designer doesn't know: shown as the chat sent it
+}
+
+/* ---------------- state ---------------- */
+
+var D = null;                 // structuredContent from open_designer
+var S = { styleId: '', filling: '', addOns: [], design: CLASSIC_CODE, message: '', carrier: 'fedex', date: '',
+  ship: { name: '', address1: '', address2: '', city: '', state: '', zip: '', phone: '' }, email: '', recipient: '', occasion: '' };
+var occFilter = '', occMore = false;        // design filter; whether every occasion chip is shown
+var occLoaded = {};                         // occasion → true once list_designs answered for it (even empty)
+var designsLoading = '', designsErr = '';
+var stylesExpanded = false, designsExpanded = false;
+var quote = null, quoteErr = '', quoteSeq = 0, quoteTimer = 0, ctxTimer = 0, dataTimer = 0;
+var phase = 'edit';           // edit | review | created
+var preview = null, previewArgs = null, checkoutSeq = 0, checkoutErr = '';
+var created = null, idemKey = '';
+var ui = {};                  // live element handles
+
+function catalog() { return D.catalog; }
+function styleById(id) { return catalog().body_styles.find(function (s) { return s.id === id; }) || null; }
+function fillingByKey(k) {
+  if (typeof k !== 'string' || !k) return null;
+  var lk = k.trim().toLowerCase();
+  return catalog().fillings.find(function (f) { return f.id === k || f.label === k; }) ||
+    catalog().fillings.find(function (f) { return f.id.toLowerCase() === lk || f.label.toLowerCase() === lk; }) || null;
+}
+function addonById(id) { return catalog().add_ons.find(function (a) { return a.id === id; }) || null; }
+// The filling's add-on rule exactly as the server enforces it (catalog.fillings[].add_ons: 'all' | 'none' | [ids]),
+// so no toggle is offered that price_order would refuse; an older server without the field leaves only the blurb.
+function fillingAllows(f, addonId) {
+  if (!f) return true;
+  var r = f.add_ons;
+  if (r === 'none') return false;
+  if (r === 'all') return true;
+  if (Array.isArray(r)) return r.indexOf(addonId) >= 0;
+  return !/fills? the box|no add-ons/i.test(f.blurb || '');
+}
+function allowedAddons(f) { return catalog().add_ons.filter(function (a) { return fillingAllows(f, a.id); }); }
+function designCode(d) { return String(d.code || ''); }
+function designByCode(code) { return D.designs.find(function (d) { return designCode(d) === code; }) || null; }
+function libraryCents() {
+  var g = catalog().graphic_upcharge_cents || {};
+  return typeof g.library_design === 'number' ? g.library_design : null;
+}
+function designCents(d) {
+  if (!d || designCode(d) === CLASSIC_CODE || d.upcharge === 'free' || d.upcharge === 0) return 0;
+  if (typeof d.upcharge === 'number') return d.upcharge;
+  return libraryCents();
+}
+function shipCents(carrier) {
+  var s = catalog().shipping_per_unit_cents || {};
+  var v = carrier === 'usps' ? s.usps_first_class : s.fedex_2day;
+  return typeof v === 'number' ? v : null;
+}
+function minDate() { return (catalog().delivery || {})[S.carrier === 'usps' ? 'earliest_usps' : 'earliest_fedex'] || ''; }
+function maxDate() { return (catalog().delivery || {}).latest || ''; }
+function graphicArg() { return S.design === CLASSIC_CODE ? { type: 'classic' } : { type: 'library', design: S.design }; }
+function fillingLabel() { var f = fillingByKey(S.filling); return f ? f.label : S.filling; }
+
+/* validation */
+function dateProblem() {
+  if (!S.date) return 'Pick an arrival date.';
+  if (!fmtDate(S.date)) return 'That date doesn’t look right.';
+  var mn = minDate(), mx = maxDate();
+  if (mn && S.date < mn) return 'The soonest ' + (S.carrier === 'usps' ? 'USPS' : 'FedEx') + ' date is ' + fmtDate(mn) + '.';
+  if (mx && S.date > mx) return 'The latest date we can take right now is ' + fmtDate(mx) + '.';
+  return '';
+}
+function addressProblems() {
+  var p = {};
+  var s = S.ship;
+  if (!s.name.trim()) p.name = 'Who is it for?';
+  if (!s.address1.trim()) p.address1 = 'Street address, please.';
+  if (!s.city.trim()) p.city = 'City, please.';
+  if (!s.state) p.state = 'Pick a state.';
+  if (!s.zip.trim()) p.zip = 'ZIP code, please.';
+  else if (!ZIP_RE.test(s.zip.trim())) p.zip = 'A ZIP looks like 78701 or 78701-1234.';
+  if (S.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(S.email.trim())) p.email = 'That email doesn’t look right.';
+  return p;
+}
+function stepDone(n) {
+  if (n === 1) return !!S.styleId;
+  if (n === 2) return !!S.filling;
+  if (n === 3) return !!S.design;
+  if (n === 4) return S.message.trim().length > 0 && S.message.length <= MSG_MAX;
+  if (n === 5) return !dateProblem() && !Object.keys(addressProblems()).length;
+  return false;
+}
+function missing() {
+  var m = [];
+  if (!S.styleId) m.push('Pick a piñata');
+  if (!S.filling) m.push('Choose what’s inside');
+  if (S.message.length > MSG_MAX) m.push('Shorten the message');
+  var needDate = !!dateProblem(), needAddr = !!Object.keys(addressProblems()).length;
+  if (needDate && needAddr) m.push('Add a delivery date and address');
+  else if (needDate) m.push('Add a delivery date');
+  else if (needAddr) m.push('Complete the delivery address');
+  return m;
+}
+
+/* ---------------- lifecycle states ---------------- */
+
+function showLoading() {
+  clear(root).appendChild(el('div', { class: 'state', 'aria-busy': 'true' }, [
+    el('h2', { text: 'Setting up your designer…' }),
+    el('p', { text: 'Loading piñatas, treats and designs.' }),
+    el('div', { class: 'skel' }), el('div', { class: 'skel' }), el('div', { class: 'skel' })
+  ]));
+}
+function showStandalone() {
+  clear(root).appendChild(el('div', { class: 'state' }, [
+    el('h2', { text: 'This designer opens inside Claude.' }),
+    el('p', { text: 'Start a chat and ask for a Piñatagram — the designer appears right in the conversation.' }),
+    el('a', { class: 'btn', href: BUILDER_FALLBACK, target: '_blank', rel: 'noopener noreferrer', text: 'Or use the full builder' })
+  ]));
+}
+function showError(text) {
+  clear(root).appendChild(el('div', { class: 'state' }, [
+    el('h2', { text: 'The designer couldn’t load.' }),
+    el('p', { class: 'err', text: text }),
+    el('p', { text: 'Ask Claude to open the designer again, or design in the full builder.' }),
+    el('a', { class: 'btn', href: (D && D.builder_url) || BUILDER_FALLBACK, target: '_blank', rel: 'noopener noreferrer', text: 'Open the full builder' })
+  ]));
+}
+function showCancelled(reason) {
+  if (D) return;
+  clearTimeout(dataTimer);
+  clear(root).appendChild(el('div', { class: 'state' }, [
+    el('h2', { text: 'The designer didn’t get its data.' }),
+    reason ? el('p', { text: 'Reason: ' + String(reason).slice(0, 200) }) : null,
+    el('p', { text: 'Ask Claude to open it again; nothing was ordered.' }),
+    el('a', { class: 'btn', href: BUILDER_FALLBACK, target: '_blank', rel: 'noopener noreferrer', text: 'Or use the full builder' })
+  ]));
+}
+
+function onToolResult(r) {
+  clearTimeout(dataTimer);
+  if (D) return; // one result per app instance
+  if (r && r.isError) return showError(textOf(r) || 'Something went wrong.');
+  var sc = r && r.structuredContent;
+  if (!sc || !sc.catalog || !Array.isArray(sc.catalog.body_styles)) {
+    return showError('The designer didn’t receive its catalog.');
+  }
+  D = sc;
+  D.designs = Array.isArray(D.designs) ? D.designs.filter(function (d) { return d && typeof d === 'object'; }) : [];
+  D.catalog.fillings = Array.isArray(D.catalog.fillings) ? D.catalog.fillings : [];
+  D.catalog.add_ons = Array.isArray(D.catalog.add_ons) ? D.catalog.add_ons : [];
+  D.tools = D.tools || {};
+  D.tools.price = D.tools.price || 'price_order';
+  D.tools.checkout = D.tools.checkout || 'create_checkout';
+  D.tools.designs = D.tools.designs || 'list_designs';
+  if (!LINK_OK.test(D.builder_url || '')) D.builder_url = BUILDER_FALLBACK;
+  if (!designByCode(CLASSIC_CODE)) {
+    D.designs.unshift({ code: CLASSIC_CODE, title: 'Classic Piñatagrams', thumb_url: CLASSIC_THUMB, upcharge: 'free', occasion: 'Any occasion' });
+  }
+  applyPrefill(D.prefill && typeof D.prefill === 'object' ? D.prefill : (rawInput && typeof rawInput === 'object' ? rawInput : {}));
+  buildUI();
+  schedulePrice();
+  scheduleContext();
+}
+
+function applyPrefill(p) {
+  var str = function (v, max) { return typeof v === 'string' ? v.trim().slice(0, max || 200) : ''; };
+  S.recipient = str(p.recipient_name, 80);
+  S.occasion = Array.isArray(p.occasion) ? p.occasion.filter(function (x) { return typeof x === 'string'; }).join(', ') : str(p.occasion, 60);
+  var st = styleById(str(p.style_id, 60));
+  if (st && st.in_stock) S.styleId = st.id;
+  var f = fillingByKey(p.filling) || catalog().fillings[0];
+  if (f) S.filling = f.id;
+  if (Array.isArray(p.add_ons)) {
+    S.addOns = p.add_ons.filter(function (a) { return typeof a === 'string' && addonById(a) && fillingAllows(f, a); });
+  }
+  var code = str(p.design, 24).toUpperCase();
+  if (code && designByCode(code)) S.design = code;
+  S.message = str(p.message, MSG_MAX);
+  if (p.carrier === 'fedex' || p.carrier === 'usps') S.carrier = p.carrier;
+  var dd = str(p.delivery_date, 10);
+  if (YMD_RE.test(dd)) S.date = dd;
+  if (p.ship_to && typeof p.ship_to === 'object') {
+    Object.keys(S.ship).forEach(function (k) {
+      S.ship[k] = str(p.ship_to[k], k === 'state' ? 2 : 120);
+    });
+    S.ship.state = S.ship.state.toUpperCase();
+    if (!STATES.some(function (s) { return s[0] === S.ship.state; })) S.ship.state = '';
+  }
+  if (!S.ship.name && S.recipient) S.ship.name = S.recipient;
+  S.email = str(p.email, 120);
+  if (S.occasion) {
+    var hit = occasions().find(function (o) { return o.toLowerCase() === S.occasion.toLowerCase(); });
+    if (hit) occFilter = hit;
+  }
+}
+
+/* ---------------- building the page (once; text inputs are never re-rendered) ---------------- */
+
+function stepEl(n, title, body) {
+  var mark = el('span', { class: 'mark', 'aria-live': 'polite' });
+  var s = el('section', { class: 'step', 'data-step': n, 'aria-labelledby': 'st' + n }, [
+    el('div', { class: 'step-h' }, [
+      el('span', { class: 'num', 'aria-hidden': 'true', text: String(n) }),
+      el('h2', { id: 'st' + n, text: title }),
+      mark
+    ])
+  ].concat(body));
+  s._mark = mark;
+  return s;
+}
+
+function buildUI() {
+  clear(root);
+  var dropped = Array.isArray(D.dropped) ? D.dropped.filter(function (x) { return x && typeof x.field === 'string'; }) : [];
+  if (dropped.length) {
+    var seen = {}, items = [];
+    dropped.forEach(function (x) {
+      var label = fieldLabel(x.field), reason = x.reason ? String(x.reason).slice(0, 120) : '';
+      var key = label + '|' + reason;
+      if (seen[key]) return; // two bad add-ons with the same note read once
+      seen[key] = 1;
+      items.push(el('li', {}, [el('strong', { text: label }), reason ? ' — ' + reason : '']));
+    });
+    root.appendChild(el('div', { class: 'info', role: 'status' }, [
+      el('strong', { text: 'A few details from the chat need your pick:' }),
+      el('ul', {}, items)
+    ]));
+  }
+  if (!D.ordering_enabled) {
+    root.appendChild(el('div', { class: 'info', role: 'status', text: 'Ordering here is switched off right now — design away, then finish in the full builder.' }));
+  }
+
+  ui.hdrPrice = document.getElementById('hdrp');
+
+  /* 1. piñata */
+  ui.styles = el('div', { class: 'grid', role: 'radiogroup', 'aria-label': 'Piñata body style' });
+  ui.stylesMore = el('div', { class: 'more' });
+  ui.steps = [];
+  ui.steps[1] = stepEl(1, 'Pick a piñata', [el('p', { class: 'hint', text: 'Every one is a gift box with a printed card inside. The recipient keeps the piñata and pulls the treats out through the bottom.' }), ui.styles, ui.stylesMore]);
+
+  /* 2. inside */
+  ui.fillings = el('div', { class: 'chips', role: 'radiogroup', 'aria-label': 'Filling' });
+  ui.blurb = el('p', { class: 'blurb', 'aria-live': 'polite' });
+  ui.addons = el('div');
+  ui.steps[2] = stepEl(2, 'What’s inside', [ui.fillings, ui.blurb, ui.addons]);
+
+  /* 3. design */
+  ui.occ = el('div', { class: 'chips', role: 'group', 'aria-label': 'Filter designs by occasion' });
+  ui.designs = el('div', { class: 'grid', role: 'radiogroup', 'aria-label': 'Front design' });
+  ui.designsMore = el('div', { class: 'more' });
+  ui.steps[3] = stepEl(3, 'Front design', [ui.occ, el('div', { class: 'gap' }), ui.designs, ui.designsMore,
+    el('p', { class: 'note' }, ['Want your own artwork? ', el('button', { type: 'button', class: 'link', text: 'Use the full builder', onclick: function () { openLink(D.builder_url); } })])]);
+
+  /* 4. message */
+  ui.msg = el('textarea', { class: 'in', id: 'msg', maxlength: String(MSG_MAX + 200), placeholder: 'Printed on the card inside', 'aria-describedby': 'msgc', oninput: function () { S.message = ui.msg.value; onMessageChange(); } });
+  ui.msg.value = S.message;
+  ui.msgCount = el('div', { class: 'count', id: 'msgc', 'aria-live': 'polite' });
+  ui.steps[4] = stepEl(4, 'Your message', [
+    el('div', { class: 'field' }, [el('label', { for: 'msg' }, ['Card message ', el('span', { class: 'opt', text: '(optional)' })]), ui.msg, ui.msgCount]),
+    el('div', { class: 'actions' }, [el('button', { type: 'button', class: 'btn', text: 'Ask Claude to write it', onclick: askClaude })])
+  ]);
+
+  /* 5. when & where */
+  ui.carriers = el('div', { class: 'carriers', role: 'radiogroup', 'aria-label': 'Shipping' });
+  ui.date = el('input', { class: 'in', type: 'date', id: 'date', 'aria-describedby': 'dateh', oninput: function () { S.date = ui.date.value; onOrderChange(false); }, onchange: function () { S.date = ui.date.value; onOrderChange(false); } });
+  ui.dateLabel = el('label', { for: 'date', text: 'Arrival date' });
+  ui.dateHint = el('div', { class: 'note', id: 'dateh' });
+  ui.dateErr = el('p', { class: 'err hidden', role: 'alert' });
+  ui.addr = {};
+  var fields = el('div', { class: 'row' }, [
+    addrField('name', 'Recipient name', 'name', false),
+    addrField('address1', 'Street address', 'address-line1', false),
+    addrField('address2', 'Apt, suite or unit', 'address-line2', true)
+  ]);
+  var row3 = el('div', { class: 'row row-3' }, [
+    addrField('city', 'City', 'address-level2', false),
+    stateField(),
+    addrField('zip', 'ZIP', 'postal-code', false)
+  ]);
+  var row4 = el('div', { class: 'row' }, [
+    addrField('phone', 'Phone for the carrier', 'tel', true),
+    emailField()
+  ]);
+  ui.steps[5] = stepEl(5, 'When & where', [
+    ui.carriers,
+    el('div', { class: 'field' }, [ui.dateLabel, ui.date, ui.dateHint, ui.dateErr]),
+    el('h3', { class: 'sub-h', text: 'Ship to' }),
+    fields, row3, row4
+  ]);
+
+  ui.main = el('div');
+  for (var i = 1; i <= 5; i++) ui.main.appendChild(ui.steps[i]);
+  root.appendChild(ui.main);
+
+  /* review / created card */
+  ui.review = el('div', { class: 'review hidden', tabindex: '-1' });
+  root.appendChild(ui.review);
+
+  /* 6. sticky bar */
+  ui.amt = el('div', { class: 'amt' });
+  ui.sub = el('div', { class: 'sub' });
+  ui.barErr = el('p', { class: 'err hidden', role: 'alert' });
+  ui.brk = el('div', { class: 'brk hidden', id: 'brk' });
+  ui.brkBtn = el('button', { type: 'button', class: 'link', text: 'See the breakdown', 'aria-expanded': 'false', 'aria-controls': 'brk', onclick: function () {
+    var nowHidden = ui.brk.classList.toggle('hidden');
+    ui.brkBtn.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
+    ui.brkBtn.textContent = nowHidden ? 'See the breakdown' : 'Hide the breakdown';
+  } });
+  ui.primary = el('button', { type: 'button', class: 'btn btn-primary', onclick: onPrimary });
+  root.appendChild(el('div', { class: 'bar', role: 'region', 'aria-label': 'Order total' }, [
+    el('div', { class: 'bar-row' }, [
+      el('div', { class: 'price', 'aria-live': 'polite', 'aria-atomic': 'true' }, [ui.amt, ui.sub]),
+      ui.primary
+    ]),
+    ui.barErr,
+    el('div', { class: 'brk-wrap' }, [ui.brkBtn]),
+    ui.brk
+  ]));
+
+  renderStyles(); renderFillings(); renderOccasions(); ensureDesigns(occFilter); renderCarriers();
+  onMessageChange();
+}
+
+function addrField(key, label, autocomplete, optional) {
+  var id = 'f-' + key;
+  var input = el('input', { class: 'in', id: id, type: key === 'phone' ? 'tel' : 'text', autocomplete: autocomplete, maxlength: key === 'zip' ? '10' : '120',
+    oninput: function () { S.ship[key] = input.value; onOrderChange(false); } });
+  input.value = S.ship[key];
+  var err = el('p', { class: 'err hidden' });
+  ui.addr[key] = { input: input, err: err, touched: false };
+  return el('div', { class: 'field' }, [
+    el('label', { for: id }, [label + ' ', optional ? el('span', { class: 'opt', text: '(optional)' }) : null]), input, err]);
+}
+function stateField() {
+  var sel = el('select', { class: 'in', id: 'f-state', autocomplete: 'address-level1', onchange: function () { S.ship.state = sel.value; onOrderChange(false); } },
+    [el('option', { value: '', text: 'State' })].concat(STATES.map(function (s) { return el('option', { value: s[0], text: s[0] + ' — ' + s[1] }); })));
+  sel.value = S.ship.state;
+  var err = el('p', { class: 'err hidden' });
+  ui.addr.state = { input: sel, err: err, touched: false };
+  return el('div', { class: 'field' }, [el('label', { for: 'f-state', text: 'State' }), sel, err]);
+}
+function emailField() {
+  var input = el('input', { class: 'in', id: 'f-email', type: 'email', autocomplete: 'email', maxlength: '120', oninput: function () { S.email = input.value; onOrderChange(false); } });
+  input.value = S.email;
+  var err = el('p', { class: 'err hidden' });
+  ui.addr.email = { input: input, err: err, touched: false };
+  return el('div', { class: 'field' }, [el('label', { for: 'f-email' }, ['Your email for the receipt ', el('span', { class: 'opt', text: '(optional)' })]), input, err]);
+}
+
+/* ---------------- renderers ---------------- */
+
+function renderStyles(focusFrom) {
+  clear(ui.styles); clear(ui.stylesMore);
+  var all = catalog().body_styles;
+  var selIdx = all.findIndex(function (s) { return s.id === S.styleId; });
+  var cap = stylesExpanded || selIdx >= STYLE_CAP ? all.length : STYLE_CAP; // the chosen piñata is never hidden
+  all.slice(0, cap).forEach(function (s) {
+    var sel = s.id === S.styleId;
+    ui.styles.appendChild(el('button', { type: 'button', class: 'card' + (sel ? ' sel' : ''), role: 'radio', 'aria-checked': sel ? 'true' : 'false', disabled: !s.in_stock,
+      'aria-label': s.name + (s.in_stock ? '' : ' — back soon'), onclick: function () { S.styleId = s.id; renderStyles(); renderDesigns(); onOrderChange(true); } }, [
+      picture(s.image_url, s.name),
+      el('div', { class: 'nm', text: s.name }),
+      !s.in_stock ? el('span', { class: 'badge', text: 'Back soon' }) : null,
+      sel ? el('span', { class: 'tick', 'aria-hidden': 'true', text: '✓' }) : null
+    ]));
+  });
+  if (cap < all.length) {
+    ui.stylesMore.appendChild(el('button', { type: 'button', class: 'link', text: 'Show all ' + all.length + ' piñatas', onclick: function () { stylesExpanded = true; renderStyles(cap); } }));
+  }
+  if (typeof focusFrom === 'number' && ui.styles.children[focusFrom]) ui.styles.children[focusFrom].focus();
+}
+
+function renderFillings() {
+  clear(ui.fillings);
+  var cur = fillingByKey(S.filling);
+  catalog().fillings.forEach(function (f) {
+    var sel = !!cur && cur.id === f.id;
+    ui.fillings.appendChild(el('button', { type: 'button', class: 'chip' + (sel ? ' sel' : ''), role: 'radio', 'aria-checked': sel ? 'true' : 'false', title: f.blurb || '',
+      onclick: function () { S.filling = f.id; S.addOns = S.addOns.filter(function (x) { return fillingAllows(f, x); }); renderFillings(); onOrderChange(true); },
+      onmouseenter: function () { ui.blurb.textContent = f.blurb || ''; },
+      onmouseleave: function () { ui.blurb.textContent = cur ? (cur.blurb || '') : ''; } },
+      [f.label + (f.price_cents > 0 ? ' +' + money(f.price_cents) : '')]));
+  });
+  ui.blurb.textContent = cur ? (cur.blurb || '') : 'Tap a filling to see what’s in it.';
+  clear(ui.addons);
+  if (!cur) return;
+  allowedAddons(cur).forEach(function (a) {
+    var on = S.addOns.indexOf(a.id) >= 0;
+    ui.addons.appendChild(el('button', { type: 'button', class: 'toggle', 'aria-pressed': on ? 'true' : 'false', onclick: function () {
+      S.addOns = on ? S.addOns.filter(function (x) { return x !== a.id; }) : S.addOns.concat([a.id]);
+      renderFillings(); onOrderChange(true);
+    } }, [
+      el('span', { class: 'box', 'aria-hidden': 'true', text: on ? '✓' : '' }),
+      el('span', { class: 'lbl', text: a.label }),
+      el('span', { class: 'pr', text: '+' + money(a.price_cents) })
+    ]));
+  });
+}
+
+/* Occasions: every label the library sells comes from the server (D.occasions); the loaded page covers a few
+   of them, the rest load on demand through list_designs — the same tool every agent uses. */
+function loadedOccasions() {
+  var set = {};
+  D.designs.forEach(function (d) { if (designCode(d) !== CLASSIC_CODE && typeof d.occasion === 'string' && d.occasion) set[d.occasion] = 1; });
+  return Object.keys(set).sort();
+}
+function occasions() {
+  var list = Array.isArray(D.occasions) ? D.occasions.filter(function (o) { return typeof o === 'string' && o && o !== 'Any occasion'; }) : [];
+  return list.length ? list : loadedOccasions();
+}
+function hasDesignsFor(o) { return D.designs.some(function (d) { return designCode(d) !== CLASSIC_CODE && d.occasion === o; }); }
+function renderOccasions() {
+  clear(ui.occ);
+  var all = occasions(), loaded = loadedOccasions();
+  if (all.length < 2) return;
+  var shown = occMore ? all : all.filter(function (o) { return loaded.indexOf(o) >= 0 || o === occFilter; });
+  [''].concat(shown).forEach(function (o) {
+    var sel = o === occFilter;
+    ui.occ.appendChild(el('button', { type: 'button', class: 'chip' + (sel ? ' sel' : ''), 'aria-pressed': sel ? 'true' : 'false', text: o || 'All',
+      onclick: function () { occFilter = o; designsExpanded = false; renderOccasions(); ensureDesigns(o); } }));
+  });
+  if (shown.length < all.length || occMore) {
+    ui.occ.appendChild(el('button', { type: 'button', class: 'chip', 'aria-expanded': occMore ? 'true' : 'false', text: occMore ? 'Fewer occasions' : 'More occasions…',
+      onclick: function () { occMore = !occMore; renderOccasions(); } }));
+  }
+}
+/* Show an occasion's designs, loading them the first time that occasion isn't on the page yet. */
+function ensureDesigns(o) {
+  designsErr = '';
+  if (!o || hasDesignsFor(o) || occLoaded[o]) { designsLoading = ''; renderDesigns(); return; }
+  designsLoading = o;
+  renderDesigns();
+  callTool(D.tools.designs, { occasion: o, limit: 24 }).then(function (r) {
+    if (r.ok && Array.isArray(r.data.designs)) {
+      occLoaded[o] = true;
+      r.data.designs.forEach(function (row) {
+        if (!row || typeof row.design !== 'string' || !DESIGN_RE.test(row.design) || designByCode(row.design)) return;
+        var d = { code: row.design, title: String(row.title_or_label || row.design), thumb_url: typeof row.thumb_url === 'string' ? row.thumb_url : null,
+          upcharge: row.upcharge === 'free' ? 'free' : 'library', occasion: typeof row.occasion === 'string' && row.occasion ? row.occasion : o };
+        if (Array.isArray(row.body_styles)) d.body_styles = row.body_styles.filter(function (x) { return typeof x === 'string'; });
+        D.designs.push(d);
+      });
+    } else if (occFilter === o) designsErr = r.text || 'Couldn’t load those designs.';
+    if (designsLoading === o) designsLoading = '';
+    renderOccasions(); renderDesigns();
+  });
+}
+function renderDesigns(focusFrom) {
+  clear(ui.designs); clear(ui.designsMore);
+  var visible = D.designs.filter(function (d) {
+    var code = designCode(d);
+    // Classic suits any occasion, and the chosen design stays visible whatever the filter.
+    return !!code && (code === CLASSIC_CODE || !occFilter || d.occasion === occFilter || code === S.design);
+  });
+  var selIdx = visible.findIndex(function (d) { return designCode(d) === S.design; });
+  var cap = designsExpanded || selIdx >= DESIGN_CAP ? visible.length : DESIGN_CAP;
+  visible.slice(0, cap).forEach(function (d) {
+    var code = designCode(d);
+    var classic = code === CLASSIC_CODE;
+    var sel = code === S.design;
+    var cents = designCents(d);
+    // A hub design may fit only some bodies (optional body_styles list); it stays visible but greyed.
+    var unfit = !!S.styleId && Array.isArray(d.body_styles) && d.body_styles.indexOf(S.styleId) < 0;
+    var price = unfit ? 'Not for this piñata' : classic ? 'Included (free)' : (cents === null ? 'Library design' : '+' + money(cents) + ' library design');
+    var title = classic ? 'Classic Piñatagrams' : String(d.title || code);
+    ui.designs.appendChild(el('button', { type: 'button', class: 'card' + (sel ? ' sel' : ''), role: 'radio', 'aria-checked': sel ? 'true' : 'false', disabled: unfit,
+      'aria-label': title + ', ' + price, onclick: function () { S.design = code; renderDesigns(); onOrderChange(true); } }, [
+      picture(d.thumb_url, title),
+      el('div', { class: 'nm', text: title }),
+      el('div', { class: 'sub', text: price }),
+      sel ? el('span', { class: 'tick', 'aria-hidden': 'true', text: '✓' }) : null
+    ]));
+  });
+  if (designsLoading) {
+    ui.designsMore.appendChild(el('p', { class: 'hint', 'aria-live': 'polite', text: 'Loading ' + designsLoading + ' designs…' }));
+  } else if (designsErr) {
+    ui.designsMore.appendChild(el('p', { class: 'err', role: 'alert' }, [designsErr + ' ',
+      el('button', { type: 'button', class: 'link', text: 'Try again', onclick: function () { ensureDesigns(occFilter); } })]));
+  } else if (cap < visible.length) {
+    ui.designsMore.appendChild(el('button', { type: 'button', class: 'link', text: 'Show ' + (visible.length - cap) + ' more designs', onclick: function () { designsExpanded = true; renderDesigns(cap); } }));
+  }
+  if (typeof focusFrom === 'number' && ui.designs.children[focusFrom]) ui.designs.children[focusFrom].focus();
+}
+
+function renderCarriers() {
+  clear(ui.carriers);
+  [['fedex', 'FedEx 2-Day', 'Arrives on the exact date you pick.'], ['usps', 'USPS First Class', 'Arrives in a window around the date you pick.']].forEach(function (c) {
+    var sel = S.carrier === c[0];
+    var cents = shipCents(c[0]);
+    ui.carriers.appendChild(el('button', { type: 'button', class: 'opt-card' + (sel ? ' sel' : ''), role: 'radio', 'aria-checked': sel ? 'true' : 'false', onclick: function () {
+      S.carrier = c[0]; renderCarriers(); onOrderChange(true);
+    } }, [
+      el('span', { class: 't', text: c[1] }),
+      el('span', { class: 'd', text: c[2] }),
+      el('span', { class: 'p', text: cents === null ? 'Shipping priced at review' : money(cents) + ' shipping' })
+    ]));
+  });
+}
+function renderDate() {
+  var mn = minDate(), mx = maxDate();
+  if (mn) ui.date.min = mn; else ui.date.removeAttribute('min');
+  if (mx) ui.date.max = mx; else ui.date.removeAttribute('max');
+  if (ui.date.value !== S.date) ui.date.value = S.date;
+  ui.dateLabel.textContent = S.carrier === 'usps' ? 'Target arrival date' : 'Arrival date';
+  ui.dateHint.textContent = (mn ? 'Soonest ' + fmtDate(mn) : '') + (mn && mx ? ' · ' : '') + (mx ? 'latest ' + fmtDate(mx) : '') +
+    (S.carrier === 'usps' ? ' · USPS lands within a few mailing days of your date' : ' · FedEx guarantees the day');
+  var p = S.date ? dateProblem() : '';
+  ui.dateErr.textContent = p;
+  ui.dateErr.classList.toggle('hidden', !p);
+  ui.date.setAttribute('aria-invalid', p ? 'true' : 'false');
+}
+function renderAddress() {
+  var probs = addressProblems();
+  Object.keys(ui.addr).forEach(function (k) {
+    var f = ui.addr[k];
+    var val = k === 'email' ? S.email : S.ship[k];
+    f.touched = f.touched || !!val;
+    var show = !!probs[k] && f.touched;
+    f.err.textContent = show ? probs[k] : '';
+    f.err.classList.toggle('hidden', !show);
+    f.input.setAttribute('aria-invalid', show ? 'true' : 'false');
+  });
+}
+function onMessageChange() {
+  var n = S.message.length;
+  ui.msgCount.textContent = n + ' / ' + MSG_MAX + (n > MSG_MAX ? ' — a little too long for the card' : '');
+  ui.msgCount.classList.toggle('over', n > MSG_MAX);
+  ui.msg.setAttribute('aria-invalid', n > MSG_MAX ? 'true' : 'false');
+  onOrderChange(false);
+}
+
+function updateMarkers() {
+  for (var i = 1; i <= 5; i++) {
+    var done = stepDone(i);
+    var s = ui.steps[i];
+    var over = i === 4 && S.message.length > MSG_MAX;
+    s.setAttribute('data-done', done ? '1' : (i === 4 && !over ? '' : '0'));
+    s._mark.textContent = done ? 'Done' : (i === 4 ? (over ? 'Too long' : 'Optional') : 'To do');
+  }
+}
+
+function updateBar() {
+  updateMarkers();
+  var miss = missing();
+  var off = !D.ordering_enabled;
+  ui.amt.classList.toggle('empty', !S.styleId && phase !== 'created');
+  if (phase === 'created') {
+    ui.amt.textContent = money(created.total_before_tax_cents) + ' before tax';
+    ui.sub.textContent = 'Checkout link ready — pay on Shopify to place the order.';
+    ui.primary.textContent = 'Pay on Shopify';
+    ui.primary.disabled = false;
+  } else if (!S.styleId) {
+    ui.amt.textContent = 'Pick a piñata to see the price';
+    ui.sub.textContent = off ? 'Ordering here is off — finish in the builder.' : miss.join(' · ');
+  } else if (quoteErr) {
+    ui.amt.textContent = '—';
+    ui.sub.textContent = '';
+  } else if (quote) {
+    ui.amt.textContent = money(quote.total_before_tax_cents) + ' before tax';
+    ui.sub.textContent = off ? 'Ordering here is off — finish in the builder.' : (miss.length ? miss.join(' · ') : 'Tax is added at checkout.');
+  } else {
+    ui.amt.textContent = 'Pricing…';
+    ui.sub.textContent = miss.join(' · ');
+  }
+  if (phase !== 'created') {
+    ui.primary.textContent = off ? 'Finish in the builder' : (phase === 'review' ? 'Edit order' : 'Review order');
+    ui.primary.disabled = !off && phase === 'edit' && (miss.length > 0 || !quote);
+    renderDate();
+    renderAddress();
+  }
+  // The header mirrors the total so the price is one glance away while the long form scrolls (visual only: the bar is the live region).
+  if (ui.hdrPrice) ui.hdrPrice.textContent = quoteErr && phase !== 'created' ? 'Price: see the note below' : ui.amt.textContent;
+  var err = quoteErr || checkoutErr; // a checkout refusal (date, address) shows WITH the live price, not instead of it
+  ui.barErr.textContent = err;
+  ui.barErr.classList.toggle('hidden', !err);
+  renderBreakdown();
+}
+function renderBreakdown() {
+  clear(ui.brk);
+  // The live quote agrees with the preview by construction (any edit resets the preview).
+  var q = quote || preview || created;
+  var hasQ = !!(q && Array.isArray(q.lines) && q.lines.length);
+  ui.brkBtn.classList.toggle('hidden', !hasQ);
+  if (!hasQ) { ui.brk.classList.add('hidden'); return; }
+  var l = q.lines[0];
+  var b = l.breakdown || {};
+  var row = function (a, c, cls) { return el('div', { class: cls || '' }, [el('span', { text: a }), el('span', { text: c })]); };
+  var hasB = typeof b.base === 'number';
+  var pinata = hasB ? b.base + (b.filling || 0) : l.unit_cents;
+  ui.brk.appendChild(row((l.style_name || 'Piñata') + ' · ' + ((l.filling && l.filling.label) || '') + (hasB && b.filling ? ' (+' + money(b.filling) + ')' : ''), money(pinata)));
+  if (hasB && b.graphic_upcharge) ui.brk.appendChild(row('Design: ' + ((l.graphic && l.graphic.label) || ''), '+' + money(b.graphic_upcharge)));
+  (q.add_on_lines || []).forEach(function (a) { ui.brk.appendChild(row(a.label, '+' + money(a.cents))); });
+  if (q.shipping) ui.brk.appendChild(row(q.carrier === 'usps' ? 'USPS First Class shipping' : 'FedEx 2-Day shipping', money(q.shipping.cents)));
+  ui.brk.appendChild(row('Total before tax', money(q.total_before_tax_cents), 'tot'));
+}
+
+/* ---------------- change handling ---------------- */
+
+function onOrderChange(affectsPrice) {
+  if (phase === 'created') return;
+  checkoutSeq++;        // any edit discards a preview still in flight
+  checkoutErr = '';     // a refusal about the date or address clears as soon as something changes
+  if (phase === 'review') { phase = 'edit'; preview = null; previewArgs = null; ui.review.classList.add('hidden'); }
+  idemKey = '';
+  if (affectsPrice) schedulePrice();
+  updateBar();
+  scheduleContext();
+}
+
+function schedulePrice() {
+  clearTimeout(quoteTimer);
+  quote = null; quoteErr = '';
+  if (!S.styleId || !S.filling) return;
+  quoteTimer = setTimeout(fetchPrice, 400);
+}
+function fetchPrice() {
+  var seq = ++quoteSeq;
+  var line = { style_id: S.styleId, qty: 1, filling: fillingLabel(), graphic: graphicArg() };
+  if (S.addOns.length) line.add_ons = S.addOns.slice();
+  callTool(D.tools.price, { carrier: S.carrier, lines: [line] }).then(function (r) {
+    if (seq !== quoteSeq) return;
+    if (r.ok && typeof r.data.total_before_tax_cents === 'number') { quote = r.data; quoteErr = ''; }
+    else { quote = null; quoteErr = r.text || 'Couldn’t price that combination.'; }
+    updateBar(); scheduleContext();
+  });
+}
+
+function scheduleContext() {
+  clearTimeout(ctxTimer);
+  ctxTimer = setTimeout(sendContext, 1000);
+}
+function contextText() {
+  var st = styleById(S.styleId), f = fillingByKey(S.filling);
+  var parts = [];
+  parts.push(st ? st.name + ' piñata' : 'no piñata picked yet');
+  parts.push((f ? f.label : 'no filling') + (S.addOns.length ? ' + ' + S.addOns.map(function (a) { var x = addonById(a); return x ? x.label : a; }).join(' + ') : ''));
+  parts.push(S.design === CLASSIC_CODE ? 'Classic design' : 'design ' + S.design);
+  var when = (S.carrier === 'usps' ? 'USPS arriving around ' : 'FedEx arriving ') + (S.date || '(no date yet)');
+  var who = S.ship.name ? ' to ' + S.ship.name + (S.ship.city ? ', ' + S.ship.city + (S.ship.state ? ' ' + S.ship.state : '') : ' (address incomplete)') : ' (no address yet)';
+  parts.push(when + who);
+  var tail = [S.message.trim() ? 'message set' : 'no message yet'];
+  tail.push(quote ? 'total ' + money(quote.total_before_tax_cents) + ' before tax' : (quoteErr ? 'price refused: ' + quoteErr : 'price pending'));
+  if (created) {
+    tail.push('checkout created: continue_url ' + created.continue_url + ', draft_order_id ' + created.draft_order_id + ', nonce ' + created.nonce +
+      ', total ' + money(created.total_before_tax_cents) + ' before tax, to ' + ((created.ship_to && created.ship_to.name) || S.ship.name) + ', arrives ' + (created.arrives || S.date) +
+      '. The order exists only after payment on that link; tax is added there');
+  } else if (phase === 'review') tail.push('reviewing the priced preview, not yet checked out');
+  else tail.push('not yet checked out' + (missing().length ? ' (still needs: ' + missing().join(', ').toLowerCase() + ')' : ''));
+  return 'Designer state: ' + parts.join(', ') + '; ' + tail.join('; ') + '.';
+}
+function sendContext() {
+  if (!D) return;
+  request('ui/update-model-context', { content: [{ type: 'text', text: contextText() }] }, 8000).catch(function () { /* host may not support it */ });
+}
+
+function askClaude() {
+  var who = S.ship.name.trim() || S.recipient || 'my recipient';
+  var occ = S.occasion || occFilter || 'the occasion';
+  var text = 'Please write a short, warm message (under 300 characters) for the card in my Piñatagram to ' + who + ' for ' + occ + '.';
+  request('ui/message', { role: 'user', content: [{ type: 'text', text: text }] }, 15000).catch(function () { /* host declined */ });
+}
+
+/* ---------------- review → checkout link → pay ---------------- */
+
+/* The dry-run request from the live state. The confirm replays THESE arguments (kept as previewArgs),
+   never the state at click time, so the reviewed card and the created checkout can't differ. */
+function checkoutArgs() {
+  var line = { style_id: S.styleId, qty: 1, filling: fillingLabel(), graphic: graphicArg(), delivery_date: S.date };
+  if (S.addOns.length) line.add_ons = S.addOns.slice();
+  if (S.message.trim()) line.message = S.message.trim();
+  var s = S.ship;
+  var ship = { name: s.name.trim(), address1: s.address1.trim(), city: s.city.trim(), state: s.state, zip: s.zip.trim() };
+  if (s.address2.trim()) ship.address2 = s.address2.trim();
+  if (s.phone.trim()) ship.phone = s.phone.trim();
+  var args = { carrier: S.carrier, lines: [line], ship_to: ship, agent: 'designer-app', dry_run: true };
+  if (S.email.trim()) args.email = S.email.trim();
+  return args;
+}
+function setBusy(on, label) {
+  ui.primary.disabled = on;
+  if (on) ui.primary.textContent = label;
+  ui.main.classList.toggle('busy', on);
+  ui.main.inert = on; // no keyboard edits either while the preview is in flight
+  ui.main.setAttribute('aria-busy', on ? 'true' : 'false');
+}
+function onPrimary() {
+  if (!D.ordering_enabled && phase !== 'created') return openLink(D.builder_url);
+  if (phase === 'created') return openLink(created.continue_url);
+  if (phase === 'review') { onOrderChange(false); return; }
+  if (missing().length) return;
+  var dryArgs = checkoutArgs(), seq = ++checkoutSeq;
+  setBusy(true, 'Checking everything…');
+  checkoutErr = '';
+  callTool(D.tools.checkout, dryArgs).then(function (r) {
+    setBusy(false, '');
+    if (seq !== checkoutSeq || phase !== 'edit') { updateBar(); return; } // edited meanwhile: that preview is stale
+    if (!r.ok || typeof r.data.total_before_tax_cents !== 'number') {
+      checkoutErr = r.ok ? 'The preview came back without a total. Please try again.' : r.text;
+      updateBar(); return;
+    }
+    preview = r.data; previewArgs = dryArgs; phase = 'review';
+    renderReview(null);
+    updateBar(); scheduleContext();
+    ui.review.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    ui.review.focus({ preventScroll: true });
+  });
+}
+function renderReview(errText) {
+  var p = preview;
+  var l = (p.lines && p.lines[0]) || {};
+  var sh = p.ship_to || {};
+  var addr = [sh.address1, sh.address2, [sh.city, sh.state].filter(Boolean).join(' ') + (sh.zip ? ' ' + sh.zip : '')].filter(Boolean).join(', ');
+  var row = function (a, c, cls) { return el('div', { class: cls || '' }, [el('span', { text: a }), el('span', { text: c })]); };
+  var lines = el('div', { class: 'lines' }, [
+    row((l.style_name || 'Piñata') + ' · ' + ((l.filling && l.filling.label) || '') + ' · ' + ((l.graphic && l.graphic.label) || ''), money(l.unit_cents))
+  ]);
+  (p.add_on_lines || []).forEach(function (a) { lines.appendChild(row(a.label, money(a.cents))); });
+  if (p.shipping) lines.appendChild(row(p.shipping.service || 'Shipping', money(p.shipping.cents)));
+  lines.appendChild(row('Total before tax', money(p.total_before_tax_cents), 'tot'));
+  var createBtn = el('button', { type: 'button', class: 'btn btn-primary', text: 'Create checkout link', onclick: createLink });
+  clear(ui.review);
+  ui.review.appendChild(el('h2', { text: 'Review your order' }));
+  ui.review.appendChild(el('dl', { class: 'kv' }, [
+    el('dt', { text: 'To' }), el('dd', { text: sh.name || '' }),
+    el('dt', { text: 'Address' }), el('dd', { text: addr }),
+    el('dt', { text: 'Arrives' }), el('dd', { text: (p.arrives || '') + (p.carrier === 'usps' ? ' (USPS window)' : ' (FedEx 2-Day)') }),
+    el('dt', { text: 'Message' }), el('dd', { text: l.message || 'No card message' }),
+    p.email ? el('dt', { text: 'Receipt to' }) : null, p.email ? el('dd', { text: p.email }) : null
+  ]));
+  ui.review.appendChild(lines);
+  ui.review.appendChild(el('p', { class: 'note', text: p.note || 'Sales tax is added by Shopify at checkout. Nothing has been ordered yet.' }));
+  if (errText) ui.review.appendChild(el('p', { class: 'err', role: 'alert', text: errText }));
+  ui.review.appendChild(el('div', { class: 'actions' }, [
+    createBtn,
+    el('button', { type: 'button', class: 'btn', text: 'Edit order', onclick: function () { onOrderChange(false); } })
+  ]));
+  ui.review.classList.remove('hidden');
+  ui.reviewCreate = createBtn;
+}
+function createLink() {
+  if (phase !== 'review' || !preview || !previewArgs) return;
+  if (!idemKey) idemKey = uuid(); // one key per reviewed order; a retry replays, an edit resets it
+  ui.reviewCreate.disabled = true;
+  ui.reviewCreate.textContent = 'Creating your checkout link…';
+  // Byte-for-byte the previewed request, plus the confirm trio.
+  var args = Object.assign({}, previewArgs, { dry_run: false, confirm: true, idempotency_key: idemKey });
+  callTool(D.tools.checkout, args, { timeoutMs: CONFIRM_TIMEOUT, timeoutText: CONFIRM_TIMEOUT_TEXT }).then(function (r) {
+    if (phase !== 'review') return;
+    if (!r.ok) return renderReview(r.text);
+    var d = r.data;
+    if (d.status !== 'ready_for_complete' || !LINK_OK.test(d.continue_url || '')) {
+      return renderReview(d.note || d.next_step || 'The store didn’t confirm a checkout link. Nothing was created.');
+    }
+    created = d; phase = 'created';
+    lockForm();
+    renderCreated();
+    updateBar();
+    clearTimeout(ctxTimer); sendContext();
+    ui.review.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+function lockForm() {
+  Array.prototype.forEach.call(ui.main.querySelectorAll('button,input,select,textarea'), function (n) { n.disabled = true; });
+}
+function renderCreated() {
+  var c = created;
+  var sh = c.ship_to || {};
+  clear(ui.review);
+  ui.review.appendChild(el('h2', { text: 'Your checkout link is ready' }));
+  ui.review.appendChild(el('div', { class: 'ok' }, [
+    el('strong', { text: money(c.total_before_tax_cents) + ' before tax' }), ' · to ' + (sh.name || '') + ' · arrives ' + (c.arrives || '')
+  ]));
+  ui.review.appendChild(el('button', { type: 'button', class: 'btn btn-primary btn-big', text: 'Pay on Shopify', onclick: function () { openLink(c.continue_url); } }));
+  ui.review.appendChild(el('p', { class: 'note' }, [
+    'If the button doesn’t open a new tab, ',
+    el('a', { href: c.continue_url, target: '_blank', rel: 'noopener noreferrer', text: 'use this link' }), '.'
+  ]));
+  ui.review.appendChild(el('p', { class: 'note', text: 'The order exists only after payment; tax is added at checkout.' }));
+  ui.review.appendChild(el('p', { class: 'small', text: 'Draft ' + String(c.draft_order_id || '').replace('gid://shopify/DraftOrder/', '#') + ' · Need a change? Ask Claude to update the checkout.' }));
+  ui.review.classList.remove('hidden');
+}
+
+/* ---------------- boot ---------------- */
+
+applyHostContext();
+showLoading();
+request('ui/initialize', { protocolVersion: PROTOCOL, appInfo: APP_INFO, appCapabilities: {} }, 4000).then(function (res) {
+  hostContext = (res && res.hostContext) || {};
+  applyHostContext();
+  notify('ui/notifications/initialized');
+  startSizeReporting();
+  // Watchdog: a host that initialized but never delivers the tool result would otherwise leave the skeleton forever.
+  dataTimer = setTimeout(function () { if (!D) showCancelled(''); }, 30000);
+}, function () {
+  if (!D) showStandalone();
+});
+})();
+</script>
+</body>
+</html>

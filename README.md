@@ -191,3 +191,35 @@ its `.env.local` pointing at the seeded Neon DB. `NEXT_PUBLIC_HUB_URL` in
 Still to do: GitHub repo + Vercel git integration (deploys are CLI-only for
 now), DNS `builder.pinatagrams.com` CNAME, and the hub must serve
 `/api/public/catalog` + `/price` (admin commit `5160452` — push pending).
+
+## MCP face (mcp.pinatagrams.com)
+
+The same codebase deploys twice. The Vercel project `pinatagrams-mcp` sets
+`APP_MODE=mcp` and tracks the `feat/ordering-mcp` branch as production; it
+has its own Shopify custom app (`pinatagrams-mcp`, `read_products` +
+`write_draft_orders`) so agent traffic can never throttle or take down the
+storefront's checkout. In that mode `src/middleware.ts` 404s every storefront,
+cart and checkout path, answers the storefront's crons with a no-op 200, and
+serves only `/api/mcp` — a public, no-auth MCP server (stateless Streamable
+HTTP; shell in `src/lib/mcp-http.ts`, tools in `src/lib/order-tools.ts`).
+On builder.pinatagrams.com the MCP endpoint 404s. Scope and decisions:
+workspace-root `ORDERING-MCP-SCOPE-2026-10.md`.
+
+Connector URL: `https://mcp.pinatagrams.com/api/mcp`. Local run of this face:
+`APP_MODE=mcp` in `.env.local`, then `next start`, and POST JSON-RPC
+(`initialize`, `tools/list`, `tools/call`) to `/api/mcp`.
+
+Tools (`src/lib/mcp-tools/*`): `get_catalog`, `get_delivery_options`,
+`list_designs`, `price_order`, `quote_bulk` (read-only) and, since Phase 2,
+`create_checkout`, `update_checkout`, `cancel_checkout`, `get_checkout_status`.
+Writes are gated on `MCP_ORDERING_ENABLED === "true"` and on the two-step
+rule (`dry_run` preview first, then `dry_run:false` + `confirm:true` with a
+UUID `idempotency_key`). A confirmed checkout calls `/api/checkout` in-process
+(Host = `MCP_STOREFRONT_HOST`, default `mcp.pinatagrams.com`) and returns
+Shopify's hosted invoice URL as `continue_url`; the server only ever creates
+or deletes unpaid draft orders — it never completes or marks one paid, never
+sends Shopify emails, and never registers webhooks (`src/lib/webhooks.ts`
+skips in mcp mode). MCP-placed orders carry the `mcp` tag plus the
+`_orderSource` / `_orderAgent` order attributes right after `_builderNonce`;
+`src/lib/paper-contract.ts` pins that shape. Idempotency is per instance
+(in-memory, 24 h, 200 keys) until Phase 3 moves it to Upstash.
