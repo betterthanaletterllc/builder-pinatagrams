@@ -1,7 +1,7 @@
-import graphicsFile from "../../../public/graphics.json";
 import {
   catalogUrl,
   HUB_TIMEOUT_MS,
+  offeredStyles,
   priceUrl,
   resolveBuilderPricing,
   resolveHubGraphics,
@@ -14,26 +14,29 @@ import {
   type HubPrice,
   type HubPriceInput,
 } from "@/lib/hub";
-import { CLASSIC_GRAPHIC, fillingAllowsAddon, resolveFillings } from "@/lib/flow";
+import { CLASSIC_GRAPHIC, fillingAllowsAddon, resolveFillings, type GraphicTier } from "@/lib/flow";
 import { resolveVariantProfile, type VariantProfile } from "@/lib/variant";
-import { EXCLUDED_PREFIXES } from "@/lib/library-data";
 import type { Carrier } from "@/lib/delivery";
+import { priceOrder, pricingCtx, shippingLabel, tierUpchargeCents } from "@/lib/order-pricing";
+import { carrierService, GUARANTEE_LABEL, GUARANTEE_TERMS } from "@/lib/order-rules";
 import { toolError, type ToolAnnotations } from "@/lib/mcp-http";
+import { LIBRARY_BY_CODE } from "@/lib/mcp-tools/library";
 import type { ToolDef } from "@/lib/order-tools";
 
 /**
  * `price_order` — quote a single-address order EXACTLY as
- * src/app/api/checkout/route.ts will charge it. Every number here is
- * recomputed from the hub's public plane the same way the route does it:
+ * src/app/api/checkout/route.ts will charge it. The money is added up by
+ * lib/order-pricing — the SAME function the route charges with and the
+ * builder's own quote shows — over the same hub reads:
  *
- *   unit        = price.unitPriceCents + tierCents + filling.priceCents
- *   tierCents   = 0 on a flat variant; else Classic default 0, any other
- *                 library / hub design graphicLibraryUpchargeCents, a custom
- *                 design graphicCustomUpchargeCents
- *   add-ons     = separate lines, addon.priceCents × the qty of every piñata
- *                 carrying that add-on (aggregated per add-on id)
- *   shipping    = (usps ? pricing.uspsShipPerUnitCents : price.shipPerUnitCents)
- *                 × total piñatas (one address = one shipping line)
+ *   prices      = the hub price with the storefront profile's all-in price
+ *                 laid over it (priceForVariant: the $50 flat profile's
+ *                 unit and its free FedEx)
+ *   unit        = base + graphic tier (0 on a flat profile) + filling delta
+ *   add-ons     = separate lines, aggregated per add-on id
+ *   shipping    = the carrier's per-piñata rate × total piñatas, plus the
+ *                 paid guaranteed date per guaranteed piñata (FedEx, on
+ *                 profiles that price one) — one address = one shipping line
  *
  * The price call is the route's FIXED query (qty=1, filled, standard,
  * custom, individual, standard) regardless of the cart, fetched fresh past
@@ -72,7 +75,6 @@ type GraphicType = (typeof GRAPHIC_TYPES)[number];
 
 // Mirrors of the route's shape guards for sellable art.
 const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
-const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
 const BLOB_RE = /^https:\/\/yrfds6n4iwscziqm\.public\.blob\.vercel-storage\.com\//;
 const SHA256_RE = /^[a-f0-9]{64}$/;
 
@@ -102,30 +104,12 @@ const PRICING_UNAVAILABLE =
 const CATALOG_UNAVAILABLE =
   "The catalog is unavailable right now — try again in a minute. Nothing was ordered.";
 
-/* ---- the Shopify design library (public/graphics.json) ------------------ */
-
-type ManifestGraphic = { design: string; title: string; art: string | null };
-
-// Sellable library designs by code: must have cdn.shopify.com print art (the
-// route's ART_RE) and not be a client one-off the public library hides.
-const LIBRARY: Map<string, ManifestGraphic> = (() => {
-  const out = new Map<string, ManifestGraphic>();
-  const list = (graphicsFile as unknown as { graphics?: ManifestGraphic[] }).graphics ?? [];
-  for (const g of list) {
-    if (!g || typeof g.design !== "string" || typeof g.art !== "string") continue;
-    if (!ART_RE.test(g.art)) continue;
-    if (EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, ""))) continue;
-    out.set(g.design.toUpperCase(), g);
-  }
-  return out;
-})();
-
 /* ---- hub reads on the money path ---------------------------------------- */
 
 /** GET a hub public endpoint exactly like the checkout route's hubGet: no
  *  cache layer (no-store + a unique query param past the hub's edge cache)
  *  and a hard deadline. null on ANY failure — the caller refuses. */
-async function hubGet<T>(url: string): Promise<T | null> {
+export async function hubGet<T>(url: string): Promise<T | null> {
   try {
     const fresh = `${url}${url.includes("?") ? "&" : "?"}fresh=${Date.now()}`;
     const res = await fetch(fresh, {
@@ -143,6 +127,15 @@ async function hubGet<T>(url: string): Promise<T | null> {
   }
 }
 
+/** The live catalog scoped to MCP_HOST, fresh like the route's, with only
+ *  the body styles the builder offers (lib/hub offeredStyles — checkout
+ *  refuses the rest). null on any failure. */
+export async function moneyCatalog(): Promise<HubCatalog | null> {
+  const catalog = await hubGet<HubCatalog>(catalogUrl({ host: MCP_HOST }));
+  if (!catalog || !Array.isArray(catalog.bodyStyles)) return null;
+  return { ...catalog, bodyStyles: offeredStyles(catalog.bodyStyles) };
+}
+
 /* ---- input parsing (no network) ----------------------------------------- */
 
 type GraphicInput =
@@ -156,6 +149,8 @@ type LineInput = {
   filling: string;
   graphic: GraphicInput;
   add_ons: string[];
+  /** The paid guaranteed delivery date (FedEx, on profiles that price one). */
+  guaranteed: boolean;
 };
 
 // Every problem is tagged with where it sits (ORDER = order-level, else the
@@ -241,7 +236,7 @@ function parseLine(raw: unknown, at: number, problems: Problem[]): LineInput | n
     return null;
   }
   const before = problems.length;
-  unknownKeys(raw, ["style_id", "qty", "filling", "graphic", "add_ons"], at, label, problems);
+  unknownKeys(raw, ["style_id", "qty", "filling", "graphic", "add_ons", "guaranteed"], at, label, problems);
 
   const style_id = typeof raw.style_id === "string" ? raw.style_id.trim() : "";
   if (!style_id) {
@@ -278,8 +273,12 @@ function parseLine(raw: unknown, at: number, problems: Problem[]): LineInput | n
     }
   }
 
+  if (raw.guaranteed !== undefined && typeof raw.guaranteed !== "boolean") {
+    problems.push({ at, text: `${label}: guaranteed must be true or false (the paid ${GUARANTEE_LABEL.toLowerCase()}, FedEx only).` });
+  }
+
   if (problems.length > before || !graphic) return null;
-  return { style_id, qty: qty as number, filling, graphic, add_ons };
+  return { style_id, qty: qty as number, filling, graphic, add_ons, guaranteed: raw.guaranteed === true };
 }
 
 function parseInput(args: Record<string, unknown>): ParsedInput {
@@ -293,7 +292,7 @@ function parseInput(args: Record<string, unknown>): ParsedInput {
       at: ORDER,
       text:
         carrierRaw === undefined
-          ? `carrier is required: "fedex" (2-Day, guaranteed arrival date) or "usps" (First Class, arrives in a window).`
+          ? `carrier is required: "fedex" (2-Day, aimed at the chosen date) or "usps" (First Class, arrives in a window).`
           : `carrier must be "fedex" or "usps" (got ${show(carrierRaw)}).`,
     });
   }
@@ -368,7 +367,8 @@ function resolveGraphic(
   ctx: Ctx,
 ): { ok: true; pick: GraphicPick } | { ok: false; message: string } {
   const { pricing, variant, tiered } = ctx;
-  const libraryCents = tiered ? pricing.graphicLibraryUpchargeCents : 0;
+  const tierCents = (tier: GraphicTier) => tierUpchargeCents(tier, pricing, tiered);
+  const libraryCents = tierCents("library");
 
   if (g.type === "custom") {
     if (!variant.allowCustom) {
@@ -381,7 +381,7 @@ function resolveGraphic(
         design: "custom",
         label: "Your custom design",
         tier: "custom",
-        cents: tiered ? pricing.graphicCustomUpchargeCents : 0,
+        cents: tierCents("custom"),
       },
     };
   }
@@ -397,11 +397,11 @@ function resolveGraphic(
     }
     return {
       ok: true,
-      pick: { type: "classic", design, label: CLASSIC_TITLE, tier: "classic", cents: 0 },
+      pick: { type: "classic", design, label: CLASSIC_TITLE, tier: "classic", cents: tierCents("classic") },
     };
   }
 
-  const lib = LIBRARY.get(design);
+  const lib = LIBRARY_BY_CODE.get(design);
   if (lib) {
     if (variant.library === "none") {
       return { ok: false, message: `design ${design} isn't offered on this store — pick one of its graphics.` };
@@ -448,16 +448,17 @@ function refuse(problems: Problem[]) {
 
 /* ---- the quote ---------------------------------------------------------- */
 
-type PricedLine = {
+type ResolvedLine = {
   style: HubBodyStyle;
   qty: number;
   filling: HubFilling;
   fillingCents: number;
   graphic: GraphicPick;
   addons: HubAddon[];
+  guaranteed: boolean;
 };
 
-function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice) {
+function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice | null) {
   const pricing = resolveBuilderPricing(catalog.pricing);
   // resolveBuilderPricing falls back on a non-finite or negative value but
   // lets a fractional one through — refuse rather than quote cents that
@@ -471,8 +472,17 @@ function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice) {
     return toolError(PRICING_UNAVAILABLE);
   }
   const variant = resolveVariantProfile(catalog.variant);
-  const tiered = variant.pricing === "tiered";
-  const uspsOffered = variant.carriers.includes("usps");
+  // The storefront's prices exactly as checkout sells them: the hub price
+  // with the profile's all-in price laid over it. Never quote at zero, and —
+  // stricter than the route — integer cents only (see cents()).
+  const money = pricingCtx(price, variant, pricing);
+  const unit = money.unitPrice;
+  if (!unit || !Number.isInteger(unit.unitPriceCents) || !Number.isInteger(unit.shipPerUnitCents)) {
+    return toolError(PRICING_UNAVAILABLE);
+  }
+  const tiered = money.tiered;
+  const uspsOffered = money.uspsOffered;
+  const guaranteeCents = variant.guaranteeCents;
   const { carrier } = input;
   // Shape problems already found ride along with the catalog problems below.
   const problems: Problem[] = [...input.problems];
@@ -480,6 +490,21 @@ function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice) {
   if (carrier === "usps" && !uspsOffered) {
     problems.push({ at: ORDER, text: 'USPS isn\'t offered on this store — price the order with carrier "fedex".' });
   }
+  // The paid guaranteed date: only where the profile prices it, FedEx only.
+  input.lines.forEach((l, i) => {
+    if (!l?.guaranteed) return;
+    if (guaranteeCents === null) {
+      problems.push({
+        at: i,
+        text: `${lineLabel(i)}: a paid ${GUARANTEE_LABEL.toLowerCase()} isn't offered on this store (its FedEx dates are already guaranteed) — leave guaranteed out.`,
+      });
+    } else if (carrier === "usps") {
+      problems.push({
+        at: i,
+        text: `${lineLabel(i)}: the ${GUARANTEE_LABEL.toLowerCase()} is FedEx only — ship with carrier "fedex" or leave guaranteed out.`,
+      });
+    }
+  });
 
   const fillings = resolveFillings(catalog.fillings);
   const addons = catalog.addons ?? [];
@@ -489,18 +514,21 @@ function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice) {
     tiered,
     hubGraphicByDesign: new Map(resolveHubGraphics(catalog.hubGraphics).map((g) => [g.design, g])),
   };
-  const inStockIds = catalog.bodyStyles.filter((s) => s.inStock).map((s) => s.id);
+  // Only the styles the builder offers (moneyCatalog applied lib/hub
+  // offeredStyles): checkout refuses the rest, whatever the hub lists.
+  const styles = catalog.bodyStyles;
+  const inStockIds = styles.filter((s) => s.inStock).map((s) => s.id);
   const fillingList = fillings.map((f) => `${f.label} (${f.id})`).join(", ");
   const addonList = addons.map((a) => `${a.label} (${a.id})`).join(", ");
 
-  const priced: PricedLine[] = [];
+  const resolved: ResolvedLine[] = [];
 
   input.lines.forEach((l, i) => {
     if (!l) return; // its shape problems are already recorded
     const at = lineLabel(i);
     const found: string[] = [];
 
-    const style = findStyle(catalog.bodyStyles, l.style_id);
+    const style = findStyle(styles, l.style_id);
     if (!style) {
       found.push(`${at}: body style "${show(l.style_id)}" isn't available — choose one of: ${inStockIds.join(", ")}.`);
     } else if (!style.inStock) {
@@ -545,60 +573,65 @@ function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice) {
       problems.push(...found.map((text) => ({ at: i, text })));
       return;
     }
-    priced.push({ style, qty: l.qty, filling, fillingCents, graphic: graphic.pick, addons: lineAddons });
+    resolved.push({
+      style,
+      qty: l.qty,
+      filling,
+      fillingCents,
+      graphic: graphic.pick,
+      addons: lineAddons,
+      guaranteed: l.guaranteed,
+    });
   });
 
   if (problems.length || !carrier) return refuse(problems);
 
-  // Shipping rate by the ORDER's carrier: FedEx from the price API, USPS
-  // from the catalog's pricing block; charged per piñata, one address.
-  const shipRate = carrier === "usps" ? pricing.uspsShipPerUnitCents : price.shipPerUnitCents;
-  const units = priced.reduce((s, l) => s + l.qty, 0);
-  const shippingCents = shipRate * units;
-
-  const lines = priced.map((l, i) => {
-    const unit = price.unitPriceCents + l.graphic.cents + l.fillingCents;
-    return {
-      line: i + 1,
-      style_id: l.style.id,
-      style_name: l.style.name,
-      graphic: {
-        type: l.graphic.type,
-        design: l.graphic.design,
-        label: l.graphic.label,
-        tier: l.graphic.tier,
-      },
-      filling: { id: l.filling.id, label: l.filling.label },
-      add_ons: l.addons.map((a) => a.id),
+  // The money: lib/order-pricing, the function checkout charges with.
+  const priced = priceOrder(
+    resolved.map((l) => ({
       qty: l.qty,
-      unit_cents: unit,
-      line_cents: unit * l.qty,
-      breakdown: {
-        base: price.unitPriceCents,
-        graphic_upcharge: l.graphic.cents,
-        filling: l.fillingCents,
-      },
-    };
-  });
+      tierCents: l.graphic.cents,
+      fillingCents: l.fillingCents,
+      addons: l.addons,
+      guaranteed: l.guaranteed,
+    })),
+    carrier,
+    money,
+  );
+  if (!priced) return toolError(PRICING_UNAVAILABLE);
 
-  // Add-ons aggregate into one line per add-on id across the order, exactly
-  // like the draft order's add-on product lines.
-  const addonTotals = new Map<string, { addon: HubAddon; qty: number }>();
-  for (const l of priced) {
-    for (const a of l.addons) {
-      addonTotals.set(a.id, { addon: a, qty: (addonTotals.get(a.id)?.qty ?? 0) + l.qty });
-    }
-  }
-  const add_on_lines = [...addonTotals.values()].map(({ addon, qty }) => ({
+  const lines = resolved.map((l, i) => ({
+    line: i + 1,
+    style_id: l.style.id,
+    style_name: l.style.name,
+    graphic: {
+      type: l.graphic.type,
+      design: l.graphic.design,
+      label: l.graphic.label,
+      tier: l.graphic.tier,
+    },
+    filling: { id: l.filling.id, label: l.filling.label },
+    add_ons: l.addons.map((a) => a.id),
+    qty: l.qty,
+    guaranteed: l.guaranteed,
+    unit_cents: priced.lines[i].unitCents,
+    line_cents: priced.lines[i].lineCents,
+    breakdown: {
+      base: unit.unitPriceCents,
+      graphic_upcharge: l.graphic.cents,
+      filling: l.fillingCents,
+    },
+  }));
+
+  // Add-ons: one line per add-on id across the order, exactly like the
+  // draft order's add-on product lines.
+  const add_on_lines = priced.addonLines.map(({ addon, qty, cents }) => ({
     id: addon.id,
     label: addon.label,
     unit_cents: addon.priceCents,
     qty,
-    cents: addon.priceCents * qty,
+    cents,
   }));
-
-  const subtotal =
-    lines.reduce((s, l) => s + l.line_cents, 0) + add_on_lines.reduce((s, a) => s + a.cents, 0);
 
   return {
     carrier,
@@ -606,18 +639,29 @@ function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice) {
     add_on_lines,
     shipping: {
       carrier,
-      service:
-        carrier === "fedex"
-          ? "FedEx 2-Day — guaranteed arrival on the chosen date"
-          : "USPS First Class — arrives in a window around the chosen date",
-      per_unit_cents: shipRate,
-      units,
-      cents: shippingCents,
+      label: shippingLabel(carrier, priced.shippingCents),
+      service: carrierService(carrier, guaranteeCents !== null),
+      per_unit_cents: priced.shipPerUnitCents,
+      units: priced.units,
+      cents: priced.shippingCents,
     },
-    subtotal_cents: subtotal,
-    total_before_tax_cents: subtotal + shippingCents,
+    // The paid guaranteed dates — invoiced on the shipping line, shown as
+    // their own row the way the builder's order summary shows them.
+    ...(priced.guaranteedUnits > 0
+      ? {
+          guarantee: {
+            label: GUARANTEE_LABEL,
+            per_pinata_cents: guaranteeCents,
+            units: priced.guaranteedUnits,
+            cents: priced.guaranteeCents,
+            terms: GUARANTEE_TERMS,
+          },
+        }
+      : {}),
+    subtotal_cents: priced.merchandiseCents,
+    total_before_tax_cents: priced.totalCents,
     currency: "USD",
-    as_of: price.asOf ?? catalog.asOf,
+    as_of: unit.asOf ?? catalog.asOf,
     note: "Sales tax and any discount code are applied by Shopify at checkout and are not included here. This is a quote — nothing has been ordered or reserved.",
   };
 }
@@ -627,7 +671,7 @@ function quote(input: ParsedInput, catalog: HubCatalog, price: HubPrice) {
 export const priceTools: Record<string, ToolDef> = {
   price_order: {
     description:
-      "Price a single-address order exactly as checkout will charge it, before tax — a quote only; nothing is ordered or reserved. Give the carrier (fedex = 2-Day with a guaranteed arrival date; usps = First Class, arrives in a window) and 1–20 lines, each with a body style id from get_catalog (must be in stock), qty 1–25, a filling (id or label from get_catalog), a graphic — {\"type\":\"classic\"} for the included Classic Piñatagrams design, {\"type\":\"library\",\"design\":\"HBD06\"} for a design-library code, or {\"type\":\"custom\"} for custom artwork — and optional add-on ids (up to 10 per line). Returns each line's unit and line total with a base / graphic upcharge / filling breakdown, add-on lines, shipping by carrier, the subtotal and the total before tax, all in integer cents USD. Sales tax and any discount code are applied by Shopify at checkout and are not included. Refusals name every problem at once and list the allowed values, and a filling or add-on whose price is negative or not whole cents is refused rather than quoted. WHAT CAN BE BOUGHT HERE: create_checkout accepts at most 5 lines and 10 piñatas per line. Custom artwork is NOT orderable through this connector — quote it only as a reference and send the customer to https://builder.pinatagrams.com to design and order it. A quote above 5 lines or 10 per line is reference-only too: order it at https://builder.pinatagrams.com, or use quote_bulk for 15 or more piñatas. For an order that fits, pass this quote's normalized style_id, filling.label and add_ons values to create_checkout — never the caller's raw strings — because checkout matches them exactly. Nothing is ordered or reserved.",
+      "Price a single-address order exactly as checkout will charge it, before tax — a quote only; nothing is ordered or reserved. Give the carrier (fedex = 2-Day aimed at the chosen date; usps = First Class, arrives in a window) and 1–20 lines, each with a body style id from get_catalog (must be in stock), qty 1–25, a filling (id or label from get_catalog), a graphic — {\"type\":\"classic\"} for the included Classic Piñatagrams design, {\"type\":\"library\",\"design\":\"HBD06\"} for a design-library code, or {\"type\":\"custom\"} for custom artwork — optional add-on ids (up to 10 per line), and optional guaranteed:true for the paid guaranteed delivery date (FedEx only, and only where get_delivery_options reports one on offer; it is refused elsewhere). Returns each line's unit and line total with a base / graphic upcharge / filling breakdown, add-on lines, shipping by carrier (with its customer-facing label, e.g. \"Free FedEx delivery\"), a guarantee row when any line is guaranteed, the subtotal and the total before tax, all in integer cents USD. Sales tax and any discount code are applied by Shopify at checkout and are not included. Refusals name every problem at once and list the allowed values, and a filling or add-on whose price is negative or not whole cents is refused rather than quoted. WHAT CAN BE BOUGHT HERE: create_checkout accepts at most 5 lines and 10 piñatas per line. Custom artwork is NOT orderable through this connector — quote it only as a reference and send the customer to https://builder.pinatagrams.com to design and order it. A quote above 5 lines or 10 per line is reference-only too: order it at https://builder.pinatagrams.com, or use quote_bulk for 15 or more piñatas. For an order that fits, pass this quote's normalized style_id, filling.label and add_ons values to create_checkout — never the caller's raw strings — because checkout matches them exactly. Nothing is ordered or reserved.",
     inputSchema: {
       type: "object",
       required: ["carrier", "lines"],
@@ -636,7 +680,7 @@ export const priceTools: Record<string, ToolDef> = {
           type: "string",
           enum: CARRIERS,
           description:
-            "How the whole order ships: fedex (2-Day, guaranteed arrival date) or usps (First Class, arrives in a window around the chosen date). One carrier per order.",
+            "How the whole order ships: fedex (2-Day, aimed at the chosen date) or usps (First Class, arrives in a window around the chosen date). One carrier per order.",
         },
         lines: {
           type: "array",
@@ -684,6 +728,10 @@ export const priceTools: Record<string, ToolDef> = {
                 maxItems: MAX_ADDONS,
                 description: `Optional add-on ids from get_catalog, e.g. ["double-candy"] — up to ${MAX_ADDONS} per line. Some fillings allow no add-ons.`,
               },
+              guaranteed: {
+                type: "boolean",
+                description: `Optional: true adds the paid ${GUARANTEE_LABEL.toLowerCase()} to every piñata on this line — FedEx only, and only where get_delivery_options reports it on offer. ${GUARANTEE_TERMS}`,
+              },
             },
             additionalProperties: false,
           },
@@ -701,24 +749,12 @@ export const priceTools: Record<string, ToolDef> = {
       // Both hub reads in parallel, fresh, exactly like checkout's pre-flight —
       // the catalog scoped to MCP_HOST, as the route scopes it to its own Host.
       const [catalog, price] = await Promise.all([
-        hubGet<HubCatalog>(catalogUrl({ host: MCP_HOST })),
+        moneyCatalog(),
         hubGet<HubPrice>(priceUrl(CHECKOUT_PRICE_QUERY)),
       ]);
-      if (!catalog || !Array.isArray(catalog.bodyStyles)) return toolError(CATALOG_UNAVAILABLE);
-      // Never quote at zero — a misconfigured price table fails loudly here
-      // just as checkout refuses to sell at it.
-      if (
-        !price ||
-        !Number.isFinite(price.unitPriceCents) ||
-        price.unitPriceCents <= 0 ||
-        !Number.isFinite(price.shipPerUnitCents) ||
-        price.shipPerUnitCents < 0 ||
-        // Stricter than the route: integer cents only (see cents()).
-        !Number.isInteger(price.unitPriceCents) ||
-        !Number.isInteger(price.shipPerUnitCents)
-      ) {
-        return toolError(PRICING_UNAVAILABLE);
-      }
+      if (!catalog) return toolError(CATALOG_UNAVAILABLE);
+      // A missing or unsellable price (zero, fractional) is refused inside
+      // quote(), once the storefront's profile has been laid over it.
       return quote(parsed, catalog, price);
     },
   },

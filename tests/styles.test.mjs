@@ -189,15 +189,24 @@ const source = (path) => {
 test("source guard: code that fetches the hub's catalog itself filters the styles too", () => {
   // Anything outside lib/hub that fetches the catalog (by either spelling of
   // its address) AND looks at its styles. Today: checkout — the money path
-  // fetches the live catalog itself — and the first journey's style
-  // switcher. A new one has to be added here, deliberately.
+  // fetches the live catalog itself — the first journey's style switcher,
+  // and the ordering MCP's money path (price_order and create_checkout read
+  // it through price.ts moneyCatalog). A new one has to be added here,
+  // deliberately. (Tests and their fixtures stub the address; not readers.)
   const direct = sources
     .filter(({ path }) => path !== "lib/hub.ts")
+    .filter(({ path }) => !/\.test\.tsx?$|\/__fixtures__\//.test(path))
     .filter(({ text }) => /catalogUrl\(|api\/public\/catalog/.test(text))
     .filter(({ text }) => /\bbodyStyles\b/.test(text))
     .map((f) => f.path)
     .sort();
-  assert.deepEqual(direct, ["app/api/checkout/route.ts", "app/design/design-flow.tsx"]);
+  assert.deepEqual(direct, ["app/api/checkout/route.ts", "app/design/design-flow.tsx", "lib/mcp-tools/price.ts"]);
+
+  // The MCP's one fetch hands back the offered styles only.
+  assert.match(
+    source("lib/mcp-tools/price.ts"),
+    /return \{ \.\.\.catalog, bodyStyles: offeredStyles\(catalog\.bodyStyles\) \};/,
+  );
 
   const checkout = source("app/api/checkout/route.ts");
   // The table every line is validated against is built from the offered styles…
@@ -281,11 +290,17 @@ test("source guard: every place a store design is shown, and checkout, use that 
   const at = checkout.indexOf("if (!isOfferedDesign(design))");
   assert.ok(at !== -1, "checkout no longer refuses a store listing the library leaves out");
   assert.ok(checkout.slice(at, at + 200).includes('code: "graphic_unavailable"'));
-  // Whatever loads the store snapshot — today those three — applies the rule.
+  // Whatever loads the store snapshot — today those three, plus the ordering
+  // MCP's one reader (lib/mcp-tools/library: list_designs, open_designer,
+  // price_order and create_checkout all read through it) — applies the rule.
   const readers = sources.filter(({ text }) => /["'`][^"'`]*graphics\.json["'`]/.test(text));
   assert.deepEqual(
     readers.map((f) => f.path).sort(),
-    ["app/design/design-flow.tsx", "app/design/graphic-library.tsx", "v2/lib/catalog-server.ts"],
+    ["app/design/design-flow.tsx", "app/design/graphic-library.tsx", "lib/mcp-tools/library.ts", "v2/lib/catalog-server.ts"],
+  );
+  assert.match(
+    source("lib/mcp-tools/library.ts"),
+    /\(g\) => !!g\?\.design && !!g\.art && isOfferedDesign\(g\.design\)/,
   );
   for (const { path, text } of readers) {
     assert.ok(text.includes("isOfferedDesign("), `${path} reads the store snapshot without the rule`);

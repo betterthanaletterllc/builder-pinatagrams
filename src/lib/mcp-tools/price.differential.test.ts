@@ -1,9 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/checkout/route";
+import { GUARANTEE_LABEL, GUARANTEE_TERMS } from "@/lib/order-rules";
 import { MCP_HOST, priceTools } from "./price";
+import { MANIFEST } from "./library";
 import catalogFixture from "./__fixtures__/hub-catalog.json";
 import priceFixture from "./__fixtures__/hub-price.json";
-import graphicsFile from "../../../public/graphics.json";
 
 /**
  * DIFFERENTIAL REVIEW SPEC (adversarial money-math review, 2026-10-15).
@@ -51,9 +52,7 @@ const CUSTOM = catalogFixture.pricing.graphicCustomUpchargeCents; // 500
 const USPS = catalogFixture.pricing.uspsShipPerUnitCents; // 675
 const DC = catalogFixture.addons[0].priceCents; // 499
 
-const LIBRARY = new Map(
-  (graphicsFile as { graphics: { design: string; title: string; art: string | null }[] }).graphics.map((g) => [g.design, g]),
-);
+const LIBRARY = new Map(MANIFEST.graphics.map((g) => [g.design, g]));
 
 let served: Json = structuredClone(catalogFixture) as unknown as Json;
 const servedPrice: Json = structuredClone(priceFixture) as unknown as Json;
@@ -104,7 +103,7 @@ afterAll(() => {
 /* ---- one selection → both request shapes -------------------------------- */
 
 type Graphic = "classic" | "custom" | { lib: string } | { hub: string } | { shopifyRaw: { design: string; art: string } };
-type Sel = { style: string; qty: number; filling: string; graphic: Graphic; addons?: string[] };
+type Sel = { style: string; qty: number; filling: string; graphic: Graphic; addons?: string[]; guaranteed?: boolean };
 
 function cartGraphic(g: Graphic): Json {
   if (g === "classic") {
@@ -143,6 +142,7 @@ function cartLines(sels: Sel[], carrier: "fedex" | "usps"): Json[] {
     ...(s.addons ? { addons: s.addons } : {}),
     deliveryDate: carrier === "usps" ? USPS_DATE : FEDEX_DATE,
     carrier,
+    ...(s.guaranteed ? { guaranteed: true } : {}),
     address: AUSTIN,
     qty: s.qty,
   }));
@@ -156,6 +156,7 @@ function priceArgs(sels: Sel[], carrier: string): Json {
       filling: s.filling,
       graphic: priceGraphic(s.graphic),
       ...(s.addons ? { add_ons: s.addons } : {}),
+      ...(s.guaranteed ? { guaranteed: true } : {}),
     })),
   };
 }
@@ -203,7 +204,9 @@ function priceNumbers(q: Json): Numbers {
     units: lines.map((l) => l.unit_cents as number),
     qty: lines.map((l) => l.qty as number),
     addons,
-    shipping: (q.shipping as Json).cents as number,
+    // Shopify's one shipping line carries the carrier's rate AND the paid
+    // guaranteed dates; the quote shows them as two rows.
+    shipping: ((q.shipping as Json).cents as number) + (((q.guarantee as Json | undefined)?.cents as number | undefined) ?? 0),
     merchandise: q.subtotal_cents as number,
     total: q.total_before_tax_cents as number,
   };
@@ -362,6 +365,23 @@ describe("price_order ≡ checkout (dry-run), cents for cents", () => {
     resetCatalog();
   });
 
+  it("a design the builder doesn't offer (BSG01, with cdn art) is refused on both sides — the storefront's isOfferedDesign rule", async () => {
+    const sel: Sel = { ...ok0, graphic: { shopifyRaw: { design: "BSG01", art: CLASSIC_ART } } };
+    const { route: r, price: p } = await bothRefuse([sel], "fedex");
+    expect(r).toMatch(/no longer available/);
+    expect(p).toMatch(/no design has the code "BSG01"/);
+  });
+
+  it("styles the builder doesn't offer (checkered, any Chonky) are refused on both sides, whatever the hub lists", async () => {
+    patched((cat) => {
+      const base = cat.bodyStyles[0];
+      cat.bodyStyles.push({ ...base, id: "checkered", name: "Checkered" }, { ...base, id: "chonky", name: "Chonky Donkey" });
+    });
+    await bothRefuse([{ ...ok0, style: "checkered" }], "fedex");
+    await bothRefuse([{ ...ok0, style: "chonky" }], "fedex");
+    resetCatalog();
+  });
+
   it("mixed carriers: the route refuses; price_order's one order-level carrier cannot express a mix", async () => {
     const lines = cartLines(
       [
@@ -387,6 +407,70 @@ describe("price_order ≡ checkout (dry-run), cents for cents", () => {
     expect(routeCatalog.searchParams.get("host")).toBe(MCP_HOST);
     expect(priceCatalog.searchParams.get("host")).toBe(MCP_HOST);
     expect(priceCatalog.origin + priceCatalog.pathname).toBe(routeCatalog.origin + routeCatalog.pathname);
+  });
+});
+
+/* ---- builder's live $50 flat profile -------------------------------------- */
+
+describe("price_order ≡ checkout on builder's $50 flat profile (flat-50-freeship)", () => {
+  // builder.pinatagrams.com's profile as the hub served it on 2026-11-17:
+  // $50 a piñata all-in, free FedEx, FedEx only, a $5 paid guaranteed date.
+  const FLAT50 = {
+    name: "flat-50-freeship",
+    pricing: "flat",
+    carriers: ["fedex"],
+    library: "all",
+    landingLines: null,
+    resolvedVia: "host",
+    allowCustom: true,
+    showLanding: true,
+    flatPrice: { unitCents: 5000, shipCents: 0 },
+    guaranteeCents: 500,
+  };
+  const flat50 = () =>
+    patched((cat) => {
+      (cat as unknown as Json).variant = { ...FLAT50 };
+    });
+  const classic: Sel = { style: "standard", qty: 1, filling: "Candy", graphic: "classic" };
+
+  it("$50 a piñata whatever the design, free FedEx — cents for cents on both sides", async () => {
+    flat50();
+    const n = await agree(
+      [
+        classic,
+        { style: "googly", qty: 2, filling: "Candy", graphic: { lib: "HBD06" } },
+        { style: "pink-uni", qty: 1, filling: "Candy", graphic: "custom", addons: ["double-candy"] },
+      ],
+      "fedex",
+    );
+    expect(n.units).toEqual([5000, 5000, 5000]);
+    expect(n.shipping).toBe(0);
+    expect(n.total).toBe(5000 * 4 + DC);
+    // …and worded the way the builder's order summary words it.
+    const p = await price(priceArgs([classic], "fedex"));
+    expect((p.shipping as Json).label).toBe("Free FedEx delivery");
+    expect(p.total_before_tax_cents).toBe(5000);
+  });
+
+  it("the paid guaranteed date: $5 per guaranteed piñata on the shipping line, on both sides", async () => {
+    flat50();
+    const n = await agree([{ ...classic, qty: 2, guaranteed: true }, { ...classic, style: "googly" }], "fedex");
+    expect(n.shipping).toBe(500 * 2);
+    expect(n.total).toBe(5000 * 3 + 500 * 2);
+
+    const only: Sel[] = [{ ...classic, qty: 2, guaranteed: true }];
+    const r = await route(cartLines(only, "fedex"));
+    const input = (r.json.draftOrders as Json[])[0].input as Json;
+    expect((input.shippingLine as Json).title).toBe("FedEx delivery — guaranteed date");
+    const p = await price(priceArgs(only, "fedex"));
+    expect(p.guarantee).toEqual({ label: GUARANTEE_LABEL, per_pinata_cents: 500, units: 2, cents: 1000, terms: GUARANTEE_TERMS });
+    expect((p.lines as Json[])[0].guaranteed).toBe(true);
+    expect((p.shipping as Json).cents).toBe(0);
+  });
+
+  it("FedEx only: USPS is refused on both sides", async () => {
+    flat50();
+    await bothRefuse([classic], "usps");
   });
 });
 
@@ -445,13 +529,23 @@ describe("asymmetries between price_order and checkout", () => {
     }
   });
 
-  it("design code NOT in graphics.json but with cdn art: checkout sells at library tier, price_order refuses", async () => {
-    const sel: Sel = { ...ok, graphic: { shopifyRaw: { design: "BSG01", art: CLASSIC_ART } } };
+  it("design code NOT in graphics.json but with cdn art (and offered): checkout sells at library tier, price_order refuses", async () => {
+    // (BSG01, the old example here, is now refused by both: see parity.)
+    const sel: Sel = { ...ok, graphic: { shopifyRaw: { design: "ZZZ01", art: CLASSIC_ART } } };
     const r = await route(cartLines([sel], "fedex"));
     expect(r.status).toBe(200);
     expect(routeNumbers(r.json).units).toEqual([BASE + LIB]);
     const p = await price(priceArgs([sel], "fedex"));
-    expect(refusalText(p)).toMatch(/no design has the code "BSG01"/);
+    expect(refusalText(p)).toMatch(/no design has the code "ZZZ01"/);
+  });
+
+  it("guaranteed on a store without a paid guarantee: checkout ignores the flag (charges nothing), price_order refuses rather than quote it", async () => {
+    const sel: Sel = { ...ok, guaranteed: true };
+    const r = await route(cartLines([sel], "fedex"));
+    expect(r.status).toBe(200);
+    expect(routeNumbers(r.json).shipping).toBe(FEDEX);
+    const p = await price(priceArgs([sel], "fedex"));
+    expect(refusalText(p)).toMatch(/isn't offered on this store/);
   });
 
   it("custom-typed line claiming the Classic code: checkout and price_order both charge the custom tier", async () => {

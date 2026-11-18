@@ -7,13 +7,19 @@ import {
   BUILDER_URL,
   DESIGN_LIMIT,
   DESIGNER_RESOURCE_URI,
+  DESIGNER_HTML_PATH,
+  DESIGNER_RULES,
   designerResources,
   designerTools,
   MCP_APP_MIME,
   RESOURCE_DOMAINS,
+  RULES_TOKEN,
   upcomingHolidays,
+  withRules,
   type DesignerData,
 } from "./designer";
+import { readFileSync } from "node:fs";
+import { GUARANTEE_LABEL, GUARANTEE_TERMS, MESSAGE_RULES } from "@/lib/order-rules";
 import { MCP_HOST } from "./price";
 
 /**
@@ -101,6 +107,7 @@ describe("open_designer — registry shape", () => {
         "design",
         "email",
         "filling",
+        "guaranteed",
         "message",
         "occasion",
         "recipient_name",
@@ -226,8 +233,15 @@ describe("open_designer — the app's data", () => {
 });
 
 describe("open_designer — prefill normalization", () => {
-  const earliestFedex = minDeliveryDate(CFG, "fedex");
-  const earliestUsps = minDeliveryDate(CFG, "usps");
+  // Read once the clock is pinned (the file's beforeAll runs first), never at
+  // collection time: a date computed then drifts with the real calendar and
+  // this suite starts failing on its own a month later.
+  let earliestFedex = "";
+  let earliestUsps = "";
+  beforeAll(() => {
+    earliestFedex = minDeliveryDate(CFG, "fedex");
+    earliestUsps = minDeliveryDate(CFG, "usps");
+  });
 
   it("keeps valid values, normalized to the catalog's own ids and codes", async () => {
     const { structuredContent: sc } = await open({
@@ -345,6 +359,54 @@ describe("open_designer — prefill normalization", () => {
   });
 });
 
+describe("open_designer — builder parity (message lines, guarantee, store profile)", () => {
+  const NL = String.fromCharCode(10);
+  /** builder.pinatagrams.com's live profile on 2026-11-17: $50 all-in, free FedEx, $5 guarantee. */
+  const flat50 = () => {
+    const c = catalogCopy();
+    c.variant = { ...c.variant, name: "flat-50-freeship", pricing: "flat", carriers: ["fedex"], flatPrice: { unitCents: 5000, shipCents: 0 }, guaranteeCents: 500 };
+    return c;
+  };
+
+  it("a message over the card's 8 lines is dropped, not clipped", async () => {
+    const nine = Array.from({ length: MESSAGE_RULES.maxLines + 1 }, (_, i) => `line ${i + 1}`).join(NL);
+    const { structuredContent: sc } = await open({ message: nine });
+    expect(sc.prefill).toEqual({});
+    expect(sc.dropped).toEqual([{ field: "message", reason: `runs to 9 lines; the card prints at most 8 — join some lines` }]);
+    const eight = Array.from({ length: MESSAGE_RULES.maxLines }, (_, i) => `line ${i + 1}`).join(NL);
+    expect((await open({ message: eight })).structuredContent.prefill).toEqual({ message: eight });
+  });
+
+  it("guaranteed is kept only on a store that prices it, and only for FedEx", async () => {
+    const kept = await open({ guaranteed: true }, flat50());
+    expect(kept.structuredContent.prefill).toEqual({ guaranteed: true });
+    expect(kept.content[0].text).toMatch(new RegExp(`Prefilled: ${GUARANTEE_LABEL.toLowerCase()}`));
+
+    const usps = await open({ guaranteed: true, carrier: "usps" }, { ...flat50(), variant: { ...flat50().variant, carriers: ["fedex", "usps"] } });
+    expect(usps.structuredContent.prefill).toEqual({ carrier: "usps" });
+    expect(usps.structuredContent.dropped).toEqual([{ field: "guaranteed", reason: "the guaranteed delivery date is FedEx only" }]);
+
+    // The recorded catalog's profile has no paid guarantee.
+    const none = await open({ guaranteed: true });
+    expect(none.structuredContent.prefill).toEqual({});
+    expect(none.structuredContent.dropped[0]).toEqual({
+      field: "guaranteed",
+      reason: "this store has no paid guaranteed date (its FedEx dates are already guaranteed)",
+    });
+  });
+
+  it("the catalog it embeds is the store's: free FedEx and no upcharge on the flat profile, carriers and guarantee price", async () => {
+    const { structuredContent: sc } = await open({}, flat50());
+    expect(sc.catalog.shipping_per_unit_cents.fedex_2day).toBe(0);
+    expect(sc.catalog.graphic_upcharge_cents).toEqual({ library_design: 0, custom_art: 0 });
+    expect(sc.catalog.store).toEqual({ carriers: ["fedex"], pricing: "flat", all_in_pinata_cents: 5000, guaranteed_date_cents: 500 });
+    // The recorded (tiered, two-carrier) profile is reported as it is.
+    const plain = (await open()).structuredContent.catalog;
+    expect(plain.store).toEqual({ carriers: ["fedex", "usps"], pricing: "tiered", all_in_pinata_cents: null, guaranteed_date_cents: null });
+    expect(plain.graphic_upcharge_cents.library_design).toBe(200);
+  });
+});
+
 describe("open_designer — the gallery", () => {
   it("an occasion filters the gallery to its designs (Classic still first) and normalizes to the label", async () => {
     const { structuredContent: sc } = await open({ occasion: "birthday" });
@@ -412,7 +474,10 @@ describe("open_designer — the gallery", () => {
 });
 
 describe("open_designer — the model-facing summary", () => {
-  const earliestFedex = minDeliveryDate(CFG, "fedex");
+  let earliestFedex = "";
+  beforeAll(() => {
+    earliestFedex = minDeliveryDate(CFG, "fedex");
+  });
 
   it("names what was prefilled and what the designer still collects, briefly", async () => {
     const { content } = await open({
@@ -492,6 +557,23 @@ describe("designerResources — the ui:// HTML", () => {
     // Cached: the second read is the same string without touching fs again.
     const again = await designerResources.read(DESIGNER_RESOURCE_URI);
     expect(again![0].text).toBe(c.text);
+  });
+
+  it("serves the app with the builder's rules filled in, and the file itself spells none out", async () => {
+    const raw = readFileSync(DESIGNER_HTML_PATH, "utf8");
+    // The file carries the token, not the rules (no 300-character limit, no
+    // FedEx promise, no refund terms of its own).
+    expect(raw).toContain(RULES_TOKEN);
+    expect(raw).not.toMatch(/MSG_MAX = [0-9]|guarantees the day|50% refund/);
+    const [c] = (await designerResources.read(DESIGNER_RESOURCE_URI))!;
+    expect(c.text).not.toContain(RULES_TOKEN);
+    expect(c.text).toContain(`var RULES = ${JSON.stringify(DESIGNER_RULES)};`);
+    expect(DESIGNER_RULES.message).toEqual({ maxChars: MESSAGE_RULES.maxChars, maxLines: 8 });
+    expect(DESIGNER_RULES.guarantee.terms).toBe(GUARANTEE_TERMS);
+    // A file that lost its token is refused loudly, never served without rules.
+    expect(() => withRules("<html></html>")).toThrow(/rules token/);
+    // Script-safe: nothing in the rules can close the script it lands in.
+    expect(withRules(`<script>var RULES = ${RULES_TOKEN};</script>`).split("</script>")).toHaveLength(2);
   });
 
   it("any other uri is null (the shell turns that into -32002)", async () => {

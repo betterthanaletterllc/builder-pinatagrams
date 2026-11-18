@@ -13,10 +13,10 @@ import {
 } from "@/lib/hub";
 import {
   normalizeHost,
-  priceForVariant,
   resolveVariantProfile,
   variantUnresolved,
 } from "@/lib/variant";
+import { priceOrder, pricingCtx, tierUpchargeCents, type PricedLine } from "@/lib/order-pricing";
 import {
   addressKey,
   CLASSIC_GRAPHIC,
@@ -791,11 +791,11 @@ export async function POST(req: Request) {
         // graphic the same. (A tampered cart claiming the Classic code with
         // someone else's art dodges at most the ~$2 library tier — same
         // exposure class as spoofing the line title.)
-        tierCents: !tiered
-          ? 0
-          : design === CLASSIC_GRAPHIC.design
-            ? 0
-            : pricing.graphicLibraryUpchargeCents,
+        tierCents: tierUpchargeCents(
+          design === CLASSIC_GRAPHIC.design ? "classic" : "library",
+          pricing,
+          tiered,
+        ),
       };
     }
     if (g?.type === "hub") {
@@ -844,7 +844,7 @@ export async function POST(req: Request) {
         title: `Piñatagram — ${styleName}`,
         graphicAttr: "Your selected graphic",
         // Prices exactly like a Shopify library pick.
-        tierCents: tiered ? pricing.graphicLibraryUpchargeCents : 0,
+        tierCents: tierUpchargeCents("library", pricing, tiered),
       };
     }
     if (g?.type === "custom") {
@@ -887,7 +887,7 @@ export async function POST(req: Request) {
         designJson: BLOB_RE.test(sidecar) ? sidecar : "",
         title: `Custom Piñatagram — ${styleName}`,
         graphicAttr: "Your custom design",
-        tierCents: tiered ? pricing.graphicCustomUpchargeCents : 0,
+        tierCents: tierUpchargeCents("custom", pricing, tiered),
       };
     }
     return { ok: false, code: "graphic_missing", message: "pick or design a graphic." };
@@ -980,37 +980,35 @@ export async function POST(req: Request) {
   }
   if (problems.length) return lineFail(problems);
 
-  // Server-side price: single-destination B2C — per-unit product + shipping.
-  // Same no-stacked-cache rule as the catalog: this number becomes a charge.
-  // A storefront's all-in price (its hub profile) lays over the price book —
-  // the same override its pages displayed.
-  const price = priceForVariant(await priceP, variant);
+  // Server-side price: single-destination B2C — per-unit product + shipping,
+  // added up by lib/order-pricing: the ONE pricing function the builder's
+  // quote and the ordering MCP's price_order run too. Same no-stacked-cache
+  // rule as the catalog: this number becomes a charge. A storefront's all-in
+  // price (its hub profile) lays over the price book there — the same
+  // override its pages displayed.
+  const priceCtx = pricingCtx(await priceP, variant, pricing);
   // Never sell at zero — a misconfigured pricing table must fail loudly.
-  if (
-    !price ||
-    !Number.isFinite(price.unitPriceCents) ||
-    price.unitPriceCents <= 0 ||
-    !Number.isFinite(price.shipPerUnitCents) ||
-    price.shipPerUnitCents < 0
-  ) {
+  if (!priceCtx.unitPrice) {
     return NextResponse.json(
       { error: "Pricing is unavailable right now — try again shortly." },
       { status: 503 },
     );
   }
+  const dollars = (cents: number) => (cents / 100).toFixed(2);
   // ONE order shape, exactly like legacy storefront orders: piñata lines at
   // retail (+ the graphic tier's upcharge + the filling's price delta — both
   // are what the piñata IS, so they price into the line), each add-on as its
   // own aggregated product line (money + sales reporting), while WHICH piñata
   // gets it stays on that piñata line's _addons attribute (the packer's map).
-  const lineUnit = (l: CleanLine) =>
-    ((price.unitPriceCents + l.tierCents + l.fillingCents) / 100).toFixed(2);
-  // Shipping rate by the order's carrier: FedEx comes from the price API
-  // (builder.shipPerUnitCents), USPS from the catalog's pricing block.
-  const shipRateCents =
-    orderCarrier === "usps"
-      ? pricing.uspsShipPerUnitCents
-      : price.shipPerUnitCents;
+  // Shipping by the order's carrier: FedEx from the price API, USPS from the
+  // catalog's pricing block; paid guarantees ride the same shipping line.
+  const pricedLine = (l: CleanLine): PricedLine<HubAddon> => ({
+    qty: l.qty,
+    tierCents: l.tierCents,
+    fillingCents: l.fillingCents,
+    addons: l.addons,
+    guaranteed: l.guaranteed,
+  });
 
   // The revenue-attribution tag (search Shopify by tag = revenue per
   // variant). A host the registry didn't recognize is tagged LOUDLY as
@@ -1028,13 +1026,6 @@ export async function POST(req: Request) {
     variantTag = null;
     console.error(`checkout: malformed variant name ${JSON.stringify(variant.name)} — tag dropped.`);
   }
-  const addonTotals = (groupLines: CleanLine[]) => {
-    const units = new Map<string, { addon: HubAddon; qty: number }>();
-    for (const l of groupLines)
-      for (const a of l.addons)
-        units.set(a.id, { addon: a, qty: (units.get(a.id)?.qty ?? 0) + l.qty });
-    return [...units.values()];
-  };
 
   // One draft order per delivery address (ShipStation: one order = one label).
   const groups = new Map<string, CleanLine[]>();
@@ -1107,9 +1098,9 @@ export async function POST(req: Request) {
   // Dry-run payload only (no Shopify creds to resolve variants): plain
   // custom line items mirroring the real structure — piñata at retail plus
   // one line per add-on.
-  const customLine = (l: CleanLine) => ({
+  const customLine = (l: CleanLine, unitCents: number) => ({
     title: l.title,
-    originalUnitPrice: lineUnit(l),
+    originalUnitPrice: dollars(unitCents),
     quantity: l.qty,
     requiresShipping: true,
     customAttributes: lineAttributes(l),
@@ -1117,26 +1108,19 @@ export async function POST(req: Request) {
 
   const draftOrders = [...groups.entries()].map(([groupKey, groupLines]) => {
     const a = groupLines[0].address;
-    const units = groupLines.reduce((s, l) => s + l.qty, 0);
-    // The shipping line carries the FedEx rate AND any paid guarantees (one
-    // shipping line per draft, like the storefront's guaranteed-date line).
-    const guaranteedUnits = groupLines.reduce((s, l) => s + (l.guaranteed ? l.qty : 0), 0);
-    const groupShipCents = shipRateCents * units + (guaranteeCents ?? 0) * guaranteedUnits;
+    // The group's money (lib/order-pricing): the piñata lines, one line per
+    // add-on, and the shipping line carrying the carrier's rate AND any paid
+    // guarantees (one shipping line per draft, like the storefront's
+    // guaranteed-date line).
+    const priced = priceOrder(groupLines.map(pricedLine), orderCarrier, priceCtx)!;
+    const guaranteedUnits = priced.guaranteedUnits;
+    const groupShipCents = priced.shippingLineCents;
     // Per-draft secret: a later checkout may delete this draft only by
     // presenting it (see supersedes) — never on a draft id alone.
     const nonce = randomBytes(16).toString("hex");
     // Free shipping only when the group's merchandise clears the code's own
     // minimum — the same gate the cart preview shows.
-    const merchandiseCents =
-      groupLines.reduce(
-        (s, l) =>
-          s + (price.unitPriceCents + l.tierCents + l.fillingCents) * l.qty,
-        0,
-      ) +
-      addonTotals(groupLines).reduce(
-        (s, { addon, qty }) => s + addon.priceCents * qty,
-        0,
-      );
+    const merchandiseCents = priced.merchandiseCents;
     const freeShip =
       shippingRule !== null &&
       merchandiseCents >= shippingRule.minSubtotalCents &&
@@ -1149,6 +1133,7 @@ export async function POST(req: Request) {
       shipTo: formatAddress(a),
       nonce,
       lines: groupLines,
+      priced,
       input: {
         // Pre-fills Shopify's contact field; never mails an invoice by itself.
         ...(email ? { email } : {}),
@@ -1235,15 +1220,15 @@ export async function POST(req: Request) {
                   : "Guaranteed delivery on your selected dates",
           // priceWithCurrency replaces the deprecated ShippingLineInput.price.
           priceWithCurrency: {
-            amount: freeShip ? "0.00" : (groupShipCents / 100).toFixed(2),
+            amount: freeShip ? "0.00" : dollars(groupShipCents),
             currencyCode: "USD",
           },
         },
         lineItems: [
-          ...groupLines.map((l) => customLine(l)),
-          ...addonTotals(groupLines).map(({ addon, qty }) => ({
+          ...groupLines.map((l, i) => customLine(l, priced.lines[i].unitCents)),
+          ...priced.addonLines.map(({ addon, qty }) => ({
             title: addon.label,
-            originalUnitPrice: (addon.priceCents / 100).toFixed(2),
+            originalUnitPrice: dollars(addon.priceCents),
             quantity: qty,
             requiresShipping: true,
           })),
@@ -1260,9 +1245,10 @@ export async function POST(req: Request) {
         ? "Checkout isn't taking live orders quite yet — your cart is saved and nothing was charged."
         : "Shopify credentials aren't configured (needs SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET). This is exactly what would be sent:",
       // The raw payload is a debugging tool, not customer content.
+      // (`priced` is this route's own working copy of the money, not payload.)
       draftOrders: isProd
         ? draftOrders.map(({ groupKey, shipTo }) => ({ groupKey, shipTo }))
-        : draftOrders,
+        : draftOrders.map(({ groupKey, shipTo, nonce, lines, input }) => ({ groupKey, shipTo, nonce, lines, input })),
       // What the live path would also do with this request (debug only).
       ...(isProd ? {} : { invoiceEmail: sendInvoice && !!email, supersedes }),
     });
@@ -1316,18 +1302,18 @@ export async function POST(req: Request) {
 
   for (const order of draftOrders) {
     order.input.lineItems = [
-      ...order.lines.map((l) => ({
+      ...order.lines.map((l, i) => ({
         variantId: variantBySku.get(customSkuFor(l.styleId))!,
         quantity: l.qty,
-        priceOverride: { amount: lineUnit(l), currencyCode: "USD" },
+        priceOverride: { amount: dollars(order.priced.lines[i].unitCents), currencyCode: "USD" },
         customAttributes: lineAttributes(l),
       })),
-      ...addonTotals(order.lines).map(({ addon, qty }) => ({
+      ...order.priced.addonLines.map(({ addon, qty }) => ({
         variantId: addonVariants.get(addon.sku!)!,
         quantity: qty,
         // Hub price stays authoritative even if the product's price drifts.
         priceOverride: {
-          amount: (addon.priceCents / 100).toFixed(2),
+          amount: dollars(addon.priceCents),
           currencyCode: "USD",
         },
       })),

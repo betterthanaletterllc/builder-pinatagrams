@@ -1314,3 +1314,78 @@ describe("throttle — 30 draft reads a minute per client IP, one bucket shared 
     expect(vi.mocked(rateLimit)).toHaveBeenCalledWith("mcp-status:unknown", 30, 60_000);
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * Builder parity: the card's 8 lines, the $50 flat profile, the paid
+ * guaranteed date (lib/order-rules, lib/order-pricing)
+ * ------------------------------------------------------------------------- */
+
+describe("create_checkout — builder parity", () => {
+  const NL = String.fromCharCode(10);
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join(NL);
+  /** builder.pinatagrams.com's profile on 2026-11-17. */
+  const flat50 = () =>
+    store.patchCatalog((c) => {
+      (c as unknown as Json).variant = {
+        name: "flat-50-freeship",
+        pricing: "flat",
+        carriers: ["fedex"],
+        library: "all",
+        landingLines: null,
+        resolvedVia: "host",
+        allowCustom: true,
+        showLanding: true,
+        flatPrice: { unitCents: 5000, shipCents: 0 },
+        guaranteeCents: 500,
+      };
+    });
+
+  it("refuses a message over the card's 8 lines instead of folding it; 8 lines go through untouched", async () => {
+    const text = await refused("create_checkout", { ...FEDEX_ARGS, lines: [line({ message: lines(9) })] });
+    expect(text).toContain("message runs to 9 lines; the card prints at most 8");
+    const res = await ok("create_checkout", { ...FEDEX_ARGS, lines: [line({ message: lines(8) })] });
+    expect((res.lines as Json[])[0].message).toBe(lines(8));
+  });
+
+  it("the $50 flat profile previews at $50 a piñata with free FedEx — the price checkout charges", async () => {
+    flat50();
+    const res = await ok("create_checkout", { ...FEDEX_ARGS, lines: [line()] });
+    expect((res.lines as Json[])[0]).toMatchObject({ unit_cents: 5000, line_cents: 5000 });
+    expect(res.shipping).toMatchObject({ label: "Free FedEx delivery", per_unit_cents: 0, cents: 0 });
+    expect(res.total_before_tax_cents).toBe(5000);
+    expect(res).not.toHaveProperty("guarantee");
+  });
+
+  it("guaranteed:true on a store that prices it: quoted, previewed, and carried to checkout on the line", async () => {
+    flat50();
+    enable();
+    const args = { ...FEDEX_ARGS, lines: [line({ qty: 2, guaranteed: true })] };
+    const preview = await ok("create_checkout", args);
+    expect((preview.lines as Json[])[0].guaranteed).toBe(true);
+    expect(preview.guarantee).toMatchObject({ label: "Guaranteed delivery date", per_pinata_cents: 500, units: 2, cents: 1000 });
+    expect(preview.total_before_tax_cents).toBe(5000 * 2 + 1000);
+
+    const created = await ok("create_checkout", confirmArgs({ ...args, idempotency_key: "guaranteed-0001-aaaa-bbbb" }));
+    expect(created.status).toBe("ready_for_complete");
+    const sent = routeCalls.at(-1)!.body.lines as Json[];
+    expect(sent[0].guaranteed).toBe(true);
+    // The route charged it on the shipping line, with the guaranteed title.
+    const input = store.draftInputs.at(-1) as Json;
+    expect(input.shippingLine).toEqual({
+      title: "FedEx delivery — guaranteed date",
+      priceWithCurrency: usd("10.00"),
+    });
+  });
+
+  it("guaranteed:true is refused where the store has no paid guarantee, and on USPS", async () => {
+    expect(await refused("create_checkout", { ...FEDEX_ARGS, lines: [line({ guaranteed: true })] })).toContain(
+      "isn't offered on this store",
+    );
+    expect(await refused("create_checkout", { ...USPS_ARGS, lines: [{ ...USPS_ARGS.lines[0], guaranteed: true }] })).toMatch(
+      /isn't offered on this store|FedEx only/,
+    );
+    expect(await refused("create_checkout", { ...FEDEX_ARGS, lines: [line({ guaranteed: "yes" })] })).toContain(
+      "guaranteed must be true or false",
+    );
+  });
+});

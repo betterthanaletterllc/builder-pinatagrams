@@ -1,4 +1,3 @@
-import graphicsFile from "../../../public/graphics.json";
 import { CLASSIC_GRAPHIC } from "@/lib/flow";
 import {
   getCatalog,
@@ -7,7 +6,8 @@ import {
   type HubGraphicCategory,
   type HubGraphicEntry,
 } from "@/lib/hub";
-import { EXCLUDED_PREFIXES, OCCASIONS, occasionOf, type LibraryGraphic } from "@/lib/library-data";
+import { OCCASIONS, occasionOf, type LibraryGraphic } from "@/lib/library-data";
+import { MANIFEST, sellableLibrary } from "@/lib/mcp-tools/library";
 import { toolError, type ToolAnnotations } from "@/lib/mcp-http";
 import type { ToolDef } from "@/lib/order-tools";
 
@@ -18,8 +18,8 @@ import type { ToolDef } from "@/lib/order-tools";
  *
  * Two sources, one list:
  *  - the Shopify design library compiled into public/graphics.json (the same
- *    sellable set the storefront shows: print art present, client one-off
- *    prefixes excluded);
+ *    sellable set the storefront shows: print art present, and a design the
+ *    builder offers — lib/library-data isOfferedDesign);
  *  - the hub's uploaded graphics (catalog `hubGraphics`), whose titles are
  *    INTERNAL — a row shows its category label instead, never the title.
  *
@@ -74,17 +74,10 @@ export type DesignSearchResult = {
   occasions: string[];
 };
 
-type Manifest = { generatedAt?: string; graphics: LibraryGraphic[] };
-const MANIFEST = graphicsFile as unknown as Manifest;
-
-const designPrefix = (design: string) => design.replace(/[0-9]+$/, "");
-
-/** The library the storefront sells: print art present, one-offs excluded. */
-export function sellableLibrary(graphics: LibraryGraphic[] = MANIFEST.graphics): LibraryGraphic[] {
-  return graphics.filter(
-    (g) => !!g?.design && !!g.art && !EXCLUDED_PREFIXES.has(designPrefix(g.design)),
-  );
-}
+// The sellable library (print art present, a design the builder offers —
+// lib/library-data isOfferedDesign) comes from lib/mcp-tools/library, the
+// MCP's one reader of the store snapshot.
+export { sellableLibrary };
 
 /** Lower-case ASCII words: "Piñatagram" → "pinatagram", "St. Patrick's" → "st patrick s". */
 export function normalizeText(s: string): string {

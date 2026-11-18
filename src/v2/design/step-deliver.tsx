@@ -12,6 +12,7 @@ import {
 } from "@/lib/delivery";
 import { formatCents } from "@/lib/hub";
 import { CORPORATE_URL } from "@/lib/links";
+import { CARRIER_COPY, GUARANTEE_LABEL, GUARANTEE_TERMS } from "@/lib/order-rules";
 import { cutoffTonight, soonest } from "../lib/dates";
 import { OptionCard } from "../ui/controls";
 import { Callout, StepHeader } from "../ui/feedback";
@@ -107,8 +108,8 @@ const StepDeliver = forwardRef<
               value="fedex"
               checked={p.carrier === "fedex"}
               onChange={() => p.onCarrier("fedex")}
-              title="FedEx"
-              description="Expected to arrive on the exact date you pick"
+              title={CARRIER_COPY.fedex.title}
+              description={CARRIER_COPY.fedex.description}
               aside={perPiece(p.fedexCents)}
             />
             <OptionCard
@@ -117,8 +118,8 @@ const StepDeliver = forwardRef<
               value="usps"
               checked={p.carrier === "usps"}
               onChange={() => p.onCarrier("usps")}
-              title="USPS First Class"
-              description="Arrives within 2–3 business days of your selected date"
+              title={CARRIER_COPY.usps.title}
+              description={CARRIER_COPY.usps.description}
               aside={perPiece(p.uspsCents)}
             />
           </fieldset>
@@ -208,7 +209,7 @@ const StepDeliver = forwardRef<
                       <span className={s.switchTrack} aria-hidden="true">
                         <span className={s.switchThumb} />
                       </span>
-                      <span className={s.guaranteeLabel}>Guaranteed delivery date</span>
+                      <span className={s.guaranteeLabel}>{GUARANTEE_LABEL}</span>
                       <span className={s.guaranteePrice}>+{formatCents(p.guaranteeCents)}</span>
                     </label>
                     <button
@@ -224,9 +225,7 @@ const StepDeliver = forwardRef<
                   </div>
                   {guaranteeHelp && (
                     <p id={`${guaranteeId}-help`} className={s.guaranteeHelp}>
-                      With the guarantee, your piñata arrives on the date you picked. If it
-                      doesn&apos;t, you get a 50% refund, and a full refund if it&apos;s more than
-                      one business day off.
+                      {GUARANTEE_TERMS}
                     </p>
                   )}
                 </div>

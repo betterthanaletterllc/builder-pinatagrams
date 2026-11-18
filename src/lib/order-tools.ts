@@ -1,17 +1,25 @@
 import { getCatalog } from "@/lib/hub";
 import {
   deliveryProblem,
+  fedexNearbyDays,
   maxDeliveryDate,
   minDeliveryDate,
   resolveDeliveryConfig,
   type Carrier,
 } from "@/lib/delivery";
+import {
+  carrierService,
+  FEDEX_NEARBY_BUSINESS_DAYS,
+  GUARANTEE_LABEL,
+  GUARANTEE_TERMS,
+} from "@/lib/order-rules";
+import { resolveVariantProfile } from "@/lib/variant";
 import { toolError, toolText, type McpToolListing, type ToolAnnotations } from "@/lib/mcp-http";
 import { projectCatalog } from "@/lib/mcp-tools/catalog";
 import { checkoutTools } from "@/lib/mcp-tools/checkout";
 import { designerTools } from "@/lib/mcp-tools/designer";
 import { designTools } from "@/lib/mcp-tools/designs";
-import { priceTools } from "@/lib/mcp-tools/price";
+import { MCP_HOST, priceTools } from "@/lib/mcp-tools/price";
 import { quoteTools } from "@/lib/mcp-tools/quote";
 
 /**
@@ -61,15 +69,16 @@ export const orderTools: Record<string, ToolDef> = {
   ...designerTools,
   get_catalog: {
     description:
-      "What Piñatagrams can send right now: body styles with in-stock status, fillings, add-ons, per-unit shipping (FedEx 2-Day guaranteed date vs USPS First Class window), graphic upcharges, and the earliest and latest delivery dates. Amounts are integer cents. Call this before quoting anything.",
+      "What Piñatagrams can send right now: body styles with in-stock status, fillings, add-ons, per-unit shipping (FedEx 2-Day vs USPS First Class window), graphic upcharges, the store's carriers and paid guaranteed-date price, and the earliest and latest delivery dates. Amounts are integer cents, as checkout charges them on this store. Call this before quoting anything.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: READ_ONLY,
-    handler: async () => projectCatalog(await getCatalog()),
+    // Scoped to MCP_HOST like price_order and create_checkout: one profile.
+    handler: async () => projectCatalog(await getCatalog({ host: MCP_HOST })),
   },
 
   get_delivery_options: {
     description:
-      "Delivery-date rules for a carrier (fedex = 2-Day with a guaranteed arrival date; usps = First Class, arrives in a window around the chosen day). Returns the earliest and latest selectable dates, and if you pass a date, whether that exact date works and why not.",
+      "Delivery-date rules for a carrier (fedex = 2-Day aimed at the chosen day; usps = First Class, arrives in a window around it). Returns the earliest and latest selectable dates, whether this store offers a paid guaranteed delivery date (FedEx only) with its price and terms, and if you pass a date, whether that exact date works and why not — plus, for a FedEx date without the guarantee on a store that offers one, the business days it may arrive on instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -82,6 +91,10 @@ export const orderTools: Record<string, ToolDef> = {
           type: "string",
           pattern: "^\\d{4}-\\d{2}-\\d{2}$",
           description: "Optional YYYY-MM-DD arrival date to validate",
+        },
+        guaranteed: {
+          type: "boolean",
+          description: `Optional: true to ask about the date WITH the paid ${GUARANTEE_LABEL.toLowerCase()} (FedEx, where offered).`,
         },
       },
       additionalProperties: false,
@@ -97,21 +110,66 @@ export const orderTools: Record<string, ToolDef> = {
       if (date !== null && !YMD.test(date)) {
         return toolError("date must be YYYY-MM-DD");
       }
-      const catalog = await getCatalog();
+      if (args.guaranteed !== undefined && typeof args.guaranteed !== "boolean") {
+        return toolError("guaranteed must be true or false");
+      }
+      // Scoped to MCP_HOST like price_order: the guarantee is the profile's.
+      const catalog = await getCatalog({ host: MCP_HOST });
       const cfg = resolveDeliveryConfig(catalog.delivery);
+      const variant = resolveVariantProfile(catalog.variant);
+      const guaranteeOffered = variant.guaranteeCents !== null && carrier === "fedex";
+      const guaranteed = guaranteeOffered && args.guaranteed === true;
       const problem = date ? deliveryProblem(date, cfg, carrier) : null;
+      // An unguaranteed FedEx date on a guarantee store is aimed at the day
+      // and may land up to two business days either side (the builder's
+      // calendar shades the same days: lib/delivery fedexNearbyDays).
+      const nearby =
+        date && !problem && guaranteeOffered && !guaranteed
+          ? [...fedexNearbyDays(date, cfg, FEDEX_NEARBY_BUSINESS_DAYS), date].sort()
+          : null;
       return {
         carrier,
         timezone: "America/Chicago",
         earliest: minDeliveryDate(cfg, carrier),
         latest: maxDeliveryDate(cfg),
         ...(date
-          ? { requested: date, ok: problem === null, ...(problem ? { reason: problem } : {}) }
+          ? {
+              requested: date,
+              ok: problem === null,
+              ...(problem ? { reason: problem } : {}),
+              ...(nearby
+                ? {
+                    may_arrive: {
+                      earliest: nearby[0],
+                      latest: nearby[nearby.length - 1],
+                      business_days: nearby,
+                      note: `Without the ${GUARANTEE_LABEL.toLowerCase()}, FedEx aims for ${date} but may deliver on any of these business days.`,
+                    },
+                  }
+                : {}),
+            }
           : {}),
         promise:
           carrier === "fedex"
-            ? "Arrives on the exact date you pick (FedEx 2-Day)."
+            ? guaranteeOffered && !guaranteed
+              ? `${carrierService("fedex", true)}.`
+              : "Arrives on the exact date you pick (FedEx 2-Day)."
             : `Arrives within about ${cfg.uspsWindowDays} mailing days either side of the date you pick (USPS First Class).`,
+        guarantee: guaranteeOffered
+          ? {
+              offered: true,
+              label: GUARANTEE_LABEL,
+              cents_per_pinata: variant.guaranteeCents,
+              terms: GUARANTEE_TERMS,
+              how: "Add guaranteed:true to each line that should have it in price_order and create_checkout.",
+            }
+          : {
+              offered: false,
+              note:
+                variant.guaranteeCents === null
+                  ? "This store has no paid guaranteed date (its FedEx dates are already guaranteed)."
+                  : `The ${GUARANTEE_LABEL.toLowerCase()} is FedEx only.`,
+            },
       };
     },
   },

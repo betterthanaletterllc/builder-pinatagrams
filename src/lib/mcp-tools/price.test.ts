@@ -97,7 +97,8 @@ type Quote = {
     breakdown: { base: number; graphic_upcharge: number; filling: number };
   }[];
   add_on_lines: { id: string; label: string; unit_cents: number; qty: number; cents: number }[];
-  shipping: { carrier: string; service: string; per_unit_cents: number; units: number; cents: number };
+  shipping: { carrier: string; label: string; service: string; per_unit_cents: number; units: number; cents: number };
+  guarantee?: { label: string; per_pinata_cents: number; units: number; cents: number; terms: string };
   subtotal_cents: number;
   total_before_tax_cents: number;
   currency: string;
@@ -373,7 +374,8 @@ describe("price_order — refusals", () => {
 
   it("refuses client one-off designs hidden from the public library", async () => {
     stubHub();
-    // EXCLUDED_PREFIXES = BSG / BRYNNEIL / RETENTION — none is sellable here.
+    // lib/library-data isOfferedDesign leaves out BSG / BRYNNEIL / RETENTION /
+    // CHONKY listings — none is sellable here.
     const err = await refused(order([line({ graphic: { type: "library", design: "BSG01" } })]));
     expect(err).toMatch(/no design has the code "BSG01"/);
   });
@@ -592,5 +594,30 @@ describe("price_order — catalog host (MCP_HOST)", () => {
   it("the tool description tells the checkout tool to reuse this quote's normalized ids and labels", () => {
     expect(priceTools.price_order.description).toMatch(/normalized style_id, filling\.label and add_ons/);
     expect(priceTools.price_order.description).toMatch(/never the caller's raw strings/);
+  });
+});
+
+describe("price_order — the paid guaranteed date's rules", () => {
+  /** A store that prices the guarantee and also offers USPS. */
+  const guaranteeStore = () => {
+    const catalog = catalogCopy();
+    catalog.variant = { ...catalog.variant, pricing: "flat", carriers: ["fedex", "usps"], guaranteeCents: 500 };
+    return catalog;
+  };
+
+  it("is FedEx only, even where the store prices it", async () => {
+    stubHub({ catalog: guaranteeStore() });
+    expect(await refused(order([line({ guaranteed: true })], "usps"))).toMatch(
+      /Line 1: the guaranteed delivery date is FedEx only/,
+    );
+  });
+
+  it("is quoted per piñata on FedEx, and must be a boolean", async () => {
+    stubHub({ catalog: guaranteeStore() });
+    const q = await quote(order([line({ qty: 3, guaranteed: true })]));
+    expect(q.guarantee).toMatchObject({ per_pinata_cents: 500, units: 3, cents: 1500 });
+    expect(q.total_before_tax_cents).toBe(q.subtotal_cents + q.shipping.cents + 1500);
+    stubHub({ catalog: guaranteeStore() });
+    expect(await refused(order([line({ guaranteed: 1 })]))).toMatch(/guaranteed must be true or false/);
   });
 });

@@ -1,8 +1,10 @@
 import type { Carrier, DeliveryConfig } from "@/lib/delivery";
 import type { CartLine, GraphicChoice } from "@/lib/flow";
 import { discountAmountCents, formatCents, type HubDiscount, type LogoZone } from "@/lib/hub";
+import { priceOrder, shippingLabel, type PricedLine } from "@/lib/order-pricing";
+import { GUARANTEE_LABEL } from "@/lib/order-rules";
 import { arrivalText, dateProblemText } from "./dates";
-import { guaranteeFor, pieceBreakdown, shipCents, type PriceCtx } from "./pricing";
+import { guaranteeFor, pieceBreakdown, pricedPiece, shipCents, type PriceCtx } from "./pricing";
 
 /**
  * The order as Step 4 shows it: every piñata (the one in progress first),
@@ -99,20 +101,22 @@ export function computeOrder(input: {
   const lineCarrier: Carrier = carrier ?? "fedex";
   const ship = shipCents(carrier, priceCtx);
   const views: LineView[] = [];
-  let merchandise = 0;
+  // Every piñata as the one pricing function (lib/order-pricing) reads it —
+  // the total below is the same sum /api/checkout charges.
+  const pieces: PricedLine[] = [];
   let units = 0;
   let guaranteeTotal = 0;
   let guaranteedUnits = 0;
 
   const add = (id: string, p: OrderPiece, kind: "current" | "editing" | "line") => {
     const b = pieceBreakdown({ graphic: p.graphic, filling: p.filling, addons: p.addons }, priceCtx);
+    pieces.push(pricedPiece(p, priceCtx, p.qty));
     units += p.qty;
     const g = guaranteeFor({ graphic: p.graphic, filling: p.filling, addons: p.addons, guaranteed: p.guaranteed }, carrier, priceCtx);
     if (g > 0) {
       guaranteeTotal += g * p.qty;
       guaranteedUnits += p.qty;
     }
-    if (b.base !== null) merchandise += (b.base + b.addons.reduce((s, a) => s + a.cents, 0)) * p.qty;
     // Every line re-checked against the ORDER's carrier (a switch, or a
     // date gone stale overnight) — named on its row, fixed per line. The
     // piñata in progress is checked by its own date section instead.
@@ -145,11 +149,13 @@ export function computeOrder(input: {
     }
   }
 
-  const known = !!priceCtx.unitPrice && ship !== null;
-  const shipTotal = ship !== null ? ship * units : null;
+  const priced = priceOrder(pieces, carrier, priceCtx);
+  const known = priced !== null;
+  const merchandise = priced?.merchandiseCents ?? 0;
+  const shipTotal = priced ? priced.shippingCents : ship !== null ? ship * units : null;
   // Shipping codes act on Shopify's shipping line, which carries the
   // guarantees too — preview them against both.
-  const shipLine = shipTotal !== null ? shipTotal + guaranteeTotal : null;
+  const shipLine = priced?.shippingLineCents ?? null;
   // A PREVIEW of each code with the cart's rules: an order code comes off
   // the merchandise, a shipping code off shipping; one that doesn't apply
   // says why. Shopify applies the real discount.
@@ -180,25 +186,18 @@ export function computeOrder(input: {
   return {
     views,
     units,
-    shipLabel:
-      carrier === "usps"
-        ? "USPS First Class"
-        : carrier === "fedex"
-          ? shipTotal === 0
-            ? "Free FedEx delivery"
-            : "FedEx delivery"
-          : "Shipping",
+    shipLabel: carrier ? shippingLabel(carrier, shipTotal) : "Shipping",
     shipTotal,
     guarantee:
       guaranteedUnits > 0
         ? {
-            label: `Guaranteed delivery date${guaranteedUnits > 1 ? ` ×${guaranteedUnits}` : ""}`,
+            label: `${GUARANTEE_LABEL}${guaranteedUnits > 1 ? ` ×${guaranteedUnits}` : ""}`,
             cents: guaranteeTotal,
           }
         : null,
     codeRows,
     notes,
-    total: known ? merchandise + shipLine! - off : null,
+    total: priced ? priced.totalCents - off : null,
     from: input.uspsOffered && carrier === null,
   };
 }

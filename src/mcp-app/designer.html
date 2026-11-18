@@ -177,7 +177,12 @@ var CLASSIC_CODE = 'STANDARD';
 var CLASSIC_THUMB = 'https://cdn.shopify.com/s/files/1/1116/8788/files/CLASSIC_STANDARD.png?v=1751310452';
 var IMG_OK = /^https:\/\/(cdn\.shopify\.com|[a-z0-9-]+\.public\.blob\.vercel-storage\.com)\//;
 var LINK_OK = /^https:\/\//;
-var MSG_MAX = 300;
+// The card's limits, the guarantee's words and each carrier's promise are filled in by the server from the
+// builder's own constants (lib/order-rules, through designer.ts withRules) — never spelled out here. What
+// varies by store (carriers on offer, the guarantee's price, shipping) comes in open_designer's result.
+var RULES = /*__PG_RULES__*/null;
+var MSG_MAX = RULES ? RULES.message.maxChars : 0;
+var MSG_LINES = RULES ? RULES.message.maxLines : 0;
 var ZIP_RE = /^\d{5}(-\d{4})?$/;
 var YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 var DESIGN_RE = /^[A-Z0-9]{2,24}$/;
@@ -187,7 +192,8 @@ var CONFIRM_TIMEOUT = 75000;         // the confirm create_checkout: at least th
 var CONFIRM_TIMEOUT_TEXT = 'The store is taking a while. If a checkout link was created, trying again in a minute returns the same one.';
 // Prefill fields → what the buyer calls them (the dropped-prefill strip never shows API names).
 var FIELD_LABELS = { occasion: 'Occasion', recipient_name: 'Recipient', style_id: 'Piñata', filling: 'What’s inside', design: 'Front design', add_ons: 'Add-on',
-  message: 'Card message', carrier: 'Shipping', delivery_date: 'Arrival date', email: 'Email', ship_to: 'Address', 'ship_to.name': 'Recipient name',
+  message: 'Card message', carrier: 'Shipping', delivery_date: 'Arrival date', guaranteed: RULES ? RULES.guarantee.label : 'Guarantee',
+  email: 'Email', ship_to: 'Address', 'ship_to.name': 'Recipient name',
   'ship_to.address1': 'Street address', 'ship_to.address2': 'Apt or suite', 'ship_to.city': 'City', 'ship_to.state': 'State', 'ship_to.zip': 'ZIP', 'ship_to.phone': 'Phone' };
 var STATES ='AL Alabama,AK Alaska,AZ Arizona,AR Arkansas,CA California,CO Colorado,CT Connecticut,DE Delaware,DC District of Columbia,FL Florida,GA Georgia,HI Hawaii,ID Idaho,IL Illinois,IN Indiana,IA Iowa,KS Kansas,KY Kentucky,LA Louisiana,ME Maine,MD Maryland,MA Massachusetts,MI Michigan,MN Minnesota,MS Mississippi,MO Missouri,MT Montana,NE Nebraska,NV Nevada,NH New Hampshire,NJ New Jersey,NM New Mexico,NY New York,NC North Carolina,ND North Dakota,OH Ohio,OK Oklahoma,OR Oregon,PA Pennsylvania,RI Rhode Island,SC South Carolina,SD South Dakota,TN Tennessee,TX Texas,UT Utah,VT Vermont,VA Virginia,WA Washington,WV West Virginia,WI Wisconsin,WY Wyoming'
   .split(',').map(function (s) { return [s.slice(0, 2), s.slice(3)]; });
@@ -383,8 +389,8 @@ function fieldLabel(field) {
 /* ---------------- state ---------------- */
 
 var D = null;                 // structuredContent from open_designer
-var S = { styleId: '', filling: '', addOns: [], design: CLASSIC_CODE, message: '', carrier: 'fedex', date: '',
-  ship: { name: '', address1: '', address2: '', city: '', state: '', zip: '', phone: '' }, email: '', recipient: '', occasion: '' };
+var S = { styleId: '', filling: '', addOns: [], design: CLASSIC_CODE, message: '', carrier: 'fedex', date: '', guaranteed: false,
+  ship:{ name: '', address1: '', address2: '', city: '', state: '', zip: '', phone: '' }, email: '', recipient: '', occasion: '' };
 var occFilter = '', occMore = false;        // design filter; whether every occasion chip is shown
 var occLoaded = {};                         // occasion → true once list_designs answered for it (even empty)
 var designsLoading = '', designsErr = '';
@@ -431,6 +437,16 @@ function shipCents(carrier) {
   var v = carrier === 'usps' ? s.usps_first_class : s.fedex_2day;
   return typeof v === 'number' ? v : null;
 }
+// This store's profile (catalog.store): the carriers it offers and the paid guaranteed date's price (FedEx only).
+function store() { return catalog().store || {}; }
+function carriersOffered() {
+  var c = Array.isArray(store().carriers) ? store().carriers.filter(function (x) { return x === 'fedex' || x === 'usps'; }) : [];
+  return c.length ? c : ['fedex'];
+}
+function guaranteeCents() { var g = store().guaranteed_date_cents; return typeof g === 'number' && g > 0 ? g : null; }
+function guaranteeOn() { return S.guaranteed && S.carrier === 'fedex' && guaranteeCents() !== null; }
+function msgLines() { return S.message ? S.message.split('\n').length : 0; }
+function msgOver() { return S.message.length > MSG_MAX || msgLines() > MSG_LINES; }
 function minDate() { return (catalog().delivery || {})[S.carrier === 'usps' ? 'earliest_usps' : 'earliest_fedex'] || ''; }
 function maxDate() { return (catalog().delivery || {}).latest || ''; }
 function graphicArg() { return S.design === CLASSIC_CODE ? { type: 'classic' } : { type: 'library', design: S.design }; }
@@ -461,7 +477,7 @@ function stepDone(n) {
   if (n === 1) return !!S.styleId;
   if (n === 2) return !!S.filling;
   if (n === 3) return !!S.design;
-  if (n === 4) return S.message.trim().length > 0 && S.message.length <= MSG_MAX;
+  if (n === 4) return S.message.trim().length > 0 && !msgOver();
   if (n === 5) return !dateProblem() && !Object.keys(addressProblems()).length;
   return false;
 }
@@ -469,7 +485,7 @@ function missing() {
   var m = [];
   if (!S.styleId) m.push('Pick a piñata');
   if (!S.filling) m.push('Choose what’s inside');
-  if (S.message.length > MSG_MAX) m.push('Shorten the message');
+  if (msgOver()) m.push('Shorten the message');
   var needDate = !!dateProblem(), needAddr = !!Object.keys(addressProblems()).length;
   if (needDate && needAddr) m.push('Add a delivery date and address');
   else if (needDate) m.push('Add a delivery date');
@@ -516,6 +532,7 @@ function onToolResult(r) {
   clearTimeout(dataTimer);
   if (D) return; // one result per app instance
   if (r && r.isError) return showError(textOf(r) || 'Something went wrong.');
+  if (!RULES) return showError('The designer is missing its rules.');
   var sc = r && r.structuredContent;
   if (!sc || !sc.catalog || !Array.isArray(sc.catalog.body_styles)) {
     return showError('The designer didn’t receive its catalog.');
@@ -553,6 +570,8 @@ function applyPrefill(p) {
   if (code && designByCode(code)) S.design = code;
   S.message = str(p.message, MSG_MAX);
   if (p.carrier === 'fedex' || p.carrier === 'usps') S.carrier = p.carrier;
+  if (carriersOffered().indexOf(S.carrier) < 0) S.carrier = carriersOffered()[0];
+  S.guaranteed = p.guaranteed === true && S.carrier === 'fedex' && guaranteeCents() !== null;
   var dd = str(p.delivery_date, 10);
   if (YMD_RE.test(dd)) S.date = dd;
   if (p.ship_to && typeof p.ship_to === 'object') {
@@ -642,6 +661,7 @@ function buildUI() {
   ui.dateLabel = el('label', { for: 'date', text: 'Arrival date' });
   ui.dateHint = el('div', { class: 'note', id: 'dateh' });
   ui.dateErr = el('p', { class: 'err hidden', role: 'alert' });
+  ui.guarantee = el('div');
   ui.addr = {};
   var fields = el('div', { class: 'row' }, [
     addrField('name', 'Recipient name', 'name', false),
@@ -660,6 +680,7 @@ function buildUI() {
   ui.steps[5] = stepEl(5, 'When & where', [
     ui.carriers,
     el('div', { class: 'field' }, [ui.dateLabel, ui.date, ui.dateHint, ui.dateErr]),
+    ui.guarantee,
     el('h3', { class: 'sub-h', text: 'Ship to' }),
     fields, row3, row4
   ]);
@@ -860,17 +881,35 @@ function renderDesigns(focusFrom) {
 
 function renderCarriers() {
   clear(ui.carriers);
-  [['fedex', 'FedEx 2-Day', 'Arrives on the exact date you pick.'], ['usps', 'USPS First Class', 'Arrives in a window around the date you pick.']].forEach(function (c) {
-    var sel = S.carrier === c[0];
-    var cents = shipCents(c[0]);
+  // Only the carriers this store offers, worded as the builder words them.
+  carriersOffered().forEach(function (id) {
+    var copy = RULES.carriers[id];
+    var sel = S.carrier === id;
+    var cents = shipCents(id);
     ui.carriers.appendChild(el('button', { type: 'button', class: 'opt-card' + (sel ? ' sel' : ''), role: 'radio', 'aria-checked': sel ? 'true' : 'false', onclick: function () {
-      S.carrier = c[0]; renderCarriers(); onOrderChange(true);
+      S.carrier = id; renderCarriers(); onOrderChange(true);
     } }, [
-      el('span', { class: 't', text: c[1] }),
-      el('span', { class: 'd', text: c[2] }),
-      el('span', { class: 'p', text: cents === null ? 'Shipping priced at review' : money(cents) + ' shipping' })
+      el('span', { class: 't', text: copy.title }),
+      el('span', { class: 'd', text: copy.description }),
+      el('span', { class: 'p', text: cents === null ? 'Shipping priced at review' : (cents === 0 ? 'Free delivery' : money(cents) + ' shipping') })
     ]));
   });
+  renderGuarantee();
+}
+// The paid guaranteed date: FedEx only, and only where this store prices one (price_order refuses it elsewhere).
+function renderGuarantee() {
+  clear(ui.guarantee);
+  var cents = guaranteeCents();
+  if (cents === null || S.carrier !== 'fedex') return;
+  var on = guaranteeOn();
+  ui.guarantee.appendChild(el('button', { type: 'button', class: 'toggle', 'aria-pressed': on ? 'true' : 'false', 'aria-describedby': 'gterms', onclick: function () {
+    S.guaranteed = !on; renderGuarantee(); onOrderChange(true);
+  } }, [
+    el('span', { class: 'box', 'aria-hidden': 'true', text: on ? '✓' : '' }),
+    el('span', { class: 'lbl', text: RULES.guarantee.label }),
+    el('span', { class: 'pr', text: '+' + money(cents) })
+  ]));
+  ui.guarantee.appendChild(el('p', { class: 'note', id: 'gterms', text: RULES.guarantee.terms }));
 }
 function renderDate() {
   var mn = minDate(), mx = maxDate();
@@ -878,8 +917,12 @@ function renderDate() {
   if (mx) ui.date.max = mx; else ui.date.removeAttribute('max');
   if (ui.date.value !== S.date) ui.date.value = S.date;
   ui.dateLabel.textContent = S.carrier === 'usps' ? 'Target arrival date' : 'Arrival date';
+  // The carrier's promise, worded by the server: on a store with a paid guarantee, a plain FedEx date is aimed
+  // at the day (it may land a business day or two either side) until the guarantee is added.
+  var service = S.carrier === 'usps' ? RULES.service.usps
+    : (guaranteeCents() !== null && !guaranteeOn() ? RULES.service.fedexWithGuaranteeOffered : RULES.service.fedex);
   ui.dateHint.textContent = (mn ? 'Soonest ' + fmtDate(mn) : '') + (mn && mx ? ' · ' : '') + (mx ? 'latest ' + fmtDate(mx) : '') +
-    (S.carrier === 'usps' ? ' · USPS lands within a few mailing days of your date' : ' · FedEx guarantees the day');
+    ((mn || mx) ? '. ' : '') + service + '.';
   var p = S.date ? dateProblem() : '';
   ui.dateErr.textContent = p;
   ui.dateErr.classList.toggle('hidden', !p);
@@ -898,10 +941,11 @@ function renderAddress() {
   });
 }
 function onMessageChange() {
-  var n = S.message.length;
-  ui.msgCount.textContent = n + ' / ' + MSG_MAX + (n > MSG_MAX ? ' — a little too long for the card' : '');
-  ui.msgCount.classList.toggle('over', n > MSG_MAX);
-  ui.msg.setAttribute('aria-invalid', n > MSG_MAX ? 'true' : 'false');
+  var n = S.message.length, lines = msgLines(), over = msgOver();
+  ui.msgCount.textContent = n + ' / ' + MSG_MAX + ' characters · ' + lines + ' / ' + MSG_LINES + ' lines' +
+    (over ? ' — a little too long for the card' : '');
+  ui.msgCount.classList.toggle('over', over);
+  ui.msg.setAttribute('aria-invalid', over ? 'true' : 'false');
   onOrderChange(false);
 }
 
@@ -909,7 +953,7 @@ function updateMarkers() {
   for (var i = 1; i <= 5; i++) {
     var done = stepDone(i);
     var s = ui.steps[i];
-    var over = i === 4 && S.message.length > MSG_MAX;
+    var over = i === 4 && msgOver();
     s.setAttribute('data-done', done ? '1' : (i === 4 && !over ? '' : '0'));
     s._mark.textContent = done ? 'Done' : (i === 4 ? (over ? 'Too long' : 'Optional') : 'To do');
   }
@@ -966,7 +1010,9 @@ function renderBreakdown() {
   ui.brk.appendChild(row((l.style_name || 'Piñata') + ' · ' + ((l.filling && l.filling.label) || '') + (hasB && b.filling ? ' (+' + money(b.filling) + ')' : ''), money(pinata)));
   if (hasB && b.graphic_upcharge) ui.brk.appendChild(row('Design: ' + ((l.graphic && l.graphic.label) || ''), '+' + money(b.graphic_upcharge)));
   (q.add_on_lines || []).forEach(function (a) { ui.brk.appendChild(row(a.label, '+' + money(a.cents))); });
-  if (q.shipping) ui.brk.appendChild(row(q.carrier === 'usps' ? 'USPS First Class shipping' : 'FedEx 2-Day shipping', money(q.shipping.cents)));
+  // Labels as price_order names them (the builder's own: "Free FedEx delivery", "Guaranteed delivery date").
+  if (q.shipping) ui.brk.appendChild(row(q.shipping.label || 'Shipping', q.shipping.cents === 0 ? 'Free' : money(q.shipping.cents)));
+  if (q.guarantee) ui.brk.appendChild(row(q.guarantee.label, '+' + money(q.guarantee.cents)));
   ui.brk.appendChild(row('Total before tax', money(q.total_before_tax_cents), 'tot'));
 }
 
@@ -993,6 +1039,7 @@ function fetchPrice() {
   var seq = ++quoteSeq;
   var line = { style_id: S.styleId, qty: 1, filling: fillingLabel(), graphic: graphicArg() };
   if (S.addOns.length) line.add_ons = S.addOns.slice();
+  if (guaranteeOn()) line.guaranteed = true;
   callTool(D.tools.price, { carrier: S.carrier, lines: [line] }).then(function (r) {
     if (seq !== quoteSeq) return;
     if (r.ok && typeof r.data.total_before_tax_cents === 'number') { quote = r.data; quoteErr = ''; }
@@ -1011,7 +1058,8 @@ function contextText() {
   parts.push(st ? st.name + ' piñata' : 'no piñata picked yet');
   parts.push((f ? f.label : 'no filling') + (S.addOns.length ? ' + ' + S.addOns.map(function (a) { var x = addonById(a); return x ? x.label : a; }).join(' + ') : ''));
   parts.push(S.design === CLASSIC_CODE ? 'Classic design' : 'design ' + S.design);
-  var when = (S.carrier === 'usps' ? 'USPS arriving around ' : 'FedEx arriving ') + (S.date || '(no date yet)');
+  var when = (S.carrier === 'usps' ? 'USPS arriving around ' : 'FedEx arriving ') + (S.date || '(no date yet)') +
+    (guaranteeOn() ? ' with the ' + RULES.guarantee.label.toLowerCase() : '');
   var who = S.ship.name ? ' to ' + S.ship.name + (S.ship.city ? ', ' + S.ship.city + (S.ship.state ? ' ' + S.ship.state : '') : ' (address incomplete)') : ' (no address yet)';
   parts.push(when + who);
   var tail = [S.message.trim() ? 'message set' : 'no message yet'];
@@ -1032,7 +1080,7 @@ function sendContext() {
 function askClaude() {
   var who = S.ship.name.trim() || S.recipient || 'my recipient';
   var occ = S.occasion || occFilter || 'the occasion';
-  var text = 'Please write a short, warm message (under 300 characters) for the card in my Piñatagram to ' + who + ' for ' + occ + '.';
+  var text = 'Please write a short, warm message (under ' + MSG_MAX + ' characters and at most ' + MSG_LINES + ' lines) for the card in my Piñatagram to ' + who + ' for ' + occ + '.';
   request('ui/message', { role: 'user', content: [{ type: 'text', text: text }] }, 15000).catch(function () { /* host declined */ });
 }
 
@@ -1044,6 +1092,7 @@ function checkoutArgs() {
   var line = { style_id: S.styleId, qty: 1, filling: fillingLabel(), graphic: graphicArg(), delivery_date: S.date };
   if (S.addOns.length) line.add_ons = S.addOns.slice();
   if (S.message.trim()) line.message = S.message.trim();
+  if (guaranteeOn()) line.guaranteed = true;
   var s = S.ship;
   var ship = { name: s.name.trim(), address1: s.address1.trim(), city: s.city.trim(), state: s.state, zip: s.zip.trim() };
   if (s.address2.trim()) ship.address2 = s.address2.trim();
@@ -1091,7 +1140,8 @@ function renderReview(errText) {
     row((l.style_name || 'Piñata') + ' · ' + ((l.filling && l.filling.label) || '') + ' · ' + ((l.graphic && l.graphic.label) || ''), money(l.unit_cents))
   ]);
   (p.add_on_lines || []).forEach(function (a) { lines.appendChild(row(a.label, money(a.cents))); });
-  if (p.shipping) lines.appendChild(row(p.shipping.service || 'Shipping', money(p.shipping.cents)));
+  if (p.shipping) lines.appendChild(row(p.shipping.label || p.shipping.service || 'Shipping', p.shipping.cents === 0 ? 'Free' : money(p.shipping.cents)));
+  if (p.guarantee) lines.appendChild(row(p.guarantee.label, money(p.guarantee.cents)));
   lines.appendChild(row('Total before tax', money(p.total_before_tax_cents), 'tot'));
   var createBtn = el('button', { type: 'button', class: 'btn btn-primary', text: 'Create checkout link', onclick: createLink });
   clear(ui.review);
@@ -1099,7 +1149,7 @@ function renderReview(errText) {
   ui.review.appendChild(el('dl', { class: 'kv' }, [
     el('dt', { text: 'To' }), el('dd', { text: sh.name || '' }),
     el('dt', { text: 'Address' }), el('dd', { text: addr }),
-    el('dt', { text: 'Arrives' }), el('dd', { text: (p.arrives || '') + (p.carrier === 'usps' ? ' (USPS window)' : ' (FedEx 2-Day)') }),
+    el('dt', { text: 'Arrives' }), el('dd', { text: (p.arrives || '') + (p.carrier === 'usps' ? ' (USPS window)' : (l.guaranteed ? ' (FedEx 2-Day, ' + RULES.guarantee.label.toLowerCase() + ')' : ' (FedEx 2-Day)')) }),
     el('dt', { text: 'Message' }), el('dd', { text: l.message || 'No card message' }),
     p.email ? el('dt', { text: 'Receipt to' }) : null, p.email ? el('dd', { text: p.email }) : null
   ]));

@@ -1,14 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
-import graphicsFile from "../../../public/graphics.json";
 import { POST as checkoutPost } from "@/app/api/checkout/route";
-import {
-  catalogUrl,
-  HUB_TIMEOUT_MS,
-  resolveHubGraphics,
-  type HubCatalog,
-  type HubGraphicEntry,
-} from "@/lib/hub";
+import { resolveHubGraphics, type HubGraphicEntry } from "@/lib/hub";
 import { CLASSIC_GRAPHIC, type CartLine, type DeliveryAddress, type GraphicChoice } from "@/lib/flow";
 import {
   deliveryIssueAtCheckout,
@@ -19,11 +12,13 @@ import {
   type Carrier,
   type DeliveryConfig,
 } from "@/lib/delivery";
-import { EXCLUDED_PREFIXES } from "@/lib/library-data";
+import { GUARANTEE_LABEL, MESSAGE_RULES } from "@/lib/order-rules";
+import { lineCount } from "@/v2/lib/message";
 import { shopifyAdmin, supersedeAllowed, unpaidBuilderDraft, type Attr } from "@/lib/shopify";
 import { rateLimit } from "@/lib/rate-limit";
 import { toolError, type ToolAnnotations } from "@/lib/mcp-http";
-import { MAX_ADDONS, MCP_HOST, priceTools } from "@/lib/mcp-tools/price";
+import { LIBRARY_BY_CODE } from "@/lib/mcp-tools/library";
+import { MAX_ADDONS, MCP_HOST, moneyCatalog, priceTools } from "@/lib/mcp-tools/price";
 import type { ToolDef } from "@/lib/order-tools";
 
 /**
@@ -104,7 +99,11 @@ const READ_ONLY: ToolAnnotations = {
 // Agent-tier caps (tighter than the route's 20 lines / 25 per line).
 export const MAX_LINES = 5;
 export const MAX_QTY = 10;
-const MESSAGE_MAX = 300; // the route's str(message, 300) — refused here, never clipped
+// The card's limits (lib/order-rules, the builder's own): the route keeps the
+// first 300 characters and folds lines past the 8th — refused here instead,
+// never clipped.
+const MESSAGE_MAX = MESSAGE_RULES.maxChars;
+const MESSAGE_MAX_LINES = MESSAGE_RULES.maxLines;
 const MAX_CODES = 2; // the route keeps at most two native codes
 // MAX_ADDONS (distinct add-ons per line, refused by COUNT before any lookup)
 // is defined once in price.ts so the quote and the checkout share the cap;
@@ -117,10 +116,10 @@ const GRAPHIC_TYPES = ["classic", "library", "hub", "custom"] as const;
 export const BUILDER_URL = "https://builder.pinatagrams.com";
 export const FLOW_HEADER_VALUE = "v2";
 
-// Mirrors of the route's guards (route.ts: DESIGN_RE, ART_RE, EMAIL_RE, the
-// discount-code filter, DRAFT_GID_RE, NONCE_RE) and its cleanAddress caps.
+// Mirrors of the route's guards (route.ts: DESIGN_RE, EMAIL_RE, the
+// discount-code filter, DRAFT_GID_RE, NONCE_RE) and its cleanAddress caps;
+// its ART_RE lives with the library (lib/mcp-tools/library).
 const DESIGN_RE = /^[A-Z0-9]{2,24}$/;
-const ART_RE = /^https:\/\/cdn\.shopify\.com\//;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const CODE_RE = /^[A-Z0-9 _#-]{2,64}$/;
 const DRAFT_GID_RE = /^gid:\/\/shopify\/DraftOrder\/\d+$/;
@@ -223,41 +222,12 @@ async function statusReadThrottled(): Promise<boolean> {
 
 /* ---- the Shopify design library (public/graphics.json) ------------------ */
 
-type ManifestGraphic = { design: string; title: string; thumb: string | null; art: string | null; message?: string | null };
-
-// Same sellable set as price_order / list_designs: cdn.shopify.com print art,
-// client one-off prefixes excluded. The art URL for a CartLine is resolved
-// HERE from the manifest, never taken from the agent.
-const LIBRARY: Map<string, ManifestGraphic> = (() => {
-  const out = new Map<string, ManifestGraphic>();
-  const list = (graphicsFile as unknown as { graphics?: ManifestGraphic[] }).graphics ?? [];
-  for (const g of list) {
-    if (!g || typeof g.design !== "string" || typeof g.art !== "string") continue;
-    if (!ART_RE.test(g.art)) continue;
-    if (EXCLUDED_PREFIXES.has(g.design.replace(/[0-9]+$/, ""))) continue;
-    out.set(g.design.toUpperCase(), g);
-  }
-  return out;
-})();
+// Same sellable set as price_order / list_designs (lib/mcp-tools/library:
+// cdn.shopify.com print art, a design the builder offers). The art URL for a
+// CartLine is resolved HERE from the manifest, never taken from the agent.
+const LIBRARY = LIBRARY_BY_CODE;
 
 const CLASSIC_DESIGN = typeof CLASSIC_GRAPHIC.design === "string" ? CLASSIC_GRAPHIC.design : "STANDARD";
-
-/* ---- hub read (delivery calendar + hub graphics), fresh like the route --- */
-
-async function hubGet<T>(url: string): Promise<T | null> {
-  try {
-    const fresh = `${url}${url.includes("?") ? "&" : "?"}fresh=${Date.now()}`;
-    const res = await fetch(fresh, { cache: "no-store", signal: AbortSignal.timeout(HUB_TIMEOUT_MS) });
-    if (!res.ok) {
-      console.error(`[mcp] checkout: hub returned HTTP ${res.status} for ${url}`);
-      return null;
-    }
-    return (await res.json()) as T;
-  } catch (e) {
-    console.error(`[mcp] checkout: hub fetch failed for ${url}: ${e instanceof Error ? e.message : String(e)}`);
-    return null;
-  }
-}
 
 /* ---- input parsing (no network) ----------------------------------------- */
 
@@ -271,6 +241,8 @@ type LineInput = {
   add_ons: string[];
   message: string;
   delivery_date: string;
+  /** The paid guaranteed delivery date (FedEx, where the store prices one). */
+  guaranteed: boolean;
 };
 
 type ShipTo = {
@@ -367,7 +339,7 @@ function parseGraphic(raw: unknown, at: number, problems: Problem[]): GraphicInp
   return { type, design: design.trim().toUpperCase() };
 }
 
-const LINE_KEYS = ["style_id", "qty", "filling", "graphic", "add_ons", "message", "delivery_date"] as const;
+const LINE_KEYS = ["style_id", "qty", "filling", "graphic", "add_ons", "message", "delivery_date", "guaranteed"] as const;
 
 function parseLine(raw: unknown, at: number, problems: Problem[]): LineInput | null {
   const label = lineLabel(at);
@@ -420,7 +392,7 @@ function parseLine(raw: unknown, at: number, problems: Problem[]): LineInput | n
   let message = "";
   if (raw.message !== undefined) {
     if (typeof raw.message !== "string") {
-      problems.push({ at, text: `${label}: message must be a string (the note printed inside, up to ${MESSAGE_MAX} characters).` });
+      problems.push({ at, text: `${label}: message must be a string (the note printed inside, up to ${MESSAGE_MAX} characters and ${MESSAGE_MAX_LINES} lines).` });
     } else {
       message = raw.message.trim();
       if (message.length > MESSAGE_MAX) {
@@ -429,7 +401,17 @@ function parseLine(raw: unknown, at: number, problems: Problem[]): LineInput | n
           text: `${label}: message is ${message.length} characters; the card holds ${MESSAGE_MAX} — shorten it (nothing is clipped silently).`,
         });
       }
+      if (lineCount(message) > MESSAGE_MAX_LINES) {
+        problems.push({
+          at,
+          text: `${label}: message runs to ${lineCount(message)} lines; the card prints at most ${MESSAGE_MAX_LINES} — join some lines (nothing is clipped silently).`,
+        });
+      }
     }
+  }
+
+  if (raw.guaranteed !== undefined && typeof raw.guaranteed !== "boolean") {
+    problems.push({ at, text: `${label}: guaranteed must be true or false (the paid ${GUARANTEE_LABEL.toLowerCase()}, FedEx only).` });
   }
 
   const delivery_date = typeof raw.delivery_date === "string" ? raw.delivery_date.trim() : "";
@@ -443,7 +425,7 @@ function parseLine(raw: unknown, at: number, problems: Problem[]): LineInput | n
   }
 
   if (problems.length > before || !graphic) return null;
-  return { style_id, qty: qty as number, filling, graphic, add_ons, message, delivery_date };
+  return { style_id, qty: qty as number, filling, graphic, add_ons, message, delivery_date, guaranteed: raw.guaranteed === true };
 }
 
 function isCalendarDate(ymd: string): boolean {
@@ -545,7 +527,7 @@ function parseInput(args: Record<string, unknown>, mode: Mode): { ok: true; valu
       at: ORDER,
       text:
         carrierRaw === undefined
-          ? `carrier is required: "fedex" (2-Day, guaranteed arrival date) or "usps" (First Class, arrives in a window).`
+          ? `carrier is required: "fedex" (2-Day, aimed at the chosen date) or "usps" (First Class, arrives in a window).`
           : `carrier must be "fedex" or "usps" (got ${show(carrierRaw)}).`,
     });
   }
@@ -675,12 +657,14 @@ type Quote = {
     filling: { id: string; label: string };
     add_ons: string[];
     qty: number;
+    guaranteed: boolean;
     unit_cents: number;
     line_cents: number;
     breakdown: { base: number; graphic_upcharge: number; filling: number };
   }[];
   add_on_lines: { id: string; label: string; unit_cents: number; qty: number; cents: number }[];
-  shipping: { carrier: Carrier; service: string; per_unit_cents: number; units: number; cents: number };
+  shipping: { carrier: Carrier; label: string; service: string; per_unit_cents: number; units: number; cents: number };
+  guarantee?: { label: string; per_pinata_cents: number; units: number; cents: number; terms: string };
   subtotal_cents: number;
   total_before_tax_cents: number;
   currency: string;
@@ -735,6 +719,7 @@ type NormalizedLine = {
   qty: number;
   delivery_date: string;
   arrives: string;
+  guaranteed?: true;
   message?: string;
   unit_cents: number;
   line_cents: number;
@@ -816,12 +801,13 @@ async function prepare(parsed: Parsed): Promise<{ ok: true; value: Prepared } | 
     filling: l.filling,
     graphic: l.graphic.type === "classic" ? { type: "classic" } : { type: "library", design: l.graphic.design },
     ...(l.add_ons.length ? { add_ons: l.add_ons } : {}),
+    ...(l.guaranteed ? { guaranteed: true } : {}),
   }));
   const [catalog, quoteRes] = await Promise.all([
-    hubGet<HubCatalog>(catalogUrl({ host: MCP_HOST })),
+    moneyCatalog(),
     priceTools.price_order.handler({ carrier: parsed.carrier, lines: priceLines }),
   ]);
-  if (!catalog || !Array.isArray(catalog.bodyStyles)) return { ok: false, refusal: toolError(CATALOG_UNAVAILABLE) };
+  if (!catalog) return { ok: false, refusal: toolError(CATALOG_UNAVAILABLE) };
 
   const cfg = resolveDeliveryConfig(catalog.delivery);
   const hubGraphics = new Map(resolveHubGraphics(catalog.hubGraphics).map((g) => [g.design, g]));
@@ -873,6 +859,9 @@ async function prepare(parsed: Parsed): Promise<{ ok: true; value: Prepared } | 
       ...(q.add_ons.length ? { addons: q.add_ons } : {}),
       deliveryDate: l.delivery_date,
       carrier: parsed.carrier,
+      // price_order accepted it, so the profile prices a guarantee and this
+      // is FedEx; the route re-checks both and charges it on the shipping line.
+      ...(q.guaranteed ? { guaranteed: true } : {}),
       address,
       qty: l.qty,
     });
@@ -886,6 +875,7 @@ async function prepare(parsed: Parsed): Promise<{ ok: true; value: Prepared } | 
       qty: l.qty,
       delivery_date: l.delivery_date,
       arrives: arrivesFor(l.delivery_date, parsed.carrier, cfg),
+      ...(q.guaranteed ? { guaranteed: true as const } : {}),
       ...(l.message ? { message: l.message } : {}),
       unit_cents: q.unit_cents,
       line_cents: q.line_cents,
@@ -909,6 +899,7 @@ function orderSummary(p: Prepared) {
     lines: p.lines,
     add_on_lines: quote.add_on_lines,
     shipping: quote.shipping,
+    ...(quote.guarantee ? { guarantee: quote.guarantee } : {}),
     subtotal_cents: quote.subtotal_cents,
     total_before_tax_cents: quote.total_before_tax_cents,
     currency: "USD",
@@ -1361,12 +1352,16 @@ const LINE_SCHEMA = {
     message: {
       type: "string",
       maxLength: MESSAGE_MAX,
-      description: `Optional message printed on the card inside, up to ${MESSAGE_MAX} characters. Confirm the wording with the customer first.`,
+      description: `Optional message printed on the card inside, up to ${MESSAGE_MAX} characters and ${MESSAGE_MAX_LINES} lines. Confirm the wording with the customer first.`,
     },
     delivery_date: {
       type: "string",
       pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      description: "Arrival date, YYYY-MM-DD in America/Chicago. FedEx: the exact day; USPS: the target of a window. Validate with get_delivery_options.",
+      description: "Arrival date, YYYY-MM-DD in America/Chicago. FedEx: the day it is aimed at (guaranteed with guaranteed:true, or on stores without a paid guarantee); USPS: the target of a window. Validate with get_delivery_options.",
+    },
+    guaranteed: {
+      type: "boolean",
+      description: `Optional: true adds the paid ${GUARANTEE_LABEL.toLowerCase()} to every piñata on this line — FedEx only, and only where get_delivery_options reports it on offer (price_order quotes it). Confirm it with the customer first.`,
     },
   },
   additionalProperties: false,
@@ -1392,7 +1387,7 @@ const ORDER_PROPERTIES = {
   carrier: {
     type: "string",
     enum: CARRIERS,
-    description: "How the whole order ships: fedex (2-Day, guaranteed arrival date) or usps (First Class, arrives in a window around the chosen date).",
+    description: "How the whole order ships: fedex (2-Day, aimed at the chosen date) or usps (First Class, arrives in a window around the chosen date).",
   },
   lines: {
     type: "array",
@@ -1434,7 +1429,7 @@ const ORDER_PROPERTIES = {
 export const checkoutTools: Record<string, ToolDef> = {
   create_checkout: {
     description:
-      `Create a Shopify checkout for ONE single-address order (1–${MAX_LINES} lines, up to ${MAX_QTY} piñatas per line) — the only way to buy through this connector. TWO-STEP RULE: call it first with dry_run true (the default) to get the priced preview (each line, add-ons, shipping, total before tax, arrival date, ship-to); show that preview to the customer; only after they explicitly say yes, call it again with the same arguments plus dry_run:false AND confirm:true. That creates one unpaid Shopify draft order and returns status "ready_for_complete" with continue_url — Shopify's secure hosted payment page. Show continue_url to the customer verbatim; they pay there and tax is added there. Until they pay, nothing is ordered, charged or reserved — never say the order is placed, paid or reserved (check with get_checkout_status instead). Use ids, labels and design codes exactly as get_catalog and list_designs return them: carrier fedex (2-Day, exact arrival date) or usps (First Class, arrival window); lines of style_id, qty, filling, graphic ({"type":"classic"}, {"type":"library","design":"HBD06"} or {"type":"hub","design":"H0001"}), optional add_ons (up to ${MAX_ADDONS} per line), optional message (≤${MESSAGE_MAX} characters, printed inside), delivery_date YYYY-MM-DD; ship_to (name, address1, address2?, city, 2-letter state, zip, phone?) for one US address; optional email, discount_codes (≤${MAX_CODES}), idempotency_key (a UUID; recommended on every confirm) and agent. Custom artwork is not available here — send the customer to ${BUILDER_URL}. Hosted assistants share egress IPs, so the store's checkout limiter may refuse a burst of confirms ("Too many checkout attempts") even from a well-behaved session: wait a minute and retry ONCE with the SAME idempotency_key — never retry in a loop. Refusals name every problem at once. Amounts are integer cents USD before tax. Keep the returned draft_order_id and nonce: update_checkout and cancel_checkout need them.`,
+      `Create a Shopify checkout for ONE single-address order (1–${MAX_LINES} lines, up to ${MAX_QTY} piñatas per line) — the only way to buy through this connector. TWO-STEP RULE: call it first with dry_run true (the default) to get the priced preview (each line, add-ons, shipping, total before tax, arrival date, ship-to); show that preview to the customer; only after they explicitly say yes, call it again with the same arguments plus dry_run:false AND confirm:true. That creates one unpaid Shopify draft order and returns status "ready_for_complete" with continue_url — Shopify's secure hosted payment page. Show continue_url to the customer verbatim; they pay there and tax is added there. Until they pay, nothing is ordered, charged or reserved — never say the order is placed, paid or reserved (check with get_checkout_status instead). Use ids, labels and design codes exactly as get_catalog and list_designs return them: carrier fedex (2-Day, aimed at the arrival date) or usps (First Class, arrival window); lines of style_id, qty, filling, graphic ({"type":"classic"}, {"type":"library","design":"HBD06"} or {"type":"hub","design":"H0001"}), optional add_ons (up to ${MAX_ADDONS} per line), optional message (≤${MESSAGE_MAX} characters and ≤${MESSAGE_MAX_LINES} lines, printed inside), delivery_date YYYY-MM-DD, optional guaranteed:true (the paid ${GUARANTEE_LABEL.toLowerCase()}, FedEx only, where offered); ship_to (name, address1, address2?, city, 2-letter state, zip, phone?) for one US address; optional email, discount_codes (≤${MAX_CODES}), idempotency_key (a UUID; recommended on every confirm) and agent. Custom artwork is not available here — send the customer to ${BUILDER_URL}. Hosted assistants share egress IPs, so the store's checkout limiter may refuse a burst of confirms ("Too many checkout attempts") even from a well-behaved session: wait a minute and retry ONCE with the SAME idempotency_key — never retry in a loop. Refusals name every problem at once. Amounts are integer cents USD before tax. Keep the returned draft_order_id and nonce: update_checkout and cancel_checkout need them.`,
     inputSchema: {
       type: "object",
       required: ["carrier", "lines", "ship_to"],

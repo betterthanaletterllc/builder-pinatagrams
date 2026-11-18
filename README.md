@@ -177,7 +177,18 @@ art upload to Blob is still a placeholder (`PENDING_RENDER_UPLOAD`).
 ```
 npm install
 npm run dev        # http://localhost:3006
+npm test           # vitest (src/**/*.test.ts) + node --test (tests/*.test.mjs)
 ```
+
+**One price, one set of rules.** Every order is added up by
+`src/lib/order-pricing.ts` — the builder's own quote (v2 price sheet and
+order summary), `/api/checkout` and the MCP's `price_order` all call it, with
+the storefront profile's all-in price laid over the hub price
+(`priceForVariant`). The words and limits customers read about an order (the
+guaranteed date's label and refund terms, each carrier's promise, the card's
+300 characters / 8 lines) live in `src/lib/order-rules.ts`; the builder, the
+MCP tools and the in-chat designer (filled in by the server) all read them.
+Don't spell either out anywhere else.
 
 Needs the hub running for data: `cd ../admin && npm run dev` (port 3005), with
 its `.env.local` pointing at the seeded Neon DB. `NEXT_PUBLIC_HUB_URL` in
@@ -195,8 +206,9 @@ now), DNS `builder.pinatagrams.com` CNAME, and the hub must serve
 ## MCP face (mcp.pinatagrams.com)
 
 The same codebase deploys twice. The Vercel project `pinatagrams-mcp` sets
-`APP_MODE=mcp` and tracks the `feat/ordering-mcp` branch as production; it
-has its own Shopify custom app (`pinatagrams-mcp`, `read_products` +
+`APP_MODE=mcp` and tracks the `feat/ordering-mcp` branch as production (to
+move to `main` once the merge lands — workspace-root
+`BULK-ORDER-AGENT-SCOPE-2026-11.md` §15.2); it has its own Shopify custom app (`pinatagrams-mcp`, `read_products` +
 `write_draft_orders`) so agent traffic can never throttle or take down the
 storefront's checkout. In that mode `src/middleware.ts` 404s every storefront,
 cart and checkout path, answers the storefront's crons with a no-op 200, and
@@ -223,3 +235,15 @@ skips in mcp mode). MCP-placed orders carry the `mcp` tag plus the
 `_orderSource` / `_orderAgent` order attributes right after `_builderNonce`;
 `src/lib/paper-contract.ts` pins that shape. Idempotency is per instance
 (in-memory, 24 h, 200 keys) until Phase 3 moves it to Upstash.
+
+Which prices the MCP sells at is the hub profile `MCP_STOREFRONT_HOST`
+resolves to — every MCP tool scopes the catalog to it, as checkout scopes to
+its request Host. On 2026-11-17 the hub resolved `mcp.pinatagrams.com` to the
+fallback `default` profile (tiered, FedEx + USPS, price-book retail, no paid
+guarantee), while `builder.pinatagrams.com` gets `flat-50-freeship`. For the
+MCP to sell what the builder sells, map `mcp.pinatagrams.com` to that profile
+in the hub (admin `/pricing` → Builder variants) or set
+`MCP_STOREFRONT_HOST=builder.pinatagrams.com` on the MCP project.
+`price_order` takes an optional `guaranteed: true` per line (FedEx, on
+profiles with a paid guarantee) and `get_delivery_options` reports the
+guarantee and, for a plain FedEx date, the ±2 business days it may land on.

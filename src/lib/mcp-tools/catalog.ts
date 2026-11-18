@@ -1,5 +1,6 @@
 import type { HubCatalog } from "@/lib/hub";
 import { maxDeliveryDate, minDeliveryDate, resolveDeliveryConfig } from "@/lib/delivery";
+import { resolveVariantProfile } from "@/lib/variant";
 
 /**
  * The customer-safe projection of the hub catalog — what get_catalog returns
@@ -23,12 +24,17 @@ function addonRule(v: unknown): "all" | "none" | string[] {
 
 /** Customer-safe projection of the hub catalog: nothing here is a cost,
  *  a margin or an exact stock count — the hub's public plane already
- *  withholds those, and this narrows further to what an agent needs. */
+ *  withholds those, and this narrows further to what an agent needs.
+ *  Amounts are the storefront profile's, as checkout charges them: its
+ *  all-in FedEx rate (free on the $50 flat profile) and no graphic upcharge
+ *  on a flat profile. */
 export function projectCatalog(catalog: HubCatalog) {
   const raw = catalog as unknown as Record<string, unknown>;
   const shipping = (raw.shipping ?? {}) as Record<string, unknown>;
   const pricing = (raw.pricing ?? {}) as Record<string, unknown>;
   const cfg = resolveDeliveryConfig(catalog.delivery);
+  const variant = resolveVariantProfile(catalog.variant);
+  const tiered = variant.pricing === "tiered";
   return {
     as_of: catalog.asOf,
     ...(catalog.stale ? { stale: catalog.stale } : {}),
@@ -52,12 +58,21 @@ export function projectCatalog(catalog: HubCatalog) {
       price_cents: num(a.priceCents) ?? 0,
     })),
     shipping_per_unit_cents: {
-      fedex_2day: num(shipping.fedexCents),
+      fedex_2day: variant.flatPrice ? variant.flatPrice.shipCents : num(shipping.fedexCents),
       usps_first_class: num(shipping.uspsCents),
     },
     graphic_upcharge_cents: {
-      library_design: num(pricing.graphicLibraryUpchargeCents),
-      custom_art: num(pricing.graphicCustomUpchargeCents),
+      library_design: tiered ? num(pricing.graphicLibraryUpchargeCents) : 0,
+      custom_art: tiered ? num(pricing.graphicCustomUpchargeCents) : 0,
+    },
+    // What this storefront sells and how (its hub profile): the carriers on
+    // offer, the all-in piñata price if it has one, and the paid guaranteed
+    // date's price per piñata (null = not offered; FedEx only).
+    store: {
+      carriers: variant.carriers,
+      pricing: variant.pricing,
+      all_in_pinata_cents: variant.flatPrice?.unitCents ?? null,
+      guaranteed_date_cents: variant.guaranteeCents,
     },
     delivery: {
       timezone: "America/Chicago",

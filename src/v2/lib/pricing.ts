@@ -1,14 +1,25 @@
 import type { Carrier } from "@/lib/delivery";
 import { graphicTier, graphicTierCents, type CartLine, type GraphicChoice } from "@/lib/flow";
 import { formatCents, type BuilderPricing, type HubFilling, type HubPrice } from "@/lib/hub";
+import {
+  guaranteeUnitCents,
+  pinataUnitCents,
+  priceOrder,
+  shipPerUnitCents,
+  shippingLabel,
+  tierUpchargeCents,
+  type PricedLine,
+} from "@/lib/order-pricing";
+import { GUARANTEE_LABEL } from "@/lib/order-rules";
 import type { V2Addon } from "./types";
 
 /**
- * DISPLAY prices for v2 — the same arithmetic as v1's dock and cart
- * (design-flow.tsx / cart-view.tsx): hub unit price + the graphic tier
- * (tiered variants only) + the filling's delta + add-ons, plus the carrier's
- * per-piñata ship rate. Checkout re-prices everything from the hub; nothing
- * here is ever sent to the server.
+ * DISPLAY prices for v2: hub unit price + the graphic tier (tiered variants
+ * only) + the filling's delta + add-ons, plus the carrier's per-piñata ship
+ * rate and any paid guarantee — added up by lib/order-pricing, the same
+ * function /api/checkout charges with and the ordering MCP quotes with.
+ * Checkout re-prices everything from the hub; nothing here is ever sent to
+ * the server.
  */
 
 export type PriceCtx = {
@@ -35,7 +46,19 @@ export type Piece = {
 
 /** The guarantee's price for this piece on this carrier (0 = none). */
 export function guaranteeFor(p: Piece, carrier: Carrier | null, ctx: PriceCtx): number {
-  return p.guaranteed && carrier !== "usps" && ctx.guaranteeCents ? ctx.guaranteeCents : 0;
+  return guaranteeUnitCents(p.guaranteed, carrier, ctx);
+}
+
+/** The piece as the one pricing function reads it. */
+export function pricedPiece(p: Piece, ctx: PriceCtx, qty = 1): PricedLine {
+  const b = pieceBreakdown(p, ctx);
+  return {
+    qty,
+    tierCents: b.tier,
+    fillingCents: b.filling,
+    addons: b.addons.map((a) => ({ id: a.id, label: a.label, priceCents: a.cents })),
+    guaranteed: p.guaranteed,
+  };
 }
 
 /** "Free" for a $0 delivery line, else the money. */
@@ -45,14 +68,8 @@ export function shipMoney(cents: number): string {
 
 /** Merchandise for ONE piñata (no shipping): base + tier + filling + add-ons. */
 export function merchCents(p: Piece, ctx: PriceCtx): number | null {
-  if (!ctx.unitPrice) return null;
-  const tier = ctx.tiered ? graphicTierCents(p.graphic, ctx.pricing) : 0;
-  const filling = ctx.fillings.find((f) => f.label === p.filling)?.priceCents ?? 0;
-  const addons = p.addons.reduce(
-    (s, id) => s + (ctx.addons.find((a) => a.id === id)?.priceCents ?? 0),
-    0,
-  );
-  return ctx.unitPrice.unitPriceCents + tier + filling + addons;
+  const b = pieceBreakdown(p, ctx);
+  return b.base === null ? null : b.base + b.addons.reduce((s, a) => s + a.cents, 0);
 }
 
 /** One piñata, itemised the way the invoice itemises it: the piñata line
@@ -66,10 +83,10 @@ export function pieceBreakdown(
   filling: number;
   addons: { id: string; label: string; cents: number }[];
 } {
-  const tier = ctx.tiered ? graphicTierCents(p.graphic, ctx.pricing) : 0;
+  const tier = tierUpchargeCents(graphicTier(p.graphic), ctx.pricing, ctx.tiered);
   const filling = ctx.fillings.find((f) => f.label === p.filling)?.priceCents ?? 0;
   return {
-    base: ctx.unitPrice ? ctx.unitPrice.unitPriceCents + tier + filling : null,
+    base: pinataUnitCents(ctx, tier, filling),
     tier,
     filling,
     addons: p.addons.flatMap((id) => {
@@ -82,11 +99,7 @@ export function pieceBreakdown(
 /** Per-piñata shipping for a carrier; null carrier on a two-carrier store =
  *  the CHEAPEST option (the honest "From" price before a carrier is picked). */
 export function shipCents(carrier: Carrier | null, ctx: PriceCtx): number | null {
-  const fedex = ctx.unitPrice?.shipPerUnitCents ?? null;
-  const usps = ctx.pricing.uspsShipPerUnitCents;
-  if (carrier === "usps") return usps;
-  if (carrier === "fedex" || !ctx.uspsOffered) return fedex;
-  return fedex === null ? null : Math.min(fedex, usps);
+  return shipPerUnitCents(carrier, ctx);
 }
 
 /** "$44.99 delivered" for one piñata, and whether it's a "From" price. */
@@ -95,10 +108,8 @@ export function deliveredCents(
   carrier: Carrier | null,
   ctx: PriceCtx,
 ): { cents: number | null; from: boolean } {
-  const m = merchCents(p, ctx);
-  const s = shipCents(carrier, ctx);
   return {
-    cents: m !== null && s !== null ? m + s + guaranteeFor(p, carrier, ctx) : null,
+    cents: priceOrder([pricedPiece(p, ctx)], carrier, ctx)?.totalCents ?? null,
     from: ctx.uspsOffered && carrier === null,
   };
 }
@@ -133,18 +144,11 @@ export function priceRows(
   for (const a of b.addons) rows.push({ label: a.label, value: `+${formatCents(a.cents)}` });
   const ship = shipCents(carrier, ctx);
   rows.push({
-    label:
-      carrier === "usps"
-        ? "USPS First Class"
-        : carrier === "fedex"
-          ? ship === 0
-            ? "Free FedEx delivery"
-            : "FedEx delivery"
-          : "Delivery (you choose at the last step)",
+    label: carrier ? shippingLabel(carrier, ship) : "Delivery (you choose at the last step)",
     value: ship === null ? "—" : `${carrier ? "" : "from "}${shipMoney(ship)}`,
   });
   const g = guaranteeFor(p, carrier, ctx);
-  if (g > 0) rows.push({ label: "Guaranteed delivery date", value: `+${formatCents(g)}` });
+  if (g > 0) rows.push({ label: GUARANTEE_LABEL, value: `+${formatCents(g)}` });
   const d = deliveredCents(p, carrier, ctx);
   return {
     rows,

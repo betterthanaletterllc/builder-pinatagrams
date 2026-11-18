@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import graphicsFile from "../../../public/graphics.json";
 import {
   getCatalog,
   resolveGraphicCategories,
@@ -12,7 +11,17 @@ import {
 } from "@/lib/hub";
 import { fillingAllowsAddon, resolveFillings } from "@/lib/flow";
 import { deliveryProblem, resolveDeliveryConfig, type Carrier } from "@/lib/delivery";
-import { HOLIDAYS, type LibraryGraphic } from "@/lib/library-data";
+import { HOLIDAYS } from "@/lib/library-data";
+import { MANIFEST } from "@/lib/mcp-tools/library";
+import {
+  CARRIER_COPY,
+  carrierService,
+  FEDEX_NEARBY_BUSINESS_DAYS,
+  GUARANTEE_LABEL,
+  GUARANTEE_TERMS,
+  MESSAGE_RULES,
+} from "@/lib/order-rules";
+import { lineCount } from "@/v2/lib/message";
 import { resolveVariantProfile } from "@/lib/variant";
 import type { McpResourceContents, McpResourceListing, ToolAnnotations } from "@/lib/mcp-http";
 import { projectCatalog, type ProjectedCatalog } from "@/lib/mcp-tools/catalog";
@@ -71,7 +80,10 @@ export const DESIGN_LIMIT = 24;
  *  next calendar holidays. */
 export const HEADLINE_OCCASIONS = ["Birthday", "Thank you", "Family & Friends", "Sympathy", "Congrats"];
 export const HOLIDAYS_ON_DEFAULT_PAGE = 2;
-const MESSAGE_MAX = 300; // the card's capacity (checkout refuses longer)
+// The card's capacity (lib/order-rules, the builder's own limits; checkout
+// refuses longer or taller).
+const MESSAGE_MAX = MESSAGE_RULES.maxChars;
+const MESSAGE_MAX_LINES = MESSAGE_RULES.maxLines;
 const TEXT_MAX = 100;
 const EMAIL_MAX = 120;
 const SHOP_TZ = "America/Chicago";
@@ -103,6 +115,7 @@ const FIELDS = [
   "message",
   "carrier",
   "delivery_date",
+  "guaranteed",
   "ship_to",
   "email",
 ] as const;
@@ -124,9 +137,6 @@ const STATE_RE = /^[A-Za-z]{2}$/;
 const ZIP_RE = /^\d{5}(-\d{4})?$/;
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-type Manifest = { graphics: LibraryGraphic[] };
-const MANIFEST = graphicsFile as unknown as Manifest;
-
 export type ShipToPrefill = Partial<Record<ShipToField, string>>;
 
 /** The prefill that survived normalization — ids and codes exactly as the
@@ -141,6 +151,8 @@ export type DesignerPrefill = {
   message?: string;
   carrier?: Carrier;
   delivery_date?: string;
+  /** The paid guaranteed delivery date (FedEx, where the store prices one). */
+  guaranteed?: true;
   ship_to?: ShipToPrefill;
   email?: string;
 };
@@ -436,6 +448,11 @@ export function normalizePrefill(
           field: "message",
           reason: `is ${m.length} characters; the card holds ${MESSAGE_MAX} — shorten it`,
         });
+      } else if (lineCount(m) > MESSAGE_MAX_LINES) {
+        dropped.push({
+          field: "message",
+          reason: `runs to ${lineCount(m)} lines; the card prints at most ${MESSAGE_MAX_LINES} — join some lines`,
+        });
       } else if (m) {
         prefill.message = m;
       }
@@ -467,6 +484,25 @@ export function normalizePrefill(
       const problem = deliveryProblem(dateKey, cfg, carrier ?? "fedex");
       if (problem) dropped.push({ field: "delivery_date", reason: problem });
       else prefill.delivery_date = dateKey;
+    }
+  }
+
+  // the paid guaranteed date — FedEx (the designer's default) only, and only
+  // where this store prices one, exactly as price_order accepts it
+  if (args.guaranteed !== undefined && args.guaranteed !== null) {
+    if (typeof args.guaranteed !== "boolean") {
+      dropped.push({ field: "guaranteed", reason: "must be true or false" });
+    } else if (args.guaranteed) {
+      if (variant.guaranteeCents === null) {
+        dropped.push({
+          field: "guaranteed",
+          reason: "this store has no paid guaranteed date (its FedEx dates are already guaranteed)",
+        });
+      } else if ((carrier ?? "fedex") === "usps") {
+        dropped.push({ field: "guaranteed", reason: `the ${GUARANTEE_LABEL.toLowerCase()} is FedEx only` });
+      } else {
+        prefill.guaranteed = true;
+      }
     }
   }
 
@@ -536,6 +572,7 @@ export function summarize(n: Normalized, orderingEnabled: boolean): string {
   if (p.message) have.push("message");
   if (p.carrier) have.push(`carrier (${p.carrier})`);
   if (p.delivery_date) have.push(`delivery date (${p.delivery_date})`);
+  if (p.guaranteed) have.push(GUARANTEE_LABEL.toLowerCase());
   if (p.ship_to) have.push(shipToComplete(p.ship_to) ? "address" : "address (partial)");
   if (p.email) have.push("email");
 
@@ -603,17 +640,21 @@ export const designerTools: Record<string, ToolDef> = {
         message: {
           type: "string",
           maxLength: MESSAGE_MAX,
-          description: `The card message printed inside, up to ${MESSAGE_MAX} characters.`,
+          description: `The card message printed inside, up to ${MESSAGE_MAX} characters and ${MESSAGE_MAX_LINES} lines.`,
         },
         carrier: {
           type: "string",
           enum: CARRIERS,
-          description: "fedex (2-Day, exact arrival date) or usps (First Class, arrives in a window).",
+          description: "fedex (2-Day, aimed at the arrival date) or usps (First Class, arrives in a window).",
         },
         delivery_date: {
           type: "string",
           pattern: "^\\d{4}-\\d{2}-\\d{2}$",
           description: "Arrival date, YYYY-MM-DD (America/Chicago).",
+        },
+        guaranteed: {
+          type: "boolean",
+          description: `true to preselect the paid ${GUARANTEE_LABEL.toLowerCase()} (FedEx only, where the store offers one; get_delivery_options says).`,
         },
         ship_to: {
           type: "object",
@@ -663,17 +704,61 @@ export const designerTools: Record<string, ToolDef> = {
 
 /* ---- the ui:// resource ------------------------------------------------- */
 
+/**
+ * The rules and wording the designer shows, filled into designer.html by the
+ * server from the builder's own constants (lib/order-rules) — the app spells
+ * out no limit or promise of its own. What varies by store (the carriers on
+ * offer, the guarantee's price, shipping) rides in open_designer's result
+ * (structuredContent.catalog, the store's profile) instead.
+ */
+export const DESIGNER_RULES = {
+  message: { maxChars: MESSAGE_RULES.maxChars, maxLines: MESSAGE_RULES.maxLines },
+  guarantee: { label: GUARANTEE_LABEL, terms: GUARANTEE_TERMS },
+  carriers: CARRIER_COPY,
+  fedexNearbyBusinessDays: FEDEX_NEARBY_BUSINESS_DAYS,
+  service: {
+    fedex: carrierService("fedex", false),
+    fedexWithGuaranteeOffered: carrierService("fedex", true),
+    usps: carrierService("usps", false),
+  },
+} as const;
+
+/** The token in designer.html the rules replace (a valid script literal, so
+ *  the raw file still parses: the app refuses to run without its rules). */
+export const RULES_TOKEN = "/*__PG_RULES__*/null";
+
+/** JSON safe inside an inline <script>: no "</script>", "<!--" or line
+ *  separators can end or bend the script. */
+function scriptJson(v: unknown): string {
+  return JSON.stringify(v)
+    .replace(/</g, "\\u003c")
+    .split(String.fromCharCode(0x2028))
+    .join("\\u2028")
+    .split(String.fromCharCode(0x2029))
+    .join("\\u2029");
+}
+
+/** Fill the rules into the designer's HTML; loud when the token is gone. */
+export function withRules(html: string): string {
+  if (!html.includes(RULES_TOKEN)) {
+    throw new Error("designer.html has lost its rules token (/*__PG_RULES__*/null)");
+  }
+  return html.replace(RULES_TOKEN, () => scriptJson(DESIGNER_RULES));
+}
+
 let htmlCache: Promise<string> | null = null;
 
-/** The designer's single-file HTML, read once per instance and kept in
- *  module scope (hosts may prefetch the resource); a failed read is not
- *  cached, so the next request retries. */
+/** The designer's single-file HTML with its rules filled in, read once per
+ *  instance and kept in module scope (hosts may prefetch the resource); a
+ *  failed read is not cached, so the next request retries. */
 export function designerHtml(): Promise<string> {
   if (!htmlCache) {
-    htmlCache = readFile(DESIGNER_HTML_PATH, "utf8").catch((err: unknown) => {
-      htmlCache = null;
-      throw err;
-    });
+    htmlCache = readFile(DESIGNER_HTML_PATH, "utf8")
+      .then(withRules)
+      .catch((err: unknown) => {
+        htmlCache = null;
+        throw err;
+      });
   }
   return htmlCache;
 }
