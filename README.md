@@ -247,3 +247,26 @@ in the hub (admin `/pricing` → Builder variants) or set
 `price_order` takes an optional `guaranteed: true` per line (FedEx, on
 profiles with a paid guarantee) and `get_delivery_options` reports the
 guarantee and, for a plain FedEx date, the ±2 business days it may land on.
+
+### Staff MCP: design mockups (`/api/mcp/staff/<secret>`)
+
+A second, team-only MCP server on the same deployment, for trying designs
+across the line-up from ChatGPT or Claude. Its `render_mockup` tool draws a
+front graphic and an inside-flap card on body styles — closed box (front
+label on the real box photo) and/or open box (piñata, flap card, optional
+message) — and returns JPEG contact sheets the assistant shows inline. Front
+and flap are picked independently: a design code (library, hub upload or
+STANDARD, offered or not), any https image URL (PNG/JPEG/WebP/SVG), or
+none. It also carries `list_designs` and `get_catalog`. Nothing is saved,
+priced or ordered.
+
+- Connector URL: `https://mcp.pinatagrams.com/api/mcp/staff/<MCP_STAFF_SECRET>`
+  (or `/api/mcp/staff/x` with `Authorization: Bearer <secret>`). Without
+  `MCP_STAFF_SECRET` (≥ 24 chars) set on the `pinatagrams-mcp` project the
+  path is a plain 404. Rotate by changing the env var.
+- Kept off the public server because it fetches any public https image a
+  caller names; `src/lib/render/images.ts` still refuses IP literals,
+  internal names, odd ports and off-policy redirects, and cleans fetched
+  SVG before rendering it.
+- Code: `src/app/api/mcp/staff/[secret]/route.ts`, `src/lib/staff-tools.ts`,
+  `src/lib/mcp-tools/mockup.ts`, scenes in `src/lib/render/mockup.ts`.

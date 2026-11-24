@@ -16,6 +16,9 @@ const nextConfig = {
     // The designer MCP App (src/lib/mcp-tools/designer.ts) is one HTML file
     // read with fs at request time; it must ship in the MCP function bundle.
     "/api/mcp": ["./src/mcp-app/**/*"],
+    // The staff MCP's render_mockup draws captions and flap messages with
+    // resvg, which reads the bundled Poppins files by path.
+    "/api/mcp/staff/[secret]": ["./src/assets/fonts/**/*"],
   },
 };
 export default nextConfig;

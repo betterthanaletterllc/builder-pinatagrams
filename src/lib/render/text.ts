@@ -96,16 +96,23 @@ export function layoutText(
   box: { w: number; h: number },
   opts: { weight: FontWeight; maxSize: number; minSize: number },
 ): TextLayout {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (!words.length) return { size: opts.minSize, lines: [], fits: true };
-  const base = words.map((w) => measure(w, opts.weight));
+  // Hard line breaks are kept (a card message is typed in lines): each
+  // paragraph wraps on its own and a blank line stays blank. Text with no
+  // "\n" lays out exactly as before.
+  const paragraphs = text.split(/\r?\n/).map((p) => p.split(/\s+/).filter(Boolean));
+  while (paragraphs.length && !paragraphs[0].length) paragraphs.shift();
+  while (paragraphs.length && !paragraphs[paragraphs.length - 1].length) paragraphs.pop();
+  if (!paragraphs.length) return { size: opts.minSize, lines: [], fits: true };
+  const base = paragraphs.map((p) => p.map((w) => measure(w, opts.weight)));
   const space = spaceAdvance(opts.weight);
-  const widest = Math.max(...base);
+  const widest = Math.max(...base.flat());
 
   let size = Math.max(opts.minSize, Math.round(opts.maxSize));
   for (;;) {
     const k = (size / MEASURE_SIZE) * SAFETY;
-    const lines = wrap(words, base.map((w) => w * k), space * k, box.w);
+    const lines = paragraphs.flatMap((p, i) =>
+      p.length ? wrap(p, base[i].map((w) => w * k), space * k, box.w) : [""],
+    );
     const fits = widest * k <= box.w && lines.length * size * LINE_HEIGHT <= box.h;
     if (fits || size <= opts.minSize) return { size, lines, fits };
     size = Math.max(opts.minSize, Math.floor(size * 0.9));

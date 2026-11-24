@@ -57,6 +57,11 @@ export type RenderResult = {
 // nothing. Refuse them loudly instead of printing a silent gap.
 const RENDERABLE = /^[\p{Script=Latin}\p{N}\p{P}\p{Zs}+<=>|~^$€£¥]+$/u;
 
+/** True when every line of `text` is drawable in Poppins (line breaks allowed). */
+export function isRenderableText(text: string): boolean {
+  return text.split(/\r?\n/).every((line) => line === "" || RENDERABLE.test(line));
+}
+
 /** Collapse whitespace, drop control characters; null when nothing
  *  printable is left or the cap is exceeded. */
 export function normalizeMessage(raw: string): string | null {
