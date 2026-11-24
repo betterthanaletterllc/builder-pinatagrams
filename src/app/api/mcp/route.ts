@@ -28,7 +28,7 @@ const INSTRUCTIONS = `Piñatagrams: piñata-shaped gift boxes filled with candy 
 - open_designer: call this FIRST whenever someone wants to send, order or design a Piñatagram, passing whatever they already told you (occasion, recipient, date, message, address). It opens a visual designer in the chat where they pick the piñata, treats, design, date and address and see the live price. Don't ask in chat for choices the designer collects; do help write the card message; relay the checkout link the designer reports (the order exists only after payment on that link).
 
 Tools, in the order a gift comes together:
-- get_catalog: body styles (in stock or not), fillings, add-ons, per-unit shipping, graphic upcharges, earliest and latest delivery dates.
+- get_catalog: body styles (in stock or not, each with a catalog photo, plus a transparent flat side view and that side view in the open box, for mockups), fillings, add-ons, per-unit shipping, graphic upcharges, earliest and latest delivery dates.
 - list_designs: printed front designs as design CODES (never URLs). STANDARD is the free Classic default; other library designs carry the library upcharge. Custom art is not available through this connector yet; send people who want their own artwork to https://builder.pinatagrams.com.
 - get_delivery_options: validate an arrival date for FedEx 2-Day (exact date) or USPS First Class (a window around the date).
 - price_order: an exact quote for one address, computed the same way checkout charges. Integer cents, USD, before tax.

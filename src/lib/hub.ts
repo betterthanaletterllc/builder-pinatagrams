@@ -73,6 +73,12 @@ export type HubBodyStyle = {
   pinataZone?: LogoZone | null;
   // Hub-hosted transparent cutout (catalog/cutouts/{id}.png) for the box scene.
   cutoutUrl?: string | null;
+  // Flat side-view (profile) photo on a transparent background, and that
+  // side view laid inside the open shipping box; null = none. Served for AI
+  // agents' mockups through the ordering MCP's get_catalog; the builder UI
+  // does not use them.
+  profileUrl?: string | null;
+  inBoxUrl?: string | null;
   inStock: boolean;
 };
 
@@ -263,6 +269,8 @@ export type HubCatalog = {
     messageZone: LogoZone | null;
     // percent padding keeping message text inside the card's border art
     messageCardPadding?: { x: number; y: number } | null;
+    // The empty open shipping box, top-down (agents' mockups only).
+    openBoxUrl?: string | null;
   };
   // Active add-ons from the hub's Pricing page; absent on older deploys.
   addons?: HubAddon[];

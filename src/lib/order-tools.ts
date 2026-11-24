@@ -61,7 +61,7 @@ export const orderTools: Record<string, ToolDef> = {
   ...designerTools,
   get_catalog: {
     description:
-      "What Piñatagrams can send right now: body styles with in-stock status, fillings, add-ons, per-unit shipping (FedEx 2-Day guaranteed date vs USPS First Class window), graphic upcharges, and the earliest and latest delivery dates. Amounts are integer cents. Call this before quoting anything.",
+      "What Piñatagrams can send right now: body styles with in-stock status (each with image_url, a catalog photo; profile_image_url, a flat side view of the piñata on a transparent background; and in_box_image_url, that side view inside the open shipping box; the two mockup photos are null when there is none), open_box_image_url (the empty open box, top-down), fillings, add-ons, per-unit shipping (FedEx 2-Day guaranteed date vs USPS First Class window), graphic upcharges, and the earliest and latest delivery dates. Amounts are integer cents. Call this before quoting anything.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: READ_ONLY,
     handler: async () => projectCatalog(await getCatalog()),

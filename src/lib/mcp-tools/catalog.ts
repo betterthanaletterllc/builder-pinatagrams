@@ -5,8 +5,10 @@ import { maxDeliveryDate, minDeliveryDate, resolveDeliveryConfig } from "@/lib/d
  * The customer-safe projection of the hub catalog — what get_catalog returns
  * and what open_designer embeds for its app. Moved here from order-tools.ts
  * so the tool modules under src/lib/mcp-tools/* can reuse it without
- * importing the registry (which imports them: a cycle otherwise). One
- * additive field since the move: each filling's add-on rule.
+ * importing the registry (which imports them: a cycle otherwise). Additive
+ * fields since the move: each filling's add-on rule, and each body style's
+ * profile_image_url and in_box_image_url, plus the catalog's
+ * open_box_image_url (photos for agents' mockups).
  */
 
 function num(v: unknown): number | null {
@@ -37,7 +39,13 @@ export function projectCatalog(catalog: HubCatalog) {
       name: s.name,
       in_stock: !!s.inStock,
       image_url: s.imageUrl ?? null,
+      // Flat side view on a transparent background, and that side view
+      // inside the open box; for mockups. null = none yet.
+      profile_image_url: s.profileUrl ?? null,
+      in_box_image_url: s.inBoxUrl ?? null,
     })),
+    // The empty open shipping box, top-down, for composing mockups.
+    open_box_image_url: catalog.box?.openBoxUrl ?? null,
     fillings: (catalog.fillings ?? []).map((f) => ({
       id: f.id,
       label: f.label,
